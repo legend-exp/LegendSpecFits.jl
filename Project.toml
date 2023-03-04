@@ -1,0 +1,8 @@
+name = "LegendSpecFits"
+uuid = "18221496-77af-46cf-bab8-820da09f7f97"
+version = "0.1.0"
+
+[deps]
+
+[compat]
+julia = "1.6"
