@@ -59,6 +59,8 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
+      - name: registry_add
+        run: julia add_registries.jl
       - uses: julia-actions/julia-buildpkg@latest
         env:
           PYTHON: 'Conda'
@@ -90,6 +92,8 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
+      - name: registry_add
+        run: julia add_registries.jl
       - uses: julia-actions/julia-buildpkg@latest
         env:
           PYTHON: 'Conda'
