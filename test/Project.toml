@@ -1,6 +1,11 @@
 [deps]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+# BAT = "c0cd4b16-88b7-57fa-983b-ab80aecada7e"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+LegendHDF5IO = "c9265ca6-b027-5446-b1a4-febfa8dd10b0"
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
