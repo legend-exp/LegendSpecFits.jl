@@ -25,6 +25,10 @@ using Tables
 using Unitful
 using ValueShapes
 
+include("utils.jl")
+include("peakshapes.jl")
+include("likelihoods.jl")
+include("priors.jl")
 include("specfit.jl")
 
 @static if !isdefined(Base, :get_extension)
