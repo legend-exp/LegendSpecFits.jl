@@ -52,19 +52,70 @@ step_gauss(x::Real, μ::Real, σ::Real) = erfc( (μ-x) / (sqrt2 * σ) ) / 2
 """
     gamma_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
-        step_amplitude::Real, skew_fraction::Real, skew_width::Real
+        step_amplitude::Real, skew_fraction::Real, skew_width::Real,
+        background::Real
     )
     
-Describes the shape of a typical gamma peak in a detector.
+Describes the shape of a typical gamma peak in a detector with a flat background.
 """
 function gamma_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
-    step_amplitude::Real, skew_fraction::Real, skew_width::Real
+    step_amplitude::Real, skew_fraction::Real, skew_width::Real,
+    background::Real
 )
     skew = skew_width * μ
     return n * (
             (1 - skew_fraction) * gauss_pdf(x, μ, σ) +
             skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
-        ) + step_amplitude * step_gauss(-x, -μ, σ);
+        ) + step_amplitude * step_gauss(-x, -μ, σ) + background;
 end
 export gamma_peakshape
+
+"""
+    signal_peakshape(
+        x::Real, μ::Real, σ::Real, n::Real,
+        skew_fraction::Real, skew_width::Real,
+    )
+    
+Describes the signal part of the shape of a typical gamma peak in a detector.
+"""
+function signal_peakshape(
+    x::Real, μ::Real, σ::Real, n::Real,
+    skew_fraction::Real
+)
+    return n * (1 - skew_fraction) * gauss_pdf(x, μ, σ)
+end
+export signal_peakshape
+
+"""
+    background_peakshape(
+        x::Real, μ::Real, σ::Real, n::Real,
+        skew_fraction::Real, skew_width::Real,
+    )
+    
+Describes the background part of the shape of a typical gamma peak in a detector.
+"""
+function background_peakshape(
+    x::Real, μ::Real, σ::Real, 
+    step_amplitude::Real, background::Real
+)
+    return gamma_peakshape(x, μ, σ, 0.0, step_amplitude, 0.0, 0.0, background)
+end
+export background_peakshape
+
+"""
+    lowEtail_peakshape(
+        x::Real, μ::Real, σ::Real, n::Real,
+        skew_fraction::Real, skew_width::Real,
+    )
+    
+Describes the low-E signal tail part of the shape of a typical gamma peak in a detector.
+"""
+function lowEtail_peakshape(
+    x::Real, μ::Real, σ::Real, n::Real,
+    skew_fraction::Real, skew_width::Real
+)
+    skew = skew_width * μ
+    return n * skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
+end
+export lowEtail_peakshape

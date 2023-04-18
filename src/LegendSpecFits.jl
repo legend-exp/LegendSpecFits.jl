@@ -24,12 +24,22 @@ using StructArrays
 using Tables
 using Unitful
 using ValueShapes
+using LsqFit
+using IntervalSets
+using Roots
+using Plots
+using Optim
+using LinearRegression
 
 include("utils.jl")
 include("peakshapes.jl")
 include("likelihoods.jl")
 include("priors.jl")
 include("specfit.jl")
+include("fwhm.jl")
+include("simple_calibration.jl")
+include("fit_peaks.jl")
+include("plot_recipes.jl")
 
 @static if !isdefined(Base, :get_extension)
     using Requires
