@@ -38,6 +38,7 @@ include("priors.jl")
 include("specfit.jl")
 include("fwhm.jl")
 include("simple_calibration.jl")
+include("auto_calibration.jl")
 include("fit_peaks.jl")
 include("plot_recipes.jl")
 
