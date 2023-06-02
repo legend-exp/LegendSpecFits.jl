@@ -30,6 +30,7 @@ function estimate_single_peak_stats(h::Histogram)
     peak_sigma = peak_fwhm * inv(2*√(2log(2)))
     #peak_area = peak_amplitude * peak_sigma * sqrt(2*π)
     mean_background = (first(W) + last(W)) / 2
+    mean_background = ifelse(mean_background == 0, 0.01, mean_background)
     peak_counts = inv(0.761) * (sum(view(W,fwhm_idx_left:fwhm_idx_right)) - mean_background * peak_fwhm)
 
     (

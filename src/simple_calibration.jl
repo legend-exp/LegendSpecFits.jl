@@ -15,10 +15,10 @@ Returns
     * `peakhists`: array of histograms around the calibration lines
     * `peakstats`: array of statistics for the calibration line fits
 """
-function simpleCalibration(e_uncal::Array, th228_lines::Array; window_size::Float64=25.0, n_bins::Int=15000, calib_type::String="th228")
+function simpleCalibration(e_uncal::Array, th228_lines::Array; window_size::Float64=25.0, n_bins::Int=15000, calib_type::String="th228", quantile_perc::Float64=0.995)
     if calib_type == "th228"
         h_uncal = fit(Histogram, e_uncal, nbins=n_bins)
-        fep_guess = quantile(e_uncal, 0.995)
+        fep_guess = quantile(e_uncal, quantile_perc)
         c = 2614.5 / fep_guess
         h_calsimple = fit(Histogram, e_uncal .* c, nbins=n_bins)
         peakhists = LegendSpecFits.subhist.(Ref(h_calsimple), (x -> (x-window_size, x+window_size)).(th228_lines))

@@ -21,7 +21,6 @@ function fitPeaks(peakhists::Array, peakstats::StructArray, th228_lines::Array)
         h = peakhists[i]
         ps = peakstats[i]
 
-    
         pseudo_prior = NamedTupleDist(
             μ = Uniform(ps.peak_pos-10, ps.peak_pos+10),
             σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),

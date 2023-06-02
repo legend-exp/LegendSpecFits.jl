@@ -119,3 +119,19 @@ function lowEtail_peakshape(
     return n * skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
 end
 export lowEtail_peakshape
+
+
+"""
+    ex_step_gauss(x::Real, l::Real, k::Real, t::Real, d::Real)
+
+Evaluates an extended step gauss model at `x` with parameters `l`, `k`, `t` and `d`.
+
+"""
+function ex_step_gauss(
+    x::Real, l::Real, k::Real, 
+    t::Real, d::Real
+)
+    return (exp(k*(x-l)) + d) / (exp((x-l)/t) + l)
+end
+export ex_step_gauss
+
