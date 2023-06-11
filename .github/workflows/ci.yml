@@ -49,6 +49,8 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v1
+      - name: registry_add
+        run: julia add_registries.jl
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         with:
@@ -68,6 +70,8 @@ jobs:
         with:
           version: '1'
       - uses: julia-actions/cache@v1
+      - name: registry_add
+        run: julia add_registries.jl
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-docdeploy@v1
         env:
