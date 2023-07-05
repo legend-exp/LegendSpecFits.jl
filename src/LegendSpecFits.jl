@@ -27,8 +27,10 @@ using ValueShapes
 using LsqFit
 using IntervalSets
 using Roots
+using BAT
 using Plots
 using Optim
+using ForwardDiff
 using LinearRegression
 
 include("utils.jl")
@@ -37,9 +39,9 @@ include("likelihoods.jl")
 include("priors.jl")
 include("specfit.jl")
 include("fwhm.jl")
-include("simple_calibration.jl")
+include("simplecalibration.jl")
 include("auto_calibration.jl")
-include("fit_peaks.jl")
+include("specfit.jl")
 include("plot_recipes.jl")
 
 @static if !isdefined(Base, :get_extension)

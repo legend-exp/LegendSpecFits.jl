@@ -15,7 +15,7 @@ Returns
     * `peakhists`: array of histograms around the calibration lines
     * `peakstats`: array of statistics for the calibration line fits
 """
-function simpleCalibration(e_uncal::Array, th228_lines::Array; window_size::Float64=25.0, n_bins::Int=15000, calib_type::String="th228", quantile_perc::Float64=0.995)
+function simple_calibration(e_uncal::Array, th228_lines::Array; window_size::Float64=25.0, n_bins::Int=15000, calib_type::String="th228", quantile_perc::Float64=0.995)
     if calib_type == "th228"
         h_uncal = fit(Histogram, e_uncal, nbins=n_bins)
         fep_guess = quantile(e_uncal, quantile_perc)
@@ -28,5 +28,5 @@ function simpleCalibration(e_uncal::Array, th228_lines::Array; window_size::Floa
         error("Calibration type not supported")
     end
 end
-export simpleCalibration
+export simple_calibration
 

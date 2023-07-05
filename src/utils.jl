@@ -27,3 +27,11 @@ function subhist(h::Histogram{<:Any, 1}, r::Tuple{<:Real,<:Real})
 end
 subhist(h, i::Interval) = subhist(h, (i.left, i.right))
 export subhist
+
+
+"""
+    get_distribution_transform(d::Distribution, pprior::Prior)
+
+Return a `DistributionTransform` for the given `Distribution` and `Prior`.
+"""
+function get_distribution_transform(d, pprior) end
