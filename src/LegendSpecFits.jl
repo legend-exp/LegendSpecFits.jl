@@ -24,11 +24,10 @@ using StructArrays
 using Tables
 using Unitful
 using ValueShapes
-using LsqFit
 using IntervalSets
 using Roots
 using BAT
-using Plots
+using LsqFit
 using Optim
 using ForwardDiff
 using LinearRegression
@@ -37,12 +36,14 @@ include("utils.jl")
 include("peakshapes.jl")
 include("likelihoods.jl")
 include("priors.jl")
+include("cut.jl")
+include("aoefit.jl")
+include("optimization.jl")
+include("singlefit.jl")
 include("specfit.jl")
 include("fwhm.jl")
-include("simplecalibration.jl")
+include("simple_calibration.jl")
 include("auto_calibration.jl")
-include("specfit.jl")
-include("plot_recipes.jl")
 
 @static if !isdefined(Base, :get_extension)
     using Requires
