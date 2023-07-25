@@ -34,4 +34,38 @@ export subhist
 
 Return a `DistributionTransform` for the given `Distribution` and `Prior`.
 """
-function get_distribution_transform(d, pprior) end
+function get_distribution_transform end
+
+
+"""
+    tuple_to_array(nt::NamedTuple, fields::Vector{Symbol})
+
+Return an array with the values of the fields in `nt` in the order given by
+`fields`.
+"""
+function tuple_to_array(nt::NamedTuple)
+    [nt[f] for f in fieldnames(nt)]
+end
+
+
+"""
+    array_to_tuple(a::AbstractArray, as_nt::NamedTuple)
+
+Return a `NamedTuple` with the values of `a` in the order given by
+`fieldnames(as_nt)`.
+"""
+function array_to_tuple(a::AbstractArray, as_nt::NamedTuple)
+    NamedTuple{fieldnames(as_nt)}(a)
+end
+
+
+""" 
+    get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Int64)
+
+Return a `NamedTuple` with the same fields as `v` and `v_err` but with
+`Normal` distributions for each field.
+"""
+function get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Int64)
+    vs = BAT.distprod(map(Normal, v, v_err))
+    NamedTuple.(rand(vs, n))
+end
