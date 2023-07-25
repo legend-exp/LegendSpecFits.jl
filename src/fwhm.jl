@@ -1,21 +1,44 @@
-f_fwhm(x, p) = sqrt.(x.*p[2] .+ p[1])
+f_fwhm(x, p) = sqrt.(x .* p[2] .+ p[1])
 """
     fitFWHM
 Fit the FWHM of the peaks to a quadratic function.
-Returns
-    * `fwhm_qbb`: the FWHM of the 2039 keV line
-    * `fwhm_qbb_err`: the uncertainty on `fwhm_qbb`
-    * `fwhm_fit_result.param`: the fit result parameters
+# Returns
+    * `qbb`: the FWHM at§ 2039 keV
+    * `err.qbb`: the uncertainty on `qbb`
+    * `v`: the fit result parameters
 """
-function fitFWHM(fwhm_vals::Dict{Float64, Float64})
-    fwhm_vals_noDEPSEP = filter(((k,v),) -> k != 1592.53 && k != 2103.53 && v > 0.0, fwhm_vals)
-    fwhm_fit_result = curve_fit(f_fwhm, collect(keys(fwhm_vals_noDEPSEP)), collect(values(fwhm_vals_noDEPSEP)), [1, 0.01], lower=[0.0, 0.0])
+function fit_fwhm(peaks::Vector{T}, fwhm::Vector{T}) where T<:Real
+    # get rid of the DEP and SEP peak
+    noDEPSEP = (peaks .!= 2103.53 .&& peaks .!= 1592.53)
+    fwhm_noDEPSEP  = fwhm[noDEPSEP]
+    peaks_noDEPSEP = peaks[noDEPSEP]
 
+    # fit FWHM fit function
+    fwhm_fit_result = curve_fit(f_fwhm, peaks_noDEPSEP, fwhm_noDEPSEP, [1, 0.01], lower=[0.0, 0.0])
+
+    # get FWHM at Qbb with error
     fwhm_qbb = f_fwhm(2039, fwhm_fit_result.param)
     fwhm_pars_rand = rand(MvNormal(fwhm_fit_result.param, estimate_covar(fwhm_fit_result)), 1000)
+    # prevent negative parameter values in fit
+    # TODO: check if this is the right way to do this
+    for v in eachcol(fwhm_pars_rand)
+        v[1] = max(v[1], 0)
+        v[2] = max(v[2], 0)
+    end
     fwhm_qbb_rand = f_fwhm.(2039, eachcol(fwhm_pars_rand))
     fwhm_qbb_err = std(fwhm_qbb_rand)
 
-    return fwhm_fit_result.param, fwhm_qbb, fwhm_qbb_err
+    result = (
+        qbb = fwhm_qbb,
+        err = (qbb = fwhm_qbb_err,), 
+        v = fwhm_fit_result.param
+    )
+    report = (
+        qbb = result.qbb,
+        err = (qbb = result.err.qbb,),
+        v = result.v,
+        f_fit = x -> Base.Fix2(f_fwhm, result.v)(x)
+    )
+    return result, report
 end
-export fitFWHM
+export fit_fwhm
