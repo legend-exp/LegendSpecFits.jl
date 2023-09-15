@@ -140,6 +140,25 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
+    # loglikelihood of real data
+    likelihood = f_loglike(v_ml)
+
+    sim = rand(Product(Poisson.(h.weights)), 10000)
+
+
+    f_loglike_sim = let f_fit=th228_fit_functions.f_fit, v=v_ml
+        w -> hist_loglike.(Base.Fix2(f_fit, v), fit.(Histogram, Ref(midpoints(h.edges[1])), weights.(w), Ref(h.edges[1])))
+    end
+
+    # calculate loglikelihood of the simulated histograms
+    likelihood_sim = f_loglike_sim(eachcol(sim))
+
+    diff = likelihood_sim .- likelihood
+
+    # calculate p-value
+    p_value = count(diff .> 0) / length(diff)
+
+
     f_loglike_array = let f_fit=gamma_peakshape, h=h
         v -> - hist_loglike(x -> f_fit(x, v...), h)
     end
@@ -192,7 +211,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
             f_bck = x -> Base.Fix2(th228_fit_functions.f_bck, v_ml)(x)
         )
     end
-    return result, report
+    return result, report, p_value
 end
 export fit_single_peak_th228
 
