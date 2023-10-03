@@ -5,10 +5,10 @@
 Cut out a single peak from the array `x` between `min_x` and `max_x`.
 The number of bins is the number of bins to use for the histogram.
 The relative cut is the fraction of the maximum counts to use for the cut.
-Returns 
-    * `h`: histogram of the cut peak
-    * `cut_low`: lower edge of the cut peak
-    * `cut_high`: upper edge of the cut peak
+# Returns 
+    * `max`: maximum position of the peak
+    * `low`: lower edge of the cut peak
+    * `high`: upper edge of the cut peak
 """
 function cut_single_peak(x::Vector{T}, min_x::T, max_x::T, n_bins::Int=1000, relative_cut::Float64=0.5) where T<:Unitful.RealOrRealQuantity
     @assert unit(min_x) == unit(max_x) == unit(x[1]) "Units of min_x, max_x and x must be the same"

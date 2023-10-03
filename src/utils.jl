@@ -25,6 +25,11 @@ function subhist(h::Histogram{<:Any, 1}, r::Tuple{<:Real,<:Real})
     if (last_bin > length(h.weights)) last_bin = length(h.weights) end
     Histogram(h.edges[1][first_bin:last_bin+1], h.weights[first_bin:last_bin])
 end
+function subhist(x::Array{<:Real})
+    bin_width = 2 * (quantile(x, 0.75) - quantile(x, 0.25)) / ∛(length(x))
+    fit(Histogram, x, minimum(x):bin_width:maximum(x))
+end
+subhist(x::Array, r::Tuple{<:Real,<:Real}) = subhist(x[r[1] .< x .< r[2]])
 subhist(h, i::Interval) = subhist(h, (i.left, i.right))
 export subhist
 
