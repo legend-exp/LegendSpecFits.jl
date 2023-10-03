@@ -82,7 +82,8 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
         e_ft = Array{Float64}(flatview(e_grid)[r, :])
         e_ft = e_ft[isfinite.(e_ft)]
         # create histogram from it
-        h = fit(Histogram, e_ft, median(e_ft) - 100:1:median(e_ft) + 100)
+        bin_width = 2 * (quantile(e_ft, 0.75) - quantile(e_ft, 0.25)) / ∛(length(e_ft))
+        h = fit(Histogram, e_ft, median(e_ft) - 100:bin_width:median(e_ft) + 100)
         # create peakstats
         ps = estimate_single_peak_stats_th228(h)
         # check if ps guess is valid
