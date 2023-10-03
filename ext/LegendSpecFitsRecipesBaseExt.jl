@@ -28,7 +28,7 @@ using StatsBase, LinearAlgebra
     end
 end
 
-@recipe function f(report:: NamedTuple{(:rt, :min_enc, :enc_grid_rt, :enc, :enc_err)}) where {T}
+@recipe function f(report:: NamedTuple{(:rt, :min_enc, :enc_grid_rt, :enc, :enc_err)})
     xlabel := "Rise Time (µs)"
     ylabel := "ENC (ADC)"
     grid := :true
@@ -57,7 +57,7 @@ end
     end
 end
 
-@recipe function f(report:: NamedTuple{(:ft, :min_fwhm, :e_grid_ft, :fwhm)}) where {T}
+@recipe function f(report:: NamedTuple{(:ft, :min_fwhm, :e_grid_ft, :fwhm)})
     xlabel := "Flat-Top Time (µs)"
     ylabel := "FWHM FEP (keV)"
     grid := :true
@@ -86,7 +86,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck)},; show_label::Bool=true)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck)}; show_label::Bool)
     xlabel := "Energy (keV)"
     ylabel := "Counts"
     legend := :bottomright

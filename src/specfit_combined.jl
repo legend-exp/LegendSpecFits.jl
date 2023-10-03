@@ -30,7 +30,7 @@ end
 export estimate_single_peak_stats
 
 
-function estimate_combined_peak_stats_th228(peakstats::StructArray) where T<:Real
+function estimate_combined_peak_stats_th228(peakstats::StructArray)
     W = h.weights
     E = first(h.edges)
     peak_amplitude, peak_idx = findmax(W)
