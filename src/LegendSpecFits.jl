@@ -31,6 +31,7 @@ using LsqFit
 using Optim
 using ForwardDiff
 using LinearRegression
+using PropDicts
 
 include("utils.jl")
 include("peakshapes.jl")
@@ -44,11 +45,14 @@ include("specfit.jl")
 include("fwhm.jl")
 include("simple_calibration.jl")
 include("auto_calibration.jl")
+include("aoe_calibration.jl")
+include("specfit_combined.jl")
+include("ctc.jl")
 
-@static if !isdefined(Base, :get_extension)
-    using Requires
-    include("../ext/LegendSpecFitsRecipesBaseExt.jl")
-end
+# @static if !isdefined(Base, :get_extension)
+#     using Requires
+#     include("../ext/LegendSpecFitsRecipesBaseExt.jl")
+# end
 
 include("precompile.jl")
 
