@@ -48,6 +48,29 @@ The result does not correspond to a PDF as it is not normalizable.
 """
 step_gauss(x::Real, μ::Real, σ::Real) = erfc( (μ-x) / (sqrt2 * σ) ) / 2
 
+"""
+    linear_function(x::Real, slope::Real, intercept::Real)
+
+Evaluates a linear function at `x` with parameters `slope` and `intercept`.
+"""
+function linear_function(
+    x::Real, slope::Real, intercept::Real
+)
+    return slope * x + intercept
+end
+export linear_function
+
+"""
+    exponential_decay(x::Real, amplitude::Real, decay::Real, offset::Real)
+
+Evaluates an exponential decay function at `x` with parameters `amplitude`, `decay` and `offset`.
+"""
+function exponential_decay(
+    x::Real, amplitude::Real, decay::Real, offset::Real 
+)
+    return amplitude * exp(-decay * x) + offset
+end
+export exponential_decay
 
 """
     gamma_peakshape(
@@ -134,4 +157,52 @@ function ex_step_gauss(
     return (exp(k*(x-l)) + d) / (exp((x-l)/t) + l)
 end
 export ex_step_gauss
+
+"""
+    aoe_compton_peakshape(
+        x::Real, μ::Real, σ::Real, n::Real,
+        background::Real, δ::Real
+    )
+
+Describes the shape of a typical A/E Compton peak in a detector as a gaussian SSE peak and a step like background for MSE events.
+"""
+function aoe_compton_peakshape(
+    x::Real, μ::Real, σ::Real, n::Real,
+    background::Real, δ::Real
+)
+    return n * gauss_pdf(x, μ, σ) +
+        background * ex_gauss_pdf(-x, -μ, σ, δ)
+end
+export aoe_compton_peakshape
+
+"""
+    aoe_compton_signal_peakshape(
+        x::Real, μ::Real, σ::Real, n::Real
+    )
+
+Describes the signal shape of a typical A/E Compton peak in a detector as a gaussian SSE peak.
+"""
+function aoe_compton_signal_peakshape(
+    x::Real, μ::Real, σ::Real, n::Real
+)
+    return n * gauss_pdf(x, μ, σ)
+end
+export aoe_compton_signal_peakshape
+
+"""
+    aoe_compton_background_peakshape(
+        x::Real, μ::Real, σ::Real,
+        background::Real, δ::Real
+    )
+
+Describes the background shape of a typical A/E Compton peak in a detector as a step like background for MSE events.
+"""
+function aoe_compton_background_peakshape(
+    x::Real, μ::Real, σ::Real,
+    background::Real, δ::Real
+)
+    return background * ex_gauss_pdf(-x, -μ, σ, δ)
+end
+export aoe_compton_background_peakshape
+
 

@@ -1,11 +1,12 @@
 f_fwhm(x, p) = sqrt.(x .* p[2] .+ p[1])
 """
-    fitFWHM
+    fitFWHM(fit_fwhm(peaks::Vector{T}, fwhm::Vector{T}) where T<:Real
 Fit the FWHM of the peaks to a quadratic function.
 # Returns
-    * `qbb`: the FWHM at§ 2039 keV
-    * `err.qbb`: the uncertainty on `qbb`
+    * `qbb`: the FWHM at 2039 keV
+    * `err`: the uncertainties of the fit parameters
     * `v`: the fit result parameters
+    * `f_fit`: the fitted function
 """
 function fit_fwhm(peaks::Vector{T}, fwhm::Vector{T}) where T<:Real
     # get rid of the DEP and SEP peak

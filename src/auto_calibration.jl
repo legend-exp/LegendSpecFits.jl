@@ -12,14 +12,16 @@ end
 Compute an energy calibration from raw reconstructed energy deposition values.
 """
 function autocal_energy(E_raw::AbstractArray{<:Real})
-    window_size = 25.0
+    window_sizes = [25.0]
     n_bins = 15000
     th228_lines = [2614.50]
     cal_hist_binning = 0:0.5:3000
-    h_calsimple, h_uncal, calib_constant, fep_guess, peakhists, peakstats = simpleCalibration(
-        E_raw, th228_lines,;
-        window_size = window_size, n_bins = n_bins, calib_type = "th228"
+    quantile_perc = 0.995
+    result, report = simple_calibration(
+        E_raw, th228_lines, window_sizes,;
+        n_bins=n_bins,  quantile_perc=quantile_perc, calib_type=:th228
     )
+    calib_constant = result.c
     f_calib = Base.Fix1(*, calib_constant * u"keV")
     E_cal_keV = ustrip.(f_calib.(E_raw))
     cal_hist = fit(Histogram, E_cal_keV, cal_hist_binning)
@@ -27,3 +29,15 @@ function autocal_energy(E_raw::AbstractArray{<:Real})
 end
 
 export autocal_energy
+
+
+"""
+    calibrate_energy!(e::AbstractArray{<:Real}, pars::PropDict)
+
+Calibrate energy values in-place.
+"""
+function calibrate_energy!(e::Array{T}, pars::PropDict) where T<:Real
+    e .*= pars.m_calib
+    e .+= pars.n_calib
+end
+

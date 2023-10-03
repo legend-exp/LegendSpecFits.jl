@@ -1,5 +1,13 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 
+# helper fucntions for fitting peakshapes
+th228_fit_functions = (
+    f_fit = (x, v) -> gamma_peakshape(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.background),
+    f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction),
+    f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
+    f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background),
+    f_sigWithTail = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction) + lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width)
+)
 
 """
     estimate_single_peak_stats(h::Histogram, calib_type::Symbol=:th228)
@@ -9,6 +17,7 @@ Estimate statistics/parameters for a single peak in the given histogram `h`.
 `h` must only contain a single peak. The peak should have a Gaussian-like
 shape.
 `calib_type` specifies the calibration type. Currently only `:th228` is implemented.
+If you want get the peak statistics for a PSD calibration, use `:psd`.
 
 # Returns 
 `NamedTuple` with the fields
@@ -18,9 +27,11 @@ shape.
     * `peak_counts`: estimated number of counts in the peak
     * `mean_background`: estimated mean background value
 """
-function estimate_single_peak_stats(h::Histogram, calib_type::Symbol=:th228)
+function estimate_single_peak_stats(h::Histogram,; calib_type::Symbol=:th228)
     if calib_type == :th228
         return estimate_single_peak_stats_th228(h)
+    elseif calib_type == :psd
+        return estimate_single_peak_stats_psd(h)
     else
         error("Calibration type not supported")
     end
@@ -53,21 +64,6 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
     )
 end
 
-
-# helper fucntions for fitting peakshapes
-th228_fit_functions = (
-    f_fit = (x, v) -> gamma_peakshape(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.background),
-    f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction),
-    f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
-    f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background),
-    f_sigWithTail = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction) + lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width)
-)
-# f_fit(x, v) = gamma_peakshape(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.background)
-# f_sig(x, v) = signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction)
-# f_lowEtail(x, v) = lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width)
-# f_bck(x, v) = background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background)
-# f_sigWithTail(x, v) = signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction) + lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width) 
-
 """
     fitPeaks
 Perform a fit of the peakshape to the data in `peakhists` using the initial values in `peakstats` to the calibration lines in `th228_lines`.
@@ -75,7 +71,7 @@ Perform a fit of the peakshape to the data in `peakhists` using the initial valu
     * `peak_fit_plots`: array of plots of the peak fits
     * `return_vals`: dictionary of the fit results
 """
-function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Array, calib_type::Symbol=:th228)
+function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Array,; calib_type::Symbol=:th228)
     if calib_type == :th228
         return fit_peaks_th228(peakhists, peakstats, th228_lines)
     else
@@ -84,17 +80,17 @@ function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Array,
 end
 export fit_peaks
 
-function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Array)
+function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Array{T}) where T<:Real
     # create return and result dicts
-    result = Dict{Float64, NamedTuple}()
-    report = Dict{Float64, NamedTuple}()
+    result = Dict{T, NamedTuple}()
+    report = Dict{T, NamedTuple}()
     # iterate throuh all peaks
     for (i, peak) in enumerate(th228_lines)
         # get histogram and peakstats
         h  = peakhists[i]
         ps = peakstats[i]
         # fit peak
-        result_peak, report_peak = fit_single_peak_th228(h, ps, true)
+        result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=true)
         # save results
         result[peak] = result_peak
         report[peak] = report_peak
@@ -104,24 +100,36 @@ end
 
 
 """
-    fitSinglePeak(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}}) where T<:Real
+    fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}};, uncertainty::Bool=true, fixed_position::Bool=false) where T<:Real
 Perform a fit of the peakshape to the data in `h` using the initial values in `ps` while using the `gamma_peakshape` with low-E tail.
-Also, FWHM is calculated from the fitted peakshape with MC error propagation.
+Also, FWHM is calculated from the fitted peakshape with MC error propagation. 
+The peak position can be fixed to the value in `ps` by setting `fixed_position=true`.
 # Returns
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
 """
-function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}}, uncertainty::Bool=true) where T<:Real
+function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}}; uncertainty::Bool=true, fixed_position::Bool=false) where T<:Real
     # create pseudo priors
     pseudo_prior = NamedTupleDist(
         μ = Uniform(ps.peak_pos-10, ps.peak_pos+10),
         σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
         n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
         step_amplitude = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
-        skew_fraction = Uniform(0.01, 0.25),
+        skew_fraction = Uniform(0.005, 0.25),
         skew_width = LogUniform(0.001, 0.1),
         background = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
     )
+    if fixed_position
+        pseudo_prior = NamedTupleDist(
+        μ = ConstValueDist(ps.peak_pos),
+        σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
+        n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
+        step_amplitude = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
+        skew_fraction = Uniform(0.01, 0.25),
+        skew_width = LogUniform(0.001, 0.1),
+        background = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
+        )
+    end
 
     # transform back to frequency space
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
@@ -195,6 +203,8 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     return result, report
 end
 export fit_single_peak_th228
+
+
 
 
 """
