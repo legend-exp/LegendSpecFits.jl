@@ -13,21 +13,22 @@ using StatsBase, LinearAlgebra
     @series begin
         seriestype := :histogram
         # y := report.f_fit.(x)
-        bins --> :sqrt
+        bins --> 2000
         normalize --> :pdf
         label := "Data"
         # label := @sprintf("μ = %s ± %s\nσ = %s ± %s\nn = %d", report.μ, report.μ_err, report.σ, report.σ_err, report.n)
         x[x .> cuts.low .&& x .< cuts.high]
+        # x
     end
     @series begin
         color := :red
         label := format("Normal Fit (μ = ({:.2f} ± {:.2f})µs, σ = ({:.2f} ± {:.2f})µs", ustrip.([report.μ, report.μ_err, report.σ, report.σ_err])...)
         lw := 3
-        ustrip(cuts.low):0.1:ustrip(cuts.high), t -> report.f_fit(t)
+        ustrip(cuts.low):0.00001:ustrip(cuts.high), t -> report.f_fit(t)
     end
 end
 
-@recipe function f(report:: NamedTuple{(:rt, :min_enc, :enc_grid_rt, :enc, :enc_err), Tuple{Q, T, Vector{Quantity{<:T}}, Vector{T}, Vector{T}}}) where {T <: Real, Q<:Quantity{T}}
+@recipe function f(report:: NamedTuple{(:rt, :min_enc, :enc_grid_rt, :enc, :enc_err)}) where {T}
     xlabel := "Rise Time (µs)"
     ylabel := "ENC (ADC)"
     grid := :true
@@ -56,7 +57,7 @@ end
     end
 end
 
-@recipe function f(report:: NamedTuple{(:ft, :min_fwhm, :e_grid_ft, :fwhm), Tuple{Q, T, Vector{Quantity{<:T}}, Vector{T}}}) where {T <: Real, Q<:Quantity{T}}
+@recipe function f(report:: NamedTuple{(:ft, :min_fwhm, :e_grid_ft, :fwhm)}) where {T}
     xlabel := "Flat-Top Time (µs)"
     ylabel := "FWHM FEP (keV)"
     grid := :true
@@ -85,12 +86,49 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck)})
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck)},; show_label::Bool=true)
     xlabel := "Energy (keV)"
     ylabel := "Counts"
     legend := :bottomright
     yscale := :log10
     ylims := (1, 1.2*report.f_sig(report.v.μ))
+    @series begin
+        seriestype := :stepbins
+        label := ifelse(show_label, "Data", "")
+        bins --> :sqrt
+        LinearAlgebra.normalize(report.h, mode = :density)
+    end
+    @series begin
+        seriestype := :line
+        label := ifelse(show_label, "Best Fit", "")
+        color := :red
+        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_fit
+    end
+    @series begin
+        seriestype := :line
+        label := ifelse(show_label, "Signal", "")
+        color := :green
+        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_sig
+    end
+    @series begin
+        seriestype := :line
+        label := ifelse(show_label, "Low Energy Tail", "")
+        color := :blue
+        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_lowEtail
+    end
+    @series begin
+        seriestype := :line
+        label := ifelse(show_label, "Background", "")
+        color := :black
+        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_bck
+    end
+end
+
+@recipe function f(report::NamedTuple{((:v, :h, :f_fit, :f_sig, :f_bck))})
+    xlabel := "A/E (a.u.)"
+    ylabel := "Counts"
+    legend := :bottomright
+    ylims := (1, max(1.5*report.f_sig(report.v.μ), 1.5*maximum(report.h.weights)))
     @series begin
         seriestype := :stepbins
         label := "Data"
@@ -101,25 +139,19 @@ end
         seriestype := :line
         label := "Best Fit"
         color := :red
-        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_fit
+        minimum(report.h.edges[1]):1e-4:maximum(report.h.edges[1]), report.f_fit
     end
     @series begin
         seriestype := :line
         label := "Signal"
         color := :green
-        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_sig
-    end
-    @series begin
-        seriestype := :line
-        label := "Low-E Tail"
-        color := :blue
-        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_lowEtail
+        minimum(report.h.edges[1]):1e-4:maximum(report.h.edges[1]), report.f_sig
     end
     @series begin
         seriestype := :line
         label := "Background"
         color := :black
-        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_bck
+        minimum(report.h.edges[1]):1e-4:maximum(report.h.edges[1]), report.f_bck
     end
 end
 
@@ -181,6 +213,68 @@ end
         color := :red
         linewidth := 1.5
         fill(fep_guess, length(y_vline)), y_vline
+    end
+end
+
+@recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after)})
+    layout := (2,2)
+    thickness_scaling := 2.0
+    size := (2400, 1600)
+    @series begin
+        seriestype := :histogram2d
+        bins := (minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
+        color := :inferno
+        xlabel := "Energy (keV)"
+        ylabel := "Drift Time"
+        title := "Before Correction"
+        xlims := (2600, 2630)
+        legend := :none
+        colorbar_scale := :log10
+        subplot := 1
+        report_ctc.e_peak, report_ctc.qdrift_peak
+    end
+    @series begin
+        seriestype := :histogram2d
+        bins := (minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
+        color := :magma
+        xlabel := "Energy (keV)"
+        ylabel := "Drift Time"
+        title := "After Correction"
+        xlims := (2600, 2630)
+        legend := :none
+        colorbar_scale := :log10
+        subplot := 2
+        report_ctc.e_ctc, report_ctc.qdrift_peak
+    end
+    @series begin
+        seriestype := :stepbins
+        color := :red
+        label := "Before CTC"
+        xlabel := "Energy (keV)"
+        ylabel := "Counts"
+        yscale := :log10
+        subplot := 3
+        report_ctc.h_before
+    end
+    @series begin
+        seriestype := :stepbins
+        color := :red
+        label := "Before CTC"
+        xlabel := "Energy (keV)"
+        ylabel := "Counts"
+        yscale := :log10
+        subplot := 4
+        report_ctc.h_before
+    end
+    @series begin
+        seriestype := :stepbins
+        color := :green
+        label := "After CTC"
+        xlabel := "Energy (keV)"
+        ylabel := "Counts"
+        yscale := :log10
+        subplot := 4
+        report_ctc.h_after
     end
 end
 
