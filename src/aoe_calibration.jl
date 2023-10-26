@@ -47,56 +47,46 @@ export correct_aoe!
 
 
 """
-    get_aoe_peakhists(aoe::Array{T}, e::Array{T}) where T<:Real
+    prepare_dep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
 
-Get the histograms of the `DEP` in the AoE spectrum.
+Prepare an array of uncalibrated DEP energies for parameter extraction and calibration.
 # Returns
-- `hist`: Histogram of the `DEP` peak
-- `stats`: Stats of the `DEP` peak
-- `dep`: Position of the `DEP` peak
-- `window`: Window size around the `DEP` peak
-- `e`: Energy values in the window around the `DEP` peak
-- `aoe`: AoE values in the window around the `DEP` peak
+- `result`: Result of the initial fit
+- `report`: Report of the initial fit
 """
-function get_dep_peakhists(aoe::Array{T}, e::Array{T}) where T<:Real
-    # DEP line and window
-    dep, window = 1592.53, 25.0
+function prepare_dep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
+    # get cut window around peak
+    cuts = cut_single_peak(e, minimum(e), maximum(e); n_bins=n_bins_cut, relative_cut=relative_cut)
+    # estimate bin width
+    bin_width = get_friedman_diaconis_bin_width(e[e .> cuts.low .&& e .< cuts.high])
     # create histogram
-    dephist = fit(Histogram, e, dep-window:0.5:dep+window)
+    dephist = fit(Histogram, e, minimum(e):bin_width:maximum(e))
+    # get peakstats
     depstats = estimate_single_peak_stats(dephist)
-    # set peakstats to known peak position
-    depstats = merge(depstats, (peak_pos = dep, ))
-    result = (
-        hist = dephist,
-        stats = depstats,
-        dep = dep,
-        window = window,
-        e = e[dep-window .< e .< dep+window],
-        aoe = aoe[dep-window .< e .< dep+window]
-        )
-    return result
+    # initial fit for calibration and parameter extraction
+    result, report = fit_single_peak_th228(dephist, depstats,; uncertainty=true, low_e_tail=false)
+    # get calibration estimate from peak postion
+    result = merge(result, (m_calib = dep / result.μ, ))
+    return result, report
 end
-export get_dep_peakhists
+export prepare_dep_peakhist
 
 
 """
-    get_n_after_psd_cut(psd_cut::T, aoe::Array{T}, e::Array{T}, peak::T, window::T,; uncertainty=true) where T<:Real
+    get_n_after_psd_cut(psd_cut::T, aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, bin_width::T, result_before::NamedTuple, peakstats::NamedTuple; uncertainty=true) where T<:Real
 
-Get the number of counts after a cut value `psd_cut` for a given `peak` and `window` size whiile performing a peak fit with fixed position.
-
-    # Returns
+Get the number of counts after a PSD cut value `psd_cut` for a given `peak` and `window` size whiile performing a peak fit with fixed position. The number of counts is determined by fitting the peak with a pseudo prior for the peak position.
+# Returns
 - `n`: Number of counts after the cut
 - `n_err`: Uncertainty of the number of counts after the cut
 """
-function get_n_after_psd_cut(psd_cut::T, aoe::Array{T}, e::Array{T}, peak::T, window::T,; uncertainty=true) where T<:Real
+function get_n_after_psd_cut(psd_cut::T, aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, bin_width::T, result_before::NamedTuple, peakstats::NamedTuple; uncertainty::Bool=true) where T<:Real
     # get energy after cut and create histogram
-    peakhist = fit(Histogram, e[aoe .> psd_cut], peak-window:0.5:peak+window)
-    # estimate peak stats
-    peakstats = estimate_single_peak_stats(peakhist)
-    # set peakstats to known peak position
-    peakstats = merge(peakstats, (peak_pos = peak, ))
+    peakhist = fit(Histogram, e[aoe .> psd_cut], peak-first(window):bin_width:peak+last(window))
+    # create pseudo_prior with known peak sigma in signal for more stable fit
+    pseudo_prior = NamedTupleDist(μ = ConstValueDist(result_before.μ), σ = Normal(result_before.σ, 0.3))
     # fit peak and return number of signal counts
-    result, _ = fit_single_peak_th228(peakhist, peakstats, uncertainty=uncertainty, fixed_position=true)
+    result, _ = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=false, pseudo_prior=pseudo_prior)
     if uncertainty
         n, n_err = result.n, result.err.n
     else
@@ -108,33 +98,43 @@ export get_n_after_psd_cut
 
 
 """
-    get_psd_cut(aoe::Array{T}, e::Array{T},; dep_sf::Float64=0.9) where T<:Real
+    get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{T}=[12.0, 10.0], dep_sf::Float64=0.9, cut_search_interval::Tuple{T,T}=(-25.0, 0.0), rtol::T=0.001) where T<:Real
 
-Get the PSD cut value for a given `DEP` surrival fraction `dep_sf` (Default: 90%). The cut value is determined by finding the cut value where the number of counts after the cut is `dep_sf` of the number of counts before the cut.
-The algorithm is based on a root search function and expecting a Bisection.
+Get the PSD cut value for a given `dep` and `window` size while performing a peak fit with fixed position. The PSD cut value is determined by finding the cut value for which the number of counts after the cut is equal to `dep_sf` times the number of counts before the cut.
+The algorhithm utilizes a root search algorithm to find the cut value with a relative tolerance of `rtol`.
 # Returns
 - `cut`: PSD cut value
 - `n0`: Number of counts before the cut
-- `n90`: Number of counts after the cut
+- `nsf`: Number of counts after the cut
+- `err`: Uncertainties
 """
-function get_psd_cut(aoe::Array{T}, e::Array{T},; dep_sf::Float64=0.9) where T<:Real
-    # generate DEP peak histogram
-    dep_peakhist = get_dep_peakhists(aoe, e)
+function get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{T}=[12.0, 10.0], dep_sf::Float64=0.9, cut_search_interval::Tuple{T,T}=(-25.0, 0.0), rtol::T=0.001) where T<:Real
+    # estimate bin width
+    bin_width = get_friedman_diaconis_bin_width(e[e .> dep - 3 .&& e .< dep + 3])
+    # create histogram
+    dephist = fit(Histogram, e, dep-first(window):bin_width:dep+last(window))
+    # get peakstats
+    depstats = estimate_single_peak_stats(dephist)
+    # cut window around peak
+    aoe = aoe[dep-first(window) .< e .< dep+last(window)]
+    e   =   e[dep-first(window) .< e .< dep+last(window)]
     # fit before cut
-    result_before, _ = fit_single_peak_th228(dep_peakhist.hist, dep_peakhist.stats, uncertainty=false, fixed_position=true)
+    result_before, _ = fit_single_peak_th228(dephist, depstats,; uncertainty=true, fixed_position=true, low_e_tail=false)
     # get n0 before cut
-    n90 = result_before.n * 0.9
+    nsf = result_before.n * dep_sf
     # get psd cut
-    n_surrival_dep_f = cut -> get_n_after_psd_cut(cut, dep_peakhist.aoe, dep_peakhist.e, dep_peakhist.dep, dep_peakhist.window,; uncertainty=false).n - n90
-    cut_search_interval = (-25.0, 0.0)
-    psd_cut = find_zero(n_surrival_dep_f, cut_search_interval, Bisection())
-    return (cut = psd_cut, n0 = result_before.n, n90 = n90)
+    n_surrival_dep_f = cut -> get_n_after_psd_cut(cut, aoe, e, dep, window, bin_width, result_before, depstats; uncertainty=false).n - nsf
+    psd_cut = find_zero(n_surrival_dep_f, cut_search_interval, Bisection(), rtol=rtol)
+    # return n_surrival_dep_f.(0.25:0.001:0.5)
+    # get nsf after cut
+    result_after = get_n_after_psd_cut(psd_cut, aoe, e, dep, window, bin_width, result_before, depstats; uncertainty=true)
+    return (cut = psd_cut, n0 = result_before.n, nsf = result_after.n, err = (cut = psd_cut * rtol, n0 = result_before.err.n, nsf = result_after.n_err))
 end
 export get_psd_cut
 
 
 """
-    get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::T, psd_cut::T,; uncertainty=true) where T<:Real
+    get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, psd_cut::T,; uncertainty::Bool=true, low_e_tail::Bool=true) where T<:Real
 
 Get the surrival fraction of a peak after a PSD cut value `psd_cut` for a given `peak` and `window` size whiile performing a peak fit with fixed position.
     
@@ -145,23 +145,24 @@ Get the surrival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `sf`: Surrival fraction
 - `err`: Uncertainties
 """
-function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::T, psd_cut::T,; uncertainty=true) where T<:Real
+function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, psd_cut::T,; uncertainty::Bool=true, low_e_tail::Bool=true) where T<:Real
+    # estimate bin width
+    bin_width = get_friedman_diaconis_bin_width(e[e .> peak - 2 .&& e .< peak + 2])
     # get energy before cut and create histogram
-    peakhist = fit(Histogram, e, peak-window:0.5:peak+window)
+    peakhist = fit(Histogram, e, peak-first(window):bin_width:peak+last(window))
     # estimate peak stats
     peakstats = estimate_single_peak_stats(peakhist)
-    # set peakstats to known peak position
-    peakstats = merge(peakstats, (peak_pos = peak, ))
     # fit peak and return number of signal counts
-    result_before, report_before = fit_single_peak_th228(peakhist, peakstats, uncertainty=uncertainty, fixed_position=true)
+    result_before, report_before = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=low_e_tail)
+
+    # get e after cut
+    e = e[aoe .> psd_cut]
     # get energy after cut and create histogram
-    peakhist = fit(Histogram, e[aoe .> psd_cut], peak-window:0.5:peak+window)
-    # estimate peak stats
-    peakstats = estimate_single_peak_stats(peakhist)
-    # set peakstats to known peak position
-    peakstats = merge(peakstats, (peak_pos = peak, ))
+    peakhist = fit(Histogram, e, peak-first(window):bin_width:peak+last(window))
+    # create pseudo_prior with known peak sigma in signal for more stable fit
+    pseudo_prior = NamedTupleDist(μ = ConstValueDist(result_before.μ), σ = Normal(result_before.σ, 0.7))
     # fit peak and return number of signal counts
-    result_after, report_after = fit_single_peak_th228(peakhist, peakstats, uncertainty=uncertainty, fixed_position=true)
+    result_after, report_after = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=low_e_tail, pseudo_prior=pseudo_prior)
     # calculate surrival fraction
     sf = result_after.n / result_before.n
     result = (
