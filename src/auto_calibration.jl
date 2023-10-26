@@ -12,16 +12,9 @@ end
 Compute an energy calibration from raw reconstructed energy deposition values.
 """
 function autocal_energy(E_raw::AbstractArray{<:Real})
-    window_sizes = [25.0]
-    n_bins = 15000
-    th228_lines = [2614.50]
     cal_hist_binning = 0:0.5:3000
     quantile_perc = 0.995
-    result, report = simple_calibration(
-        E_raw, th228_lines, window_sizes,;
-        n_bins=n_bins,  quantile_perc=quantile_perc, calib_type=:th228
-    )
-    calib_constant = result.c
+    calib_constant = 2614.5 / quantile(E_raw, quantile_perc)
     f_calib = Base.Fix1(*, calib_constant * u"keV")
     E_cal_keV = ustrip.(f_calib.(E_raw))
     cal_hist = fit(Histogram, E_cal_keV, cal_hist_binning)
