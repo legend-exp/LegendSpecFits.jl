@@ -74,3 +74,37 @@ function get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Int64)
     vs = BAT.distprod(map(Normal, v, v_err))
     NamedTuple.(rand(vs, n))
 end
+
+"""
+    get_friedman_diaconis_bin_width(x::AbstractArray)
+
+Return the bin width for the given data `x` using the Friedman-Diaconis rule.
+"""
+function get_friedman_diaconis_bin_width(x::AbstractArray)
+    2 * (quantile(x, 0.75) - quantile(x, 0.25)) / ∛(length(x))
+end
+
+
+"""
+    get_number_of_bins(x::AbstractArray,; method::Symbol=:sqrt)
+
+Return the number of bins for the given data `x` using the given method.
+"""
+function get_number_of_bins(x::AbstractArray,; method::Symbol=:sqrt)
+    # all methods from https://en.wikipedia.org/wiki/Histogram#:~:text=To%20construct%20a%20histogram%2C%20the,overlapping%20intervals%20of%20a%20variable.
+    if method == :sqrt
+        return round(Int, sqrt(length(x)))
+    elseif method == :sturges
+        return round(Int, ceil(log2(length(x)) + 1))
+    elseif method == :rice
+        return round(Int, 2 * ∛(length(x)))
+    elseif method == :scott
+        return round(Int, (maximum(x) - minimum(x)) / (3.5 * std(x) * ∛(length(x))))
+    elseif method == :doane
+        return round(Int, 1 + log2(length(x)) + log2(1 + abs(skewness(x)) / sqrt(6 / (length(x) - 2))))
+    elseif method == :fd
+        return round(Int, (maximum(x) - minimum(x)) / get_friedman_diaconis_bin_width(x))
+    else
+        @assert false "Method not implemented"
+    end
+end
