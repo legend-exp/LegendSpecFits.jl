@@ -22,6 +22,7 @@ using SpecialFunctions
 using StatsBase
 using StructArrays
 using Tables
+using TypedTables
 using Unitful
 using ValueShapes
 using IntervalSets
@@ -48,6 +49,7 @@ include("auto_calibration.jl")
 include("aoe_calibration.jl")
 include("specfit_combined.jl")
 include("ctc.jl")
+include("qc.jl")
 
 # @static if !isdefined(Base, :get_extension)
 #     using Requires
