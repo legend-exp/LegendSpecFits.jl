@@ -39,7 +39,7 @@ ValueShapes = "136a8f8c-c49b-4edb-8b98-f3d64d48be8f"
 [compat]
 ArgCheck = "1, 2"
 ArraysOfArrays = "0.6"
-BAT = "~3.0"
+BAT = "~3.0, ~3.1"
 ChangesOfVariables = "0.1.1"
 DensityInterface = "0.4"
 Distributions = "0.24, 0.25"
