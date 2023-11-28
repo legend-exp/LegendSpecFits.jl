@@ -93,7 +93,7 @@ function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Array,
 end
 export fit_peaks
 
-function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Array{T},; uncertainty::Bool=true, low_e_tail::Bool=true) where T<:Real
+function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Array{T},; uncertainty::Bool=true, low_e_tail::Bool=true) where T<:Any
     # create return and result dicts
     result = Dict{T, NamedTuple}()
     report = Dict{T, NamedTuple}()
