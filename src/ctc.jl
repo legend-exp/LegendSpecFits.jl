@@ -36,13 +36,20 @@ of `window`. The drift time dependence is given by `qdrift`.
     * `fct`: correction factor
     * `bin_width`: optimal bin width
 """
-function ctc_energy(e::Array{T}, qdrift::Array{T}, peak::T, window::T) where T<:Real
+function ctc_energy(e::Array{T}, qdrift::Array{T}, peak::T, window::Tuple{T, T}) where T<:Real
     # create cut window around peak
-    cut = peak - window .< e .< peak + window
+    cut = peak - first(window) .< e .< peak + last(window)
     e_cut, qdrift_cut = e[cut], qdrift[cut]
     # calculate optimal bin width
-    bin_width        = 2 * (quantile(e_cut, 0.75) - quantile(e_cut, 0.25)) / ∛(length(e_cut))
-    bin_width_qdrift = 2 * (quantile(qdrift_cut, 0.75) - quantile(qdrift_cut, 0.25)) / ∛(length(qdrift_cut))
+    bin_width        = get_friedman_diaconis_bin_width(e[peak - 5 .< e .< peak + 5])
+    bin_width_qdrift = get_friedman_diaconis_bin_width(qdrift[peak - 5 .< e .< peak + 5])
+
+    # get FWHM before correction
+    # fit peak
+    h_before = fit(Histogram, e_cut, minimum(e_cut):bin_width:maximum(e_cut))
+    ps_before = estimate_single_peak_stats(h_before)
+    result_before, report_before = fit_single_peak_th228(h_before, ps_before; uncertainty=true)
+
     # create function to minimize
     f_minimize = let f_optimize=f_optimize_ctc, e=e_cut, qdrift=qdrift_cut, bin_width=bin_width
         fct -> f_optimize(fct, e, qdrift, bin_width)
@@ -53,14 +60,23 @@ function ctc_energy(e::Array{T}, qdrift::Array{T}, peak::T, window::T) where T<:
     opt_r = optimize(f_minimize, fct_range[1], fct_range[2], fct_start, Fminbox(GradientDescent()), Optim.Options(iterations=1000, show_trace=false, time_limit=600))
     # get optimal correction factor
     fct = Optim.minimizer(opt_r)[1]
+
     # calculate drift time corrected energy
     e_ctc = e_cut .+ fct .* qdrift_cut
+    # get FWHM after correction
+    # fit peak
+    h_after = fit(Histogram, e_ctc, minimum(e_ctc):bin_width:maximum(e_ctc))
+    ps_after = estimate_single_peak_stats(h_after)
+    result_after, report_after = fit_single_peak_th228(h_after, ps_after; uncertainty=true)
     result = (
         peak = peak,
         window = window,
         fct = fct,
         bin_width = bin_width,
         bin_width_qdrift = bin_width_qdrift,
+        fwhm_before = result_before.fwhm,
+        fwhm_after = result_after.fwhm,
+        err = (fwhm_before = result_before.err.fwhm, fwhm_after = result_after.err.fwhm)
     )
     report = (
         peak = result.peak,
@@ -71,8 +87,13 @@ function ctc_energy(e::Array{T}, qdrift::Array{T}, peak::T, window::T) where T<:
         e_peak = e_cut,
         e_ctc = e_ctc, 
         qdrift_peak = qdrift_cut,
-        h_before = fit(Histogram, e_cut, minimum(e_cut):bin_width:maximum(e_cut)),
-        h_after = fit(Histogram, e_ctc, minimum(e_ctc):bin_width:maximum(e_ctc))
+        h_before = h_before,
+        h_after = h_after,
+        fwhm_before = result_before.fwhm,
+        fwhm_after = result_after.fwhm,
+        err = (fwhm_before = result_before.err.fwhm, fwhm_after = result_after.err.fwhm),
+        report_before = report_before,
+        report_after = report_after
     )
     return result, report
 end
