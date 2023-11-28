@@ -157,10 +157,12 @@ function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window:
 
     # get e after cut
     e = e[aoe .> psd_cut]
+    # estimate bin width
+    bin_width = get_friedman_diaconis_bin_width(e[e .> peak - 2 .&& e .< peak + 2])
     # get energy after cut and create histogram
     peakhist = fit(Histogram, e, peak-first(window):bin_width:peak+last(window))
     # create pseudo_prior with known peak sigma in signal for more stable fit
-    pseudo_prior = NamedTupleDist(μ = ConstValueDist(result_before.μ), σ = Normal(result_before.σ, 0.7))
+    pseudo_prior = NamedTupleDist(μ = ConstValueDist(result_before.μ), σ = Normal(result_before.σ, 0.1))
     # fit peak and return number of signal counts
     result_after, report_after = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=low_e_tail, pseudo_prior=pseudo_prior)
     # calculate surrival fraction
