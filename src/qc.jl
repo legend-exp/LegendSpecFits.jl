@@ -5,27 +5,27 @@
 
 Perform simple QC cuts on the DEP and SEP data and return the data for the optimization of the SG window length.
 """
-function qc_sg_optimization(dsp_dep::NamedTuple{(:aoe, :e, :blmean, :blslope, :t0)}, dsp_sep::NamedTuple{(:aoe, :e, :blmean, :blslope, :t0)}, optimization_config::PropDict)
+function qc_sg_optimization(dsp_dep::NamedTuple{(:aoe, :e, :blmean, :blslope, :t50)}, dsp_sep::NamedTuple{(:aoe, :e, :blmean, :blslope, :t50)}, optimization_config::PropDict)
     ### DEP
     # Load DEP data and prepare Pile-up cut
-    blslope_dep, t0_dep = dsp_dep.blslope[isfinite.(dsp_dep.e)], dsp_dep.t0[isfinite.(dsp_dep.e)]
+    blslope_dep, t50_dep = dsp_dep.blslope[isfinite.(dsp_dep.e)], dsp_dep.t50[isfinite.(dsp_dep.e)]
     aoe_dep, e_dep = dsp_dep.aoe[:, isfinite.(dsp_dep.e)], dsp_dep.e[isfinite.(dsp_dep.e)]
     # get half truncated centered cut on blslope for pile-up rejection
-    result_dep_slope_cut, report_dep_slope_cut = get_centered_gaussian_window_cut(blslope_dep, -0.1u"ns^-1", 0.1u"ns^-1", 2, ; n_bins_cut=optimization_config.sg.cuts.dep.nbins_blslope_cut, relative_cut=optimization_config.sg.cuts.dep.rel_cut_blslope_cut)
+    result_dep_slope_cut, report_dep_slope_cut = get_centered_gaussian_window_cut(blslope_dep, -0.1u"ns^-1", 0.1u"ns^-1", optimization_config.sg.cuts.dep.blslope_sigma, ; n_bins_cut=optimization_config.sg.cuts.dep.nbins_blslope_cut, relative_cut=optimization_config.sg.cuts.dep.rel_cut_blslope_cut)
     # Cut on blslope, energy and t0 for simple QC
-    qc_cut_dep = blslope_dep .> result_dep_slope_cut.low_cut .&& blslope_dep .< result_dep_slope_cut.high_cut .&& e_dep .> optimization_config.sg.cuts.dep.min_e .&& quantile(e_dep, first(optimization_config.sg.cuts.dep.e_quantile)) .< e_dep .< quantile(e_dep, last(optimization_config.sg.cuts.dep.e_quantile)) .&& first(optimization_config.sg.cuts.dep.t0)u"µs" .< t0_dep .< last(optimization_config.sg.cuts.dep.t0)u"µs"
+    qc_cut_dep = blslope_dep .> result_dep_slope_cut.low_cut .&& blslope_dep .< result_dep_slope_cut.high_cut .&& e_dep .> optimization_config.sg.cuts.dep.min_e .&& quantile(e_dep, first(optimization_config.sg.cuts.dep.e_quantile)) .< e_dep .< quantile(e_dep, last(optimization_config.sg.cuts.dep.e_quantile)) .&& first(optimization_config.sg.cuts.dep.t50)u"µs" .< t50_dep .< last(optimization_config.sg.cuts.dep.t50)u"µs"
     aoe_dep, e_dep = aoe_dep[:, qc_cut_dep], e_dep[qc_cut_dep]
 
     ### SEP
     # Load SEP data and prepare Pile-up cut
-    blslope_sep, t0_sep = dsp_sep.blslope[isfinite.(dsp_sep.e)], dsp_sep.t0[isfinite.(dsp_sep.e)]
+    blslope_sep, t50_sep = dsp_sep.blslope[isfinite.(dsp_sep.e)], dsp_sep.t50[isfinite.(dsp_sep.e)]
     aoe_sep, e_sep = dsp_sep.aoe[:, isfinite.(dsp_sep.e)], dsp_sep.e[isfinite.(dsp_sep.e)]
 
     # get half truncated centered cut on blslope for pile-up rejection
-    result_sep_slope_cut, report_sep_slope_cut = get_centered_gaussian_window_cut(blslope_sep, -0.1u"ns^-1", 0.1u"ns^-1", 2, ; n_bins_cut=optimization_config.sg.cuts.sep.nbins_blslope_cut, relative_cut=optimization_config.sg.cuts.sep.rel_cut_blslope_cut)
+    result_sep_slope_cut, report_sep_slope_cut = get_centered_gaussian_window_cut(blslope_sep, -0.1u"ns^-1", 0.1u"ns^-1", optimization_config.sg.cuts.sep.blslope_sigma, ; n_bins_cut=optimization_config.sg.cuts.sep.nbins_blslope_cut, relative_cut=optimization_config.sg.cuts.sep.rel_cut_blslope_cut)
 
     # Cut on blslope, energy and t0 for simple QC
-    qc_cut_sep = blslope_sep .> result_sep_slope_cut.low_cut .&& blslope_sep .< result_sep_slope_cut.high_cut .&& e_sep .> optimization_config.sg.cuts.sep.min_e .&& quantile(e_sep, first(optimization_config.sg.cuts.sep.e_quantile)) .< e_sep .< quantile(e_sep, last(optimization_config.sg.cuts.sep.e_quantile)) .&& first(optimization_config.sg.cuts.sep.t0)u"µs" .< t0_sep .< last(optimization_config.sg.cuts.sep.t0)u"µs"
+    qc_cut_sep = blslope_sep .> result_sep_slope_cut.low_cut .&& blslope_sep .< result_sep_slope_cut.high_cut .&& e_sep .> optimization_config.sg.cuts.sep.min_e .&& quantile(e_sep, first(optimization_config.sg.cuts.sep.e_quantile)) .< e_sep .< quantile(e_sep, last(optimization_config.sg.cuts.sep.e_quantile)) .&& first(optimization_config.sg.cuts.sep.t50)u"µs" .< t50_sep .< last(optimization_config.sg.cuts.sep.t50)u"µs"
     aoe_sep, e_sep = aoe_sep[:, qc_cut_sep], e_sep[qc_cut_sep]
 
     return (dep=(aoe=aoe_dep, e=e_dep), sep=(aoe=aoe_sep, e=e_sep))
