@@ -65,8 +65,8 @@ end
     gridlinewidth := 0.5
     # xscale := :log10
     # yscale := :log10
-    ylims := (1, 5)
-    xlims := (1, 5)
+    ylims := (1, 8)
+    xlims := (0.5, 5)
     @series begin
         seriestype := :scatter
         u"µs", NoUnits
@@ -108,7 +108,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck)}; show_label::Bool=true)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck)}; show_label=true)
     xlabel := "Energy (keV)"
     ylabel := "Counts"
     legend := :bottomright
@@ -204,7 +204,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:h_calsimple, :h_uncal, :c, :fep_guess, :peakhists, :peakstats)}; cal::Bool)
+@recipe function f(report::NamedTuple{(:h_calsimple, :h_uncal, :c, :fep_guess, :peakhists, :peakstats)}; cal=true)
     ylabel := "Counts"
     legend := :topright
     yscale := :log10
@@ -238,7 +238,7 @@ end
     end
 end
 
-@recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after)})
+@recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after, :fwhm_before, :fwhm_after, :err, :report_before, :report_after)})
     layout := (2,2)
     thickness_scaling := 2.0
     size := (2400, 1600)
@@ -274,10 +274,33 @@ end
         label := "Before CTC"
         xlabel := "Energy (keV)"
         ylabel := "Counts"
+        title := "FWHM $(round(report_ctc.fwhm_before, digits=2))±$(round(report_ctc.err.fwhm_before, digits=2))keV"
         yscale := :log10
         subplot := 3
         report_ctc.h_before
     end
+    # @series begin
+    #     # seriestype := :stepbins
+    #     color := :red
+    #     # label := "Before CTC"
+    #     # xlabel := "Energy (keV)"
+    #     # ylabel := "Counts"
+    #     # yscale := :log10
+    #     subplot := 3
+    #     # report_ctc.h_before
+    #     minimum(report_ctc.e_peak):0.001:maximum(report_ctc.e_peak), t -> report_ctc.report_before.f_fit(t)
+    # end
+    # @series begin
+    #     # seriestype := :stepbins
+    #     color := :red
+    #     # label := "Before CTC"
+    #     # xlabel := "Energy (keV)"
+    #     # ylabel := "Counts"
+    #     # yscale := :log10
+    #     subplot := 4
+    #     # report_ctc.h_before
+    #     minimum(report_ctc.e_peak):0.001:maximum(report_ctc.e_peak), t -> report_ctc.report_after.f_fit(t)
+    # end
     @series begin
         seriestype := :stepbins
         color := :red
@@ -294,6 +317,7 @@ end
         label := "After CTC"
         xlabel := "Energy (keV)"
         ylabel := "Counts"
+        title := "FWHM $(round(report_ctc.fwhm_after, digits=2))±$(round(report_ctc.err.fwhm_after, digits=2))keV"
         yscale := :log10
         subplot := 4
         report_ctc.h_after
