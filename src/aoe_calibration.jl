@@ -15,7 +15,7 @@ function fit_aoe_corrections(e::Array{<:Real}, μ::Array{T}, σ::Array{T}) where
     @debug "μ_scs_intercept: $μ_scs_intercept"
 
     # fit compton band sigmas with exponential function
-    σ_scs = curve_fit(f_aoe_sigma, e, σ, [0.0, maximum(σ), 5.0])
+    σ_scs = curve_fit(f_aoe_sigma, e, σ, [0.05, median(σ), 5.0], lower=[0.001, 0.0, 0.0], upper=[Inf, Inf, Inf])
     @debug "σ_scs offset: $(σ_scs.param[1])"
     @debug "σ_scs shift : $(σ_scs.param[2])"
     @debug "σ_scs phase : $(σ_scs.param[3])"
@@ -124,7 +124,7 @@ function get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{
     nsf = result_before.n * dep_sf
     # get psd cut
     n_surrival_dep_f = cut -> get_n_after_psd_cut(cut, aoe, e, dep, window, bin_width, result_before, depstats; uncertainty=false).n - nsf
-    psd_cut = find_zero(n_surrival_dep_f, cut_search_interval, Bisection(), rtol=rtol)
+    psd_cut = find_zero(n_surrival_dep_f, cut_search_interval, Bisection(), rtol=rtol, maxiters=100)
     # return n_surrival_dep_f.(0.25:0.001:0.5)
     # get nsf after cut
     result_after = get_n_after_psd_cut(psd_cut, aoe, e, dep, window, bin_width, result_before, depstats; uncertainty=true)
