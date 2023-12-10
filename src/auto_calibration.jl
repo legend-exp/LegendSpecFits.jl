@@ -44,4 +44,5 @@ function calibrate_energy!(e::Array{T}, pars::PropDict) where T<:Real
     e .*= pars.m_calib
     e .+= pars.n_calib
 end
+export calibrate_energy!
 
