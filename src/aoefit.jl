@@ -236,7 +236,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
 
     # create loglikehood function
     f_loglike = let f_fit=f_aoe_compton, h=h
-        v -> hist_loglike(Base.Fix2(f_fit, v), h)
+        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
     end
 
     # MLE
@@ -245,7 +245,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    f_loglike_array = let f_fit=f_aoe_compton, h=h
+    f_loglike_array = let f_fit=aoe_compton_peakshape, h=h
         v -> - hist_loglike(x -> f_fit(x, v...), h)
     end
 
@@ -255,7 +255,10 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     weights_rand = rand(Product(Poisson.(h.weights)), 10000)
 
     f_loglike_h = let f_fit=f_aoe_compton, v=v_ml
-        w -> hist_loglike.(Base.Fix2(f_fit, v), fit.(Histogram, Ref(midpoints(h.edges[1])), weights.(w), Ref(h.edges[1])))
+        w -> hist_loglike.(
+            x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, 
+            fit.(Histogram, Ref(midpoints(h.edges[1])), weights.(w), Ref(h.edges[1]))
+        )
     end
 
     mle_rand = f_loglike_h(eachcol(weights_rand))
