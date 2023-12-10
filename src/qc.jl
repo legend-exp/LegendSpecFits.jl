@@ -58,11 +58,12 @@ function qc_cal_energy(data::Q, qc_config::PropDict) where Q<:Table
     inTrace_qc = .!(data.inTrace_intersect .> data.t0 .+ 2 .* data.drift_time .&& data.inTrace_n .> 1)
     @debug format("Intrace pile-up cut surrival fraction {:.2f}%", count(inTrace_qc) / length(data) * 100)
     # get energy cut
-    energy_qc = qc_config.e_trap.min .< data.e_trap .&& .!isnan.(data.e_trap)
+    energy_qc = qc_config.e_trap.min .< data.e_trap .&& isfinite.(data.e_trap) .&& isfinite.(data.e_zac) .&& isfinite.(data.e_cusp)
     @debug format("Energy cut surrival fraction {:.2f}%", count(energy_qc) / length(data) * 100)
 
-    qc = blmean_qc .&& blslope_qc .&& blsigma_qc .&& t0_qc .&& inTrace_qc .&& energy_qc
+    # combine all cuts
+    qc_tab = TypedTables.Table(blmean = blmean_qc, blslope = blslope_qc, blsigma = blsigma_qc, t0 = t0_qc, inTrace = inTrace_qc, energy = energy_qc, qc = blmean_qc .&& blslope_qc .&& blsigma_qc .&& t0_qc .&& inTrace_qc .&& energy_qc)
     @debug format("Total QC cut surrival fraction {:.2f}%", count(qc) / length(data) * 100)
-    return qc
+    return qc_tab
 end
 export qc_cal_energy
