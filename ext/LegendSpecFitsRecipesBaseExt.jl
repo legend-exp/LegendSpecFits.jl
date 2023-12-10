@@ -113,7 +113,9 @@ end
     ylabel := "Counts"
     legend := :bottomright
     yscale := :log10
-    ylims := (1, max(1.2*report.f_sig(report.v.μ), 1.2*maximum(report.h.weights)))
+    ylim_max = max(1.2*report.f_sig(report.v.μ), 1.2*maximum(report.h.weights))
+    ylim_max = ifelse(ylim_max == 0.0, 1e5, ylim_max)
+    ylims := (1, ylim_max)
     @series begin
         seriestype := :stepbins
         label := ifelse(show_label, "Data", "")
