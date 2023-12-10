@@ -193,7 +193,7 @@ function fit_sg_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRan
 
         # prepare AoE
         max_aoe_dep_i = quantile(aoe_dep_i, optimization_config.sg.max_aoe_quantile) + optimization_config.sg.max_aoe_offset
-        min_aoe_dep_i = quantile(aoe_dep_i, optimization_config.sg.min_aoe_quantile)
+        min_aoe_dep_i = quantile(aoe_dep_i, optimization_config.sg.min_aoe_quantile) + optimization_config.sg.min_aoe_offset
 
         try
             psd_cut = get_psd_cut(aoe_dep_i, e_dep_i; window=dep_window, cut_search_interval=(min_aoe_dep_i, max_aoe_dep_i))
