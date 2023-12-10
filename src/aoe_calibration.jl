@@ -1,4 +1,5 @@
-f_aoe_sigma(x, p) = p[1] .+ p[2]*exp.(-p[3]./x)
+# f_aoe_sigma(x, p) = p[1] .+ p[2]*exp.(-p[3]./x)
+f_aoe_sigma(x, p) = sqrt(abs(p[1]) + abs(p[2])/x^2)
 f_aoe_mu(x, p) = p[1] .+ p[2]*x
 
 
@@ -20,11 +21,10 @@ function fit_aoe_corrections(e::Array{<:Real}, μ::Array{T}, σ::Array{T}) where
     @debug "μ_scs_intercept: $μ_scs_intercept"
 
     # fit compton band sigmas with exponential function
-    σ_scs = curve_fit(f_aoe_sigma, e, σ, [0.0, median(σ), 5.0])
+    σ_scs = curve_fit(f_aoe_sigma, e, σ, [median(σ), 5.0])
     σ_scs_err = stderror(σ_scs)
     @debug "σ_scs offset: $(σ_scs.param[1])"
     @debug "σ_scs shift : $(σ_scs.param[2])"
-    @debug "σ_scs phase : $(σ_scs.param[3])"
     
     (
         e = e,
@@ -32,7 +32,7 @@ function fit_aoe_corrections(e::Array{<:Real}, μ::Array{T}, σ::Array{T}) where
         μ_scs = μ_scs.param,
         f_μ_scs = x -> μ_scs_slope * x + μ_scs_intercept,
         σ = σ,
-        σ_scs = σ_scs.param,
+        σ_scs = abs.(σ_scs.param),
         f_σ_scs = x -> Base.Fix2(f_aoe_sigma, σ_scs.param)(x),
         err = (σ_scs = σ_scs_err, 
         μ_scs = μ_scs_err
