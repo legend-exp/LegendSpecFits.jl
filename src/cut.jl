@@ -18,7 +18,12 @@ function cut_single_peak(x::Vector{T}, min_x::T, max_x::T,; n_bins::Int=1000, re
     # cut out window of interest
     x = x[(x .> min_x) .&& (x .< max_x)]
     # fit histogram
-    h = fit(Histogram, x, nbins=n_bins)
+    if n_bins < 0
+        bin_width = get_friedman_diaconis_bin_width(x)
+        h = fit(Histogram, x, minimum(x):bin_width:maximum(x))
+    else
+        h = fit(Histogram, x, nbins=n_bins)
+    end
     # find peak
     cts_argmax = mapslices(argmax, h.weights, dims=1)[1]
     cts_max    = h.weights[cts_argmax]
