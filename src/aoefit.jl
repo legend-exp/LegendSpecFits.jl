@@ -70,16 +70,16 @@ the binning is only done in the area around the peak. The peak parameters are es
 """
 function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compton_bands::Array{<:Real}, compton_window::T) where T<:Real
     # get aoe values in compton bands
-    aoe_compton_bands = [aoe[(e .> c) .&& (e .< c + compton_window) .&& (aoe .> 0.0)] for c in compton_bands]
+    aoe_compton_bands = [aoe[c .< e .< c + compton_window .&& aoe .> 0.0] for c in compton_bands]
 
     # can constrain data to the area around the peak
     max_aoe              = [quantile(aoe_c, 0.99) + 0.05 for aoe_c in aoe_compton_bands]
-    min_aoe              = [quantile(aoe_c, 0.1)         for aoe_c in aoe_compton_bands]
+    min_aoe              = [quantile(aoe_c, 0.2)         for aoe_c in aoe_compton_bands]
     half_quantile_aoe    = [quantile(aoe_c, 0.5)         for aoe_c in aoe_compton_bands]
 
     # Freedman-Diaconis Rule for binning only in the area aroung the peak
     # bin_width   = [2 * (quantile(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]], 0.75) - quantile(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]], 0.25)) / ∛(length(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])) for (i, aoe_c) in enumerate(aoe_compton_bands)]
-    bin_width   = [get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])/2 for (i, aoe_c) in enumerate(aoe_compton_bands)]
+    bin_width   = [get_friedman_diaconis_bin_width(aoe_c[half_quantile_aoe[i] .< aoe_c .< max_aoe[i]])/2 for (i, aoe_c) in enumerate(aoe_compton_bands)]
     # n_bins   = [round(Int, (max_aoe[i] - half_quantile_aoe[i]) / get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])) for (i, aoe_c) in enumerate(aoe_compton_bands)]
 
     # cuts = [cut_single_peak(aoe_c, min_aoe[i], max_aoe[i]; n_bins=n_bins[i], relative_cut=0.5) for (i, aoe_c) in enumerate(aoe_compton_bands)]
@@ -113,9 +113,9 @@ function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compto
 
     # estimate peak sigmas energy depencence
     peak_sigma = peakstats.peak_sigma
-    mean_peak_sigma_end, std_peak_sigma_end = mean(peak_sigma[20:end]), std(peak_sigma[20:end])
+    mean_peak_sigma, std_peak_sigma = mean(peak_sigma[20:end]), std(peak_sigma[20:end])
     # simple curve fit for parameter extraction
-    simple_fit_aoe_σ        = curve_fit(f_aoe_σ, compton_bands, peak_sigma, [0.0, 0.0, mean_peak_sigma_end])
+    simple_fit_aoe_σ        = curve_fit(f_aoe_σ, compton_bands, peak_sigma, [0.0, 0.0, mean_peak_sigma])
     simple_pars_aoe_σ       = simple_fit_aoe_σ.param
     simple_pars_error_aoe_σ = zeros(length(simple_pars_aoe_σ))
     try
@@ -124,20 +124,32 @@ function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compto
         @warn "Error calculating standard errors for simple fitted σ: $e"
     end
 
+
+    # Recalculate max_aoe to get rid out high-A/E outliers
+    max_aoe  = peakstats.peak_pos .+ 4 .* abs.(peakstats.peak_sigma)
+    # Freedman-Diaconis Rule for binning only in the area aroung the peak
+    bin_width   = [get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])/4 for (i, aoe_c) in enumerate(aoe_compton_bands)]
+
+    # regenerate histograms
+    peakhists = [fit(Histogram, aoe_compton_bands[i], min_aoe[i]:bin_width[i]:max_aoe[i]) for i in eachindex(aoe_compton_bands)]
+
+    # reestimate peak parameters
+    peakstats = StructArray(estimate_single_peak_stats_psd.(peakhists))
+
     (
-        aoe_compton_bands = aoe_compton_bands,
-        peakhists = peakhists,
-        peakstats = peakstats,
-        min_aoe = min_aoe,
-        max_aoe = max_aoe,
-        mean_peak_pos = mean_peak_pos,
-        std_peak_pos = std_peak_pos,
-        simple_pars_aoe_μ = simple_pars_aoe_μ,
-        simple_pars_error_aoe_μ = simple_pars_error_aoe_μ,
-        mean_peak_sigma = mean_peak_sigma_end,
-        std_peak_sigma = std_peak_sigma_end,
-        simple_pars_aoe_σ = simple_pars_aoe_σ,
-        simple_pars_error_aoe_σ = simple_pars_error_aoe_σ
+        ;
+        peakhists,
+        peakstats,
+        min_aoe,
+        max_aoe,
+        mean_peak_pos,
+        std_peak_pos,
+        simple_pars_aoe_μ,
+        simple_pars_error_aoe_μ,
+        mean_peak_sigma,
+        std_peak_sigma,
+        simple_pars_aoe_σ,
+        simple_pars_error_aoe_σ
     )
 end
 export generate_aoe_compton_bands
