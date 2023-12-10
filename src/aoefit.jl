@@ -38,11 +38,13 @@ function estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
     peak_sigma = peak_fwhm * inv(2*√(2log(2)))
     #peak_area = peak_amplitude * peak_sigma * sqrt(2*π)
     # mean_background = (first(W) + last(W)) / 2
-    background_max = findfirst(e -> e >= peak_pos - 3*peak_sigma, E)
-    mean_background = convert(typeof(peak_pos), (sum(view(W, 1:background_max))))
-    # mean_background = ifelse(mean_background == 0, 0.01, mean_background)
+    # five_sigma_idx_left = findfirst(e -> e >= peak_pos - 5*peak_sigma, E)
+    three_sigma_idx_left = findfirst(e -> e >= peak_pos - 3*peak_sigma, E)
+    mean_background = convert(typeof(peak_pos), (sum(view(W, 1:three_sigma_idx_left))))
+    mean_background = ifelse(mean_background == 0.0, 100.0, mean_background)
     # peak_counts = inv(0.761) * (sum(view(W,fwhm_idx_left:fwhm_idx_right)) - mean_background * peak_fwhm)
-    peak_counts = inv(0.761) * (sum(view(W,fwhm_idx_left:fwhm_idx_right)))
+    # peak_counts = sum(view(W,three_sigma_idx_left:lastindex(W))) / (1 - exp(-3))
+    peak_counts = 2*sum(view(W,peak_idx:lastindex(W)))
 
     (
         peak_pos = peak_pos, 
@@ -77,10 +79,14 @@ function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compto
 
     # Freedman-Diaconis Rule for binning only in the area aroung the peak
     # bin_width   = [2 * (quantile(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]], 0.75) - quantile(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]], 0.25)) / ∛(length(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])) for (i, aoe_c) in enumerate(aoe_compton_bands)]
-    bin_width   = [get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]]) for (i, aoe_c) in enumerate(aoe_compton_bands)]
+    bin_width   = [get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])/2 for (i, aoe_c) in enumerate(aoe_compton_bands)]
+    # n_bins   = [round(Int, (max_aoe[i] - half_quantile_aoe[i]) / get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])) for (i, aoe_c) in enumerate(aoe_compton_bands)]
 
+    # cuts = [cut_single_peak(aoe_c, min_aoe[i], max_aoe[i]; n_bins=n_bins[i], relative_cut=0.5) for (i, aoe_c) in enumerate(aoe_compton_bands)]
+    # cuts = [cut_single_peak(aoe_c, min_aoe[i], max_aoe[i]; n_bins=-1, relative_cut=0.5) for (i, aoe_c) in enumerate(aoe_compton_bands)]
+    # bin_width = [get_friedman_diaconis_bin_width(aoe_c[cuts[i].low .< aoe_c .< cuts[i].high]) for (i, aoe_c) in enumerate(aoe_compton_bands)]
     # generate histograms
-    peakhists = [fit(Histogram, aoe_compton_bands[i], min_aoe[i]:bin_width[i]:max_aoe[i]) for i in eachindex(aoe_compton_bands)]
+    peakhists = [fit(Histogram, aoe_compton_bands[i], min_aoe[i]:bin_width[i]/2:max_aoe[i]) for i in eachindex(aoe_compton_bands)]
 
     # estimate peak parameters
     peakstats = StructArray(estimate_single_peak_stats_psd.(peakhists))
@@ -98,7 +104,12 @@ function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compto
     # simple curve fit for parameter extraction
     simple_fit_aoe_μ        = curve_fit(f_aoe_μ, compton_bands[peak_pos_cut], peak_pos[peak_pos_cut], [0.0, mean_peak_pos])
     simple_pars_aoe_μ       = simple_fit_aoe_μ.param
-    simple_pars_error_aoe_μ = standard_errors(simple_fit_aoe_μ)
+    simple_pars_error_aoe_μ = zeros(length(simple_pars_aoe_μ))
+    try
+        simple_pars_error_aoe_μ = standard_errors(simple_fit_aoe_μ)
+    catch e
+        @warn "Error calculating standard errors for simple fitted μ: $e"
+    end
 
     # estimate peak sigmas energy depencence
     peak_sigma = peakstats.peak_sigma
@@ -106,7 +117,12 @@ function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compto
     # simple curve fit for parameter extraction
     simple_fit_aoe_σ        = curve_fit(f_aoe_σ, compton_bands, peak_sigma, [0.0, 0.0, mean_peak_sigma_end])
     simple_pars_aoe_σ       = simple_fit_aoe_σ.param
-    simple_pars_error_aoe_σ = standard_errors(simple_fit_aoe_σ)
+    simple_pars_error_aoe_σ = zeros(length(simple_pars_aoe_σ))
+    try
+        simple_pars_error_aoe_σ = standard_errors(simple_fit_aoe_σ)
+    catch e
+        @warn "Error calculating standard errors for simple fitted σ: $e"
+    end
 
     (
         aoe_compton_bands = aoe_compton_bands,
@@ -137,40 +153,25 @@ Fit the A/E Compton bands using the `f_aoe_compton` function consisting of a gau
     * `result`: Dict of NamedTuples of the fit results containing values and errors for each compton band
     * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
-function fit_aoe_compton(peakhists::Array, peakstats::StructArray, compton_bands::Array{T},; pars_aoe::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing)) where T<:Real
-    if isnothing(pars_aoe.μ)
-        # create return and result dicts
-        result = Dict{T, NamedTuple}()
-        report = Dict{T, NamedTuple}()
-        # iterate throuh all peaks
-        for (i, band) in enumerate(compton_bands)
-            # get histogram and peakstats
-            h  = peakhists[i]
-            ps = peakstats[i]
-            # fit peak
-            result_band, report_band = fit_single_aoe_compton(h, ps, ; uncertainty=false)
-            # save results
-            result[band] = result_band
-            report[band] = report_band
-        end
-        return result, report
-    else
-        # create return and result dicts
-        result = Dict{T, NamedTuple}()
-        report = Dict{T, NamedTuple}()
-        # iterate throuh all peaks
-        for (i, band) in enumerate(compton_bands)
-            # get histogram and peakstats
-            h  = peakhists[i]
+function fit_aoe_compton(peakhists::Array, peakstats::StructArray, compton_bands::Array{T},; pars_aoe::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Real
+    # create return and result dicts
+    result = Dict{T, NamedTuple}()
+    report = Dict{T, NamedTuple}()
+    # iterate throuh all peaks
+    for (i, band) in enumerate(compton_bands)
+        # get histogram and peakstats
+        h  = peakhists[i]
+        ps = peakstats[i]
+        if !isnothing(pars_aoe.μ)
             ps = merge(peakstats[i], (μ = f_aoe_μ(band, pars_aoe.μ), σ = f_aoe_σ(band, pars_aoe.σ)))
-            # fit peak
-            result_band, report_band = fit_single_aoe_compton(h, ps, ; uncertainty=false)
-            # save results
-            result[band] = result_band
-            report[band] = report_band
         end
-        return result, report
+        # fit peak
+        result_band, report_band = fit_single_aoe_compton(h, ps, ; uncertainty=uncertainty)
+        # save results
+        result[band] = result_band
+        report[band] = report_band
     end
+    return result, report
 end
 export fit_aoe_compton
 
@@ -184,85 +185,37 @@ Perform a fit of the peakshape to the data in `h` using the initial values in `p
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
 """
-function fit_single_aoe_compton(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}}; uncertainty::Bool=true) where T<:Real
+function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
     # create pseudo priors
     pseudo_prior = NamedTupleDist(
-                μ = Uniform(ps.peak_pos-3*ps.peak_sigma, ps.peak_pos+3*ps.peak_sigma),
-                σ = weibull_from_mx(ps.peak_sigma, 5*ps.peak_sigma),
-                n = weibull_from_mx(ps.peak_counts, 7*ps.peak_counts),
-                B = weibull_from_mx(ps.mean_background, 5*ps.mean_background),
-                δ = weibull_from_mx(0.1, 0.5)
+                μ = Uniform(ps.peak_pos-0.5*ps.peak_sigma, ps.peak_pos+0.5*ps.peak_sigma),
+                # σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
+                σ = Uniform(0.95*ps.peak_sigma, 1.05*ps.peak_sigma),
+                # σ = Normal(ps.peak_sigma, 0.01*ps.peak_sigma),
+                # n = weibull_from_mx(ps.peak_counts, 1.1*ps.peak_counts),
+                # n = Normal(ps.peak_counts, 0.5*ps.peak_counts),
+                # n = Normal(0.9*ps.peak_counts, 0.5*ps.peak_counts),
+                n = LogUniform(0.01*ps.peak_counts, 5*ps.peak_counts),
+                # n = Uniform(0.8*ps.peak_counts, 1.2*ps.peak_counts),
+                # B = weibull_from_mx(ps.mean_background, 1.2*ps.mean_background),
+                # B = Normal(ps.mean_background, 0.8*ps.mean_background),
+                B = LogUniform(0.1*ps.mean_background, 10*ps.mean_background),
+                # B = Uniform(0.8*ps.mean_background, 1.2*ps.mean_background),
+                # B = Uniform(0.8*ps.mean_background, 1.2*ps.mean_background),
+                # δ = weibull_from_mx(0.1, 0.8)
+                δ = LogUniform(0.01, 1.0)
             )
-    
-    # transform back to frequency space
-    f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
-
-    # start values for MLE
-    v_init = mean(pseudo_prior)
-
-    # create loglikehood function
-    f_loglike = let f_fit=f_aoe_compton, h=h
-        v -> hist_loglike(Base.Fix2(f_fit, v), h)
+    if haskey(ps, :μ)
+        # create pseudo priors
+        pseudo_prior = NamedTupleDist(
+                    μ = weibull_from_mx(ps.μ, 2*ps.μ),
+                    σ = weibull_from_mx(ps.σ, 2*ps.σ),
+                    n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
+                    B = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
+                    δ = weibull_from_mx(0.1, 0.8)
+                )
     end
-
-    # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
-
-    # best fit results
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
-
-    f_loglike_array = let f_fit=f_aoe_compton, h=h
-        v -> - hist_loglike(x -> f_fit(x, v...), h)
-    end
-
-    if uncertainty
-        # Calculate the Hessian matrix using ForwardDiff
-        H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
-
-        # Calculate the parameter covariance matrix
-        param_covariance = inv(H)
-
-        # Extract the parameter uncertainties
-        v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
-
-
-        @debug "Best Fit values"
-        @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
-        @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
-        @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
-        @debug "B: $(v_ml.B) ± $(v_ml_err.B)"
-
-        result = merge(v_ml, (err = v_ml_err, ))
-    else
-        @debug "Best Fit values"
-        @debug "μ: $(v_ml.μ)"
-        @debug "σ: $(v_ml.σ)"
-        @debug "n: $(v_ml.n)"
-        @debug "B: $(v_ml.B)"
-
-        result = v_ml
-    end
-    report = (
-            v = v_ml,
-            h = h,
-            f_fit = x -> Base.Fix2(f_aoe_compton, v_ml)(x),
-            f_sig = x -> Base.Fix2(f_aoe_sig, v_ml)(x),
-            f_bck = x -> Base.Fix2(f_aoe_bkg, v_ml)(x)
-        )
-    return result, report
-end
-
-
-function fit_single_aoe_compton(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
-    # create pseudo priors
-    pseudo_prior = NamedTupleDist(
-                μ = weibull_from_mx(ps.μ, 2*ps.μ),
-                σ = weibull_from_mx(ps.σ, 2*ps.σ),
-                n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
-                B = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
-                δ = weibull_from_mx(0.1, 0.8)
-            )
-    
+        
     # transform back to frequency space
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 

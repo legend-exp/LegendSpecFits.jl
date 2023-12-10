@@ -1,4 +1,5 @@
 f_aoe_sigma(x, p) = p[1] .+ p[2]*exp.(-p[3]./x)
+f_aoe_mu(x, p) = p[1] .+ p[2]*x
 
 
 """
@@ -9,42 +10,52 @@ Fit the corrections for the AoE value of the detector.
 function fit_aoe_corrections(e::Array{<:Real}, μ::Array{T}, σ::Array{T}) where T<:Real
     # fit compton band mus with linear function
     μ_cut = (mean(μ) - 2*std(μ) .< μ .&& μ .< mean(μ) + 2*std(μ))
-    μ_scs = linregress(e[μ_cut], μ[μ_cut])
+    e, μ, σ = e[μ_cut], μ[μ_cut], σ[μ_cut]
+    # μ_scs = linregress(e[μ_cut], μ[μ_cut])
+    μ_scs = linregress(e, μ)
     μ_scs_slope, μ_scs_intercept = LinearRegression.slope(μ_scs)[1], LinearRegression.bias(μ_scs)[1]
+    μ_scs = curve_fit(f_aoe_mu, e, μ, [μ_scs_intercept, μ_scs_slope])
+    μ_scs_err = stderror(μ_scs)  
     @debug "μ_scs_slope    : $μ_scs_slope"
     @debug "μ_scs_intercept: $μ_scs_intercept"
 
     # fit compton band sigmas with exponential function
-    σ_scs = curve_fit(f_aoe_sigma, e, σ, [0.05, median(σ), 5.0], lower=[0.001, 0.0, 0.0], upper=[Inf, Inf, Inf])
+    σ_scs = curve_fit(f_aoe_sigma, e, σ, [0.0, median(σ), 5.0])
+    σ_scs_err = stderror(σ_scs)
     @debug "σ_scs offset: $(σ_scs.param[1])"
     @debug "σ_scs shift : $(σ_scs.param[2])"
     @debug "σ_scs phase : $(σ_scs.param[3])"
     
     (
-        e = e[μ_cut],
-        μ = μ[μ_cut],
+        e = e,
+        μ = μ,
+        μ_scs = μ_scs.param,
         f_μ_scs = x -> μ_scs_slope * x + μ_scs_intercept,
-        μ_scs_slope = μ_scs_slope,
-        μ_scs_intercept = μ_scs_intercept,
-        σ = σ[μ_cut],
+        σ = σ,
         σ_scs = σ_scs.param,
-        f_σ_scs = x -> Base.Fix2(f_aoe_sigma, σ_scs.param)(x)
+        f_σ_scs = x -> Base.Fix2(f_aoe_sigma, σ_scs.param)(x),
+        err = (σ_scs = σ_scs_err, 
+        μ_scs = μ_scs_err
+        )
     )
 end
 export fit_aoe_corrections
 
 """ 
-    correctAoE!(aoe::Array{T}, e::Array{T}, aoe_corrections::NamedTuple{(:e, :μ, :f_μ_scs, :μ_scs_slope, :μ_scs_intercept, :σ, :σ_scs, :f_σ_scs)}) where T<:Real
+    correctAoE!(aoe::Array{T}, e::Array{T}, aoe_corrections::NamedTuple) where T<:Real
 
 Correct the AoE values in the `aoe` array using the corrections in `aoe_corrections`.
 """
-function correct_aoe!(aoe::Array{T}, e::Array{T}, aoe_corrections::NamedTuple{(:e, :μ, :f_μ_scs, :μ_scs_slope, :μ_scs_intercept, :σ, :σ_scs, :f_σ_scs)}) where T<:Real
-    aoe ./= aoe_corrections.f_μ_scs.(e)
+function correct_aoe!(aoe::Array{T}, e::Array{T}, aoe_corrections::NamedTuple) where T<:Real
+    aoe ./= Base.Fix2(f_aoe_mu, aoe_corrections.μ_scs).(e)
     aoe .-= 1.0
-    aoe ./= aoe_corrections.f_σ_scs.(e)
+    aoe ./= Base.Fix2(f_aoe_sigma, aoe_corrections.σ_scs).(e)
 end
 export correct_aoe!
 
+function correct_aoe!(aoe::Array{T}, e::Array{T}, aoe_corrections::PropDict) where T<:Real
+    correct_aoe!(aoe, e, NamedTuple(aoe_corrections))
+end
 
 """
     prepare_dep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
@@ -202,14 +213,14 @@ Get the surrival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `result`: Dict of results for each peak
 - `report`: Dict of reports for each peak
 """
-function get_peaks_surrival_fractions(aoe::Array{T}, e::Array{T}, peaks::Array{T}, peak_names::Array{Symbol}, windows::Array{T}, psd_cut::T,; uncertainty=true) where T<:Real
+function get_peaks_surrival_fractions(aoe::Array{T}, e::Array{T}, peaks::Array{T}, peak_names::Array{Symbol}, windows::Array{Tuple{T, T}}, psd_cut::T,; uncertainty=true) where T<:Real
     # create return and result dicts
     result = Dict{Symbol, NamedTuple}()
     report = Dict{Symbol, NamedTuple}()
     # iterate throuh all peaks
     for (peak, name, window) in zip(peaks, peak_names, windows)
         # fit peak
-        result_peak, report_peak = get_peak_surrival_fraction(aoe, e, peak, window, psd_cut; uncertainty=uncertainty)
+        result_peak, report_peak = get_peak_surrival_fraction(aoe, e, peak, collect(window), psd_cut; uncertainty=uncertainty)
         # save results
         result[name] = result_peak
         report[name] = report_peak
