@@ -13,11 +13,20 @@ using Random
 
 using ArgCheck
 using ArraysOfArrays
+using BAT
 using Distributions
 using FillArrays
+using ForwardDiff
+using IntervalSets
 using InverseFunctions
 using IrrationalConstants
+using LegendDataManagement
+using LinearRegression
+using LsqFit
+using Optim
+using PropDicts
 using RadiationSpectra
+using Roots
 using SpecialFunctions
 using StatsBase
 using StructArrays
@@ -25,14 +34,6 @@ using Tables
 using TypedTables
 using Unitful
 using ValueShapes
-using IntervalSets
-using Roots
-using BAT
-using LsqFit
-using Optim
-using ForwardDiff
-using LinearRegression
-using PropDicts
 
 include("utils.jl")
 include("peakshapes.jl")
