@@ -51,17 +51,6 @@ include("specfit_combined.jl")
 include("ctc.jl")
 include("qc.jl")
 
-# @static if !isdefined(Base, :get_extension)
-#     using Requires
-#     include("../ext/LegendSpecFitsRecipesBaseExt.jl")
-# end
-
 include("precompile.jl")
-
-function __init__()
-    @static if !isdefined(Base, :get_extension)
-        @require BAT = "c0cd4b16-88b7-57fa-983b-ab80aecada7e" include("../ext/LegendSpecFitsBATExt.jl")
-    end
-end
 
 end # module
