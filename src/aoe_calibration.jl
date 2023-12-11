@@ -91,13 +91,13 @@ Get the number of counts after a PSD cut value `psd_cut` for a given `peak` and 
 - `n`: Number of counts after the cut
 - `n_err`: Uncertainty of the number of counts after the cut
 """
-function get_n_after_psd_cut(psd_cut::T, aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, bin_width::T, result_before::NamedTuple, peakstats::NamedTuple; uncertainty::Bool=true) where T<:Real
+function get_n_after_psd_cut(psd_cut::T, aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, bin_width::T, result_before::NamedTuple, peakstats::NamedTuple; uncertainty::Bool=true, fixed_position::Bool=true) where T<:Real
     # get energy after cut and create histogram
     peakhist = fit(Histogram, e[aoe .> psd_cut], peak-first(window):bin_width:peak+last(window))
     # create pseudo_prior with known peak sigma in signal for more stable fit
-    pseudo_prior = NamedTupleDist(μ = ConstValueDist(result_before.μ), σ = Normal(result_before.σ, 0.3))
+    pseudo_prior = NamedTupleDist(σ = Normal(result_before.σ, 0.3), )
     # fit peak and return number of signal counts
-    result, _ = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=false, pseudo_prior=pseudo_prior)
+    result, _ = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, fixed_position=fixed_position, low_e_tail=false, pseudo_prior=pseudo_prior)
     if uncertainty
         n, n_err = result.n, result.err.n
     else
@@ -119,9 +119,9 @@ The algorhithm utilizes a root search algorithm to find the cut value with a rel
 - `nsf`: Number of counts after the cut
 - `err`: Uncertainties
 """
-function get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{T}=[12.0, 10.0], dep_sf::Float64=0.9, cut_search_interval::Tuple{T,T}=(-25.0, 0.0), rtol::T=0.001) where T<:Real
+function get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{T}=[12.0, 10.0], dep_sf::Float64=0.9, cut_search_interval::Tuple{T,T}=(-25.0, 0.0), rtol::T=0.001, bin_width_window::T=3.0, fixed_position::Bool=true) where T<:Real
     # estimate bin width
-    bin_width = get_friedman_diaconis_bin_width(e[e .> dep - 3 .&& e .< dep + 3])
+    bin_width = get_friedman_diaconis_bin_width(e[e .> dep - bin_width_window .&& e .< dep + bin_width_window])
     # create histogram
     dephist = fit(Histogram, e, dep-first(window):bin_width:dep+last(window))
     # get peakstats
@@ -130,15 +130,15 @@ function get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{
     aoe = aoe[dep-first(window) .< e .< dep+last(window)]
     e   =   e[dep-first(window) .< e .< dep+last(window)]
     # fit before cut
-    result_before, _ = fit_single_peak_th228(dephist, depstats,; uncertainty=true, fixed_position=true, low_e_tail=false)
+    result_before, _ = fit_single_peak_th228(dephist, depstats,; uncertainty=true, fixed_position=fixed_position, low_e_tail=false)
     # get n0 before cut
     nsf = result_before.n * dep_sf
     # get psd cut
-    n_surrival_dep_f = cut -> get_n_after_psd_cut(cut, aoe, e, dep, window, bin_width, result_before, depstats; uncertainty=false).n - nsf
+    n_surrival_dep_f = cut -> get_n_after_psd_cut(cut, aoe, e, dep, window, bin_width, result_before, depstats; uncertainty=false, fixed_position=fixed_position).n - nsf
     psd_cut = find_zero(n_surrival_dep_f, cut_search_interval, Bisection(), rtol=rtol, maxiters=100)
     # return n_surrival_dep_f.(0.25:0.001:0.5)
     # get nsf after cut
-    result_after = get_n_after_psd_cut(psd_cut, aoe, e, dep, window, bin_width, result_before, depstats; uncertainty=true)
+    result_after = get_n_after_psd_cut(psd_cut, aoe, e, dep, window, bin_width, result_before, depstats; uncertainty=true, fixed_position=fixed_position)
     return (cut = psd_cut, n0 = result_before.n, nsf = result_after.n, err = (cut = psd_cut * rtol, n0 = result_before.err.n, nsf = result_after.n_err))
 end
 export get_psd_cut
@@ -156,9 +156,9 @@ Get the surrival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `sf`: Surrival fraction
 - `err`: Uncertainties
 """
-function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, psd_cut::T,; uncertainty::Bool=true, low_e_tail::Bool=true) where T<:Real
+function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, psd_cut::T,; uncertainty::Bool=true, low_e_tail::Bool=true, bin_width_window::T=2.0) where T<:Real
     # estimate bin width
-    bin_width = get_friedman_diaconis_bin_width(e[e .> peak - 2 .&& e .< peak + 2])
+    bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     # get energy before cut and create histogram
     peakhist = fit(Histogram, e, peak-first(window):bin_width:peak+last(window))
     # estimate peak stats
@@ -169,13 +169,17 @@ function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window:
     # get e after cut
     e = e[aoe .> psd_cut]
     # estimate bin width
-    bin_width = get_friedman_diaconis_bin_width(e[e .> peak - 2 .&& e .< peak + 2])
+    bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     # get energy after cut and create histogram
     peakhist = fit(Histogram, e, peak-first(window):bin_width:peak+last(window))
     # create pseudo_prior with known peak sigma in signal for more stable fit
     pseudo_prior = NamedTupleDist(μ = ConstValueDist(result_before.μ), σ = Normal(result_before.σ, 0.1))
+    pseudo_prior = NamedTupleDist(σ = Normal(result_before.σ, 0.1), )
+    # estimate peak stats
+    peakstats = estimate_single_peak_stats(peakhist)
     # fit peak and return number of signal counts
-    result_after, report_after = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=low_e_tail, pseudo_prior=pseudo_prior)
+    result_after, report_after = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=low_e_tail)
+    # result_after, report_after = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=low_e_tail, pseudo_prior=pseudo_prior)
     # calculate surrival fraction
     sf = result_after.n / result_before.n
     result = (
@@ -213,14 +217,14 @@ Get the surrival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `result`: Dict of results for each peak
 - `report`: Dict of reports for each peak
 """
-function get_peaks_surrival_fractions(aoe::Array{T}, e::Array{T}, peaks::Array{T}, peak_names::Array{Symbol}, windows::Array{Tuple{T, T}}, psd_cut::T,; uncertainty=true) where T<:Real
+function get_peaks_surrival_fractions(aoe::Array{T}, e::Array{T}, peaks::Array{T}, peak_names::Array{Symbol}, windows::Array{Tuple{T, T}}, psd_cut::T,; uncertainty=true, bin_width_window::T=2.0) where T<:Real
     # create return and result dicts
     result = Dict{Symbol, NamedTuple}()
     report = Dict{Symbol, NamedTuple}()
     # iterate throuh all peaks
     for (peak, name, window) in zip(peaks, peak_names, windows)
         # fit peak
-        result_peak, report_peak = get_peak_surrival_fraction(aoe, e, peak, collect(window), psd_cut; uncertainty=uncertainty)
+        result_peak, report_peak = get_peak_surrival_fraction(aoe, e, peak, collect(window), psd_cut; uncertainty=uncertainty, bin_width_window=bin_width_window)
         # save results
         result[name] = result_peak
         report[name] = report_peak

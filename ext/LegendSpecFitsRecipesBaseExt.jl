@@ -108,12 +108,12 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck)}; show_label=true)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck)}; show_label=true, show_fit=true)
     xlabel := "Energy (keV)"
     ylabel := "Counts"
     legend := :bottomright
     yscale := :log10
-    ylim_max = max(1.2*report.f_sig(report.v.μ), 1.2*maximum(report.h.weights))
+    ylim_max = max(5*report.f_sig(report.v.μ), 5*maximum(report.h.weights))
     ylim_max = ifelse(ylim_max == 0.0, 1e5, ylim_max)
     ylims := (1, ylim_max)
     @series begin
@@ -122,29 +122,31 @@ end
         bins --> :sqrt
         LinearAlgebra.normalize(report.h, mode = :density)
     end
-    @series begin
-        seriestype := :line
-        label := ifelse(show_label, "Best Fit", "")
-        color := :red
-        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_fit
-    end
-    @series begin
-        seriestype := :line
-        label := ifelse(show_label, "Signal", "")
-        color := :green
-        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_sig
-    end
-    @series begin
-        seriestype := :line
-        label := ifelse(show_label, "Low Energy Tail", "")
-        color := :blue
-        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_lowEtail
-    end
-    @series begin
-        seriestype := :line
-        label := ifelse(show_label, "Background", "")
-        color := :black
-        minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_bck
+    if show_fit
+        @series begin
+            seriestype := :line
+            label := ifelse(show_label, "Best Fit", "")
+            color := :red
+            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_fit
+        end
+        @series begin
+            seriestype := :line
+            label := ifelse(show_label, "Signal", "")
+            color := :green
+            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_sig
+        end
+        @series begin
+            seriestype := :line
+            label := ifelse(show_label, "Low Energy Tail", "")
+            color := :blue
+            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_lowEtail
+        end
+        @series begin
+            seriestype := :line
+            label := ifelse(show_label, "Background", "")
+            color := :black
+            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_bck
+        end
     end
 end
 
