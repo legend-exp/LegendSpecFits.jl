@@ -59,6 +59,10 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
         peak_sigma = peak_fwqm * inv(2*√(2log(4)))
         peak_fwhm  = peak_sigma * 2*√(2log(2))
     end
+    if peak_sigma == 0
+        peak_sigma = 1.0
+        peak_fwhm = 2.0
+    end
     #peak_area = peak_amplitude * peak_sigma * sqrt(2*π)
     mean_background = (first(W) + last(W)) / 2
     mean_background = ifelse(mean_background == 0, 0.01, mean_background)

@@ -36,6 +36,14 @@ function estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
     peak_pos = (peak_max_pos + peak_mid_pos) / 2.0
     peak_fwhm = (E[fwhm_idx_right] - E[fwhm_idx_left]) / 1.0
     peak_sigma = peak_fwhm * inv(2*√(2log(2)))
+    # make sure that peakstats have non-zero sigma and fwhm values to prevent fit priors from being zero
+    if peak_fwhm == 0
+        fwqm_idx_left = findfirst(w -> w >= (first(W) + peak_amplitude) / 4, W)
+        fwqm_idx_right = findlast(w -> w >= (last(W) + peak_amplitude) / 4, W)
+        peak_fwqm = (E[fwqm_idx_right] - E[fwqm_idx_left]) / 1.0
+        peak_sigma = peak_fwqm * inv(2*√(2log(4)))
+        peak_fwhm  = peak_sigma * 2*√(2log(2))
+    end
     #peak_area = peak_amplitude * peak_sigma * sqrt(2*π)
     # mean_background = (first(W) + last(W)) / 2
     # five_sigma_idx_left = findfirst(e -> e >= peak_pos - 5*peak_sigma, E)
@@ -127,8 +135,12 @@ function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compto
 
     # Recalculate max_aoe to get rid out high-A/E outliers
     max_aoe  = peakstats.peak_pos .+ 4 .* abs.(peakstats.peak_sigma)
+    # Recalculate min_aoe to focus on main peak
+    min_aoe = peakstats.peak_pos .- 20 .* abs.(peakstats.peak_sigma)
+    min_3sigma_aoe = peakstats.peak_pos .- 3 .* abs.(peakstats.peak_sigma)
     # Freedman-Diaconis Rule for binning only in the area aroung the peak
-    bin_width   = [get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])/4 for (i, aoe_c) in enumerate(aoe_compton_bands)]
+    # bin_width   = [get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])/4 for (i, aoe_c) in enumerate(aoe_compton_bands)]
+    bin_width   = [get_friedman_diaconis_bin_width(aoe_c[aoe_c .> min_3sigma_aoe[i] .&& aoe_c .< max_aoe[i]])/4 for (i, aoe_c) in enumerate(aoe_compton_bands)]
 
     # regenerate histograms
     peakhists = [fit(Histogram, aoe_compton_bands[i], min_aoe[i]:bin_width[i]:max_aoe[i]) for i in eachindex(aoe_compton_bands)]
@@ -246,7 +258,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
     f_loglike_array = let f_fit=aoe_compton_peakshape, h=h
-        v -> - hist_loglike(x -> f_fit(x, v...), h)
+        v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v...) : 0, h)
     end
 
     # get p-value
@@ -269,8 +281,14 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 
-        # Calculate the parameter covariance matrix
-        param_covariance = inv(H)
+        param_covariance = nothing
+        if !all(isfinite.(H))
+            @warn "Hessian matrix is not finite"
+            param_covariance = zeros(length(v_ml), length(v_ml))
+        else
+            # Calculate the parameter covariance matrix
+            param_covariance = inv(H)
+        end
 
         # Extract the parameter uncertainties
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)

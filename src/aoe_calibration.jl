@@ -1,5 +1,5 @@
 # f_aoe_sigma(x, p) = p[1] .+ p[2]*exp.(-p[3]./x)
-f_aoe_sigma(x, p) = sqrt(abs(p[1]) + abs(p[2])/x^2)
+@. f_aoe_sigma(x, p) = sqrt(abs(p[1]) + abs(p[2])/x^2)
 f_aoe_mu(x, p) = p[1] .+ p[2]*x
 
 
@@ -21,7 +21,7 @@ function fit_aoe_corrections(e::Array{<:Real}, μ::Array{T}, σ::Array{T}) where
     @debug "μ_scs_intercept: $μ_scs_intercept"
 
     # fit compton band sigmas with exponential function
-    σ_scs = curve_fit(f_aoe_sigma, e, σ, [median(σ), 5.0])
+    σ_scs = curve_fit(f_aoe_sigma, e, σ, [median(σ)^2, 1e-5])
     σ_scs_err = stderror(σ_scs)
     @debug "σ_scs offset: $(σ_scs.param[1])"
     @debug "σ_scs shift : $(σ_scs.param[2])"
@@ -119,7 +119,7 @@ The algorhithm utilizes a root search algorithm to find the cut value with a rel
 - `nsf`: Number of counts after the cut
 - `err`: Uncertainties
 """
-function get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{T}=[12.0, 10.0], dep_sf::Float64=0.9, cut_search_interval::Tuple{T,T}=(-25.0, 0.0), rtol::T=0.001, bin_width_window::T=3.0, fixed_position::Bool=true) where T<:Real
+function get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{T}=[12.0, 10.0], dep_sf::Float64=0.9, cut_search_interval::Tuple{T,T}=(-25.0, 0.0), rtol::T=0.001, bin_width_window::T=3.0, fixed_position::Bool=true, sigma_high_sided::T=NaN) where T<:Real
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> dep - bin_width_window .&& e .< dep + bin_width_window])
     # create histogram
@@ -129,6 +129,11 @@ function get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{
     # cut window around peak
     aoe = aoe[dep-first(window) .< e .< dep+last(window)]
     e   =   e[dep-first(window) .< e .< dep+last(window)]
+    # check if a high sided AoE cut should be applied before the PSD cut is generated
+    if !isnan(sigma_high_sided)
+        e   =   e[aoe .< sigma_high_sided]
+        aoe = aoe[aoe .< sigma_high_sided]
+    end
     # fit before cut
     result_before, _ = fit_single_peak_th228(dephist, depstats,; uncertainty=true, fixed_position=fixed_position, low_e_tail=false)
     # get n0 before cut
@@ -156,7 +161,7 @@ Get the surrival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `sf`: Surrival fraction
 - `err`: Uncertainties
 """
-function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, psd_cut::T,; uncertainty::Bool=true, low_e_tail::Bool=true, bin_width_window::T=2.0) where T<:Real
+function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, psd_cut::T,; uncertainty::Bool=true, low_e_tail::Bool=true, bin_width_window::T=2.0, sigma_high_sided::T=NaN) where T<:Real
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     # get energy before cut and create histogram
@@ -167,7 +172,11 @@ function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window:
     result_before, report_before = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=low_e_tail)
 
     # get e after cut
-    e = e[aoe .> psd_cut]
+    if !isnan(sigma_high_sided)
+        e = e[psd_cut .< aoe .< sigma_high_sided]
+    else
+        e = e[psd_cut .< aoe]
+    end
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     # get energy after cut and create histogram
@@ -217,14 +226,14 @@ Get the surrival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `result`: Dict of results for each peak
 - `report`: Dict of reports for each peak
 """
-function get_peaks_surrival_fractions(aoe::Array{T}, e::Array{T}, peaks::Array{T}, peak_names::Array{Symbol}, windows::Array{Tuple{T, T}}, psd_cut::T,; uncertainty=true, bin_width_window::T=2.0) where T<:Real
+function get_peaks_surrival_fractions(aoe::Array{T}, e::Array{T}, peaks::Array{T}, peak_names::Array{Symbol}, windows::Array{Tuple{T, T}}, psd_cut::T,; uncertainty::Bool=true, bin_width_window::T=2.0, low_e_tail::Bool=true, sigma_high_sided::T=NaN) where T<:Real
     # create return and result dicts
     result = Dict{Symbol, NamedTuple}()
     report = Dict{Symbol, NamedTuple}()
     # iterate throuh all peaks
     for (peak, name, window) in zip(peaks, peak_names, windows)
         # fit peak
-        result_peak, report_peak = get_peak_surrival_fraction(aoe, e, peak, collect(window), psd_cut; uncertainty=uncertainty, bin_width_window=bin_width_window)
+        result_peak, report_peak = get_peak_surrival_fraction(aoe, e, peak, collect(window), psd_cut; uncertainty=uncertainty, bin_width_window=bin_width_window, low_e_tail=low_e_tail, sigma_high_sided=sigma_high_sided)
         # save results
         result[name] = result_peak
         report[name] = report_peak
@@ -246,10 +255,14 @@ Get the surrival fraction of a continuum after a PSD cut value `psd_cut` for a g
 - `sf`: Surrival fraction
 - `err`: Uncertainties
 """
-function get_continuum_surrival_fraction(aoe::Array{T}, e::Array{T}, center::T, window::T, psd_cut::T,; uncertainty=true) where T<:Real
+function get_continuum_surrival_fraction(aoe::Array{T}, e::Array{T}, center::T, window::T, psd_cut::T,; uncertainty=true, sigma_high_sided=sigma_high_sided) where T<:Real
     # get number of events in window before cut
     n_before = length(e[center-window .< e .< center+window])
     # get number of events after cut
+    n_after = length(e[aoe .> psd_cut .&& center-window .< e .< center+window])
+    if !isnan(sigma_high_sided)
+        n_after = length(e[psd_cut .< aoe .< sigma_high_sided .&& center-window .< e .< center+window])
+    end
     n_after = length(e[aoe .> psd_cut .&& center-window .< e .< center+window])
     # calculate surrival fraction
     sf = n_after / n_before
