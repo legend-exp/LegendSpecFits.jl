@@ -51,7 +51,7 @@ include("aoe_calibration.jl")
 include("specfit_combined.jl")
 include("ctc.jl")
 include("qc.jl")
-
+include("gof.jl")
 include("precompile.jl")
 
 end # module

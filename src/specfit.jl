@@ -177,6 +177,9 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         # Extract the parameter uncertainties
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
+        # calculate p-value
+        pval, chi2, dof = p_value(th228_fit_functions.f_fit, h, v_ml)
+        pval, chi2, dof = p_value_LogLikeRatio(th228_fit_functions.f_fit, h, v_ml)
         # get fwhm of peak
         fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, v_ml_err)
 
@@ -184,9 +187,10 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
         @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
         @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
+        @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
 
-        result = merge(v_ml, (fwhm = fwhm, err = merge(v_ml_err, (fwhm = fwhm_err,))))
+        result = merge(v_ml, (pval = pval,chi2 = chi2, dof = dof, fwhm = fwhm, err = merge(v_ml_err, (fwhm = fwhm_err,))))
         report = (
             v = v_ml,
             h = h,
