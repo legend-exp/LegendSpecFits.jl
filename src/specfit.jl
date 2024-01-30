@@ -8,7 +8,7 @@ th228_fit_functions = (
     f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background),
     f_sigWithTail = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction) + lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width)
 )
-
+export th228_fit_functions
 """
     estimate_single_peak_stats(h::Histogram, calib_type::Symbol=:th228)
 
@@ -179,7 +179,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
 
         # calculate p-value
         pval, chi2, dof = p_value(th228_fit_functions.f_fit, h, v_ml)
-        pval, chi2, dof = p_value_LogLikeRatio(th228_fit_functions.f_fit, h, v_ml)
+        
         # get fwhm of peak
         fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, v_ml_err)
 

@@ -20,6 +20,7 @@ function prepare_data(h::Histogram{<:Real,1})
     return counts, bin_widths, bin_centers
 end
 
+""" baseline: p-value via least-squares """
 function p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::NamedTuple)
     # prepare data
     counts, bin_widths, bin_centers = prepare_data(h)
@@ -66,3 +67,39 @@ function p_value_LogLikeRatio(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml:
 return pval, chi2, dof
 end
 export p_value_LogLikeRatio
+
+""" alternative p-value via Monte Carlo. Warning: can be computational expensive!"""
+function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1},ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background)},v_ml::NamedTuple,;n_samples::Int64=1000)
+    counts, bin_widths, bin_centers = prepare_data(h) # get data 
+   
+    # get peakshape of best-fit and maximum likelihood value
+    model_func  = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
+    model_counts = bin_widths.*map(energy->model_func(energy), bin_centers) # evaluate model at bin center (= binned measured energies)
+    loglike_bf = -hist_loglike(model_func,h) 
+
+    # draw sample for each bin
+    dists = Poisson.(model_counts) # create poisson distribution for each bin
+    counts_mc_vec = rand.(dists,n_samples) # randomized histogram counts
+    counts_mc = [ [] for _ in 1:n_samples ] #re-structure data_samples_vec to array of arrays, there is probably a better way to do this...
+    for i = 1:n_samples
+        counts_mc[i] = map(x -> x[i],counts_mc_vec)
+    end
+    
+    # fit every sample histogram and calculate max. loglikelihood
+    loglike_bf_mc = NaN.*ones(n_samples)
+    gof_samples   = NaN.*ones(n_samples,3)
+    h_mc = h # make copy of data histogram
+    for i=1:n_samples
+        h_mc.weights = counts_mc[i] # overwrite counts with MC values
+        result_fit_mc, report = fit_single_peak_th228(h_mc, ps ; uncertainty=false) # fit MC histogram
+        fit_par_mc   = result_fit_mc[(:μ, :σ, :n, :step_amplitude, :skew_fraction, :skew_width, :background)]
+        #gof_samples[i,:] = [report.pval, report.chi2, report.dof]
+        model_func_sample  = Base.Fix2(f_fit, fit_par_mc) # fix the fit parameters to ML best-estimate
+        loglike_bf_mc[i] = -hist_loglike(model_func_sample,h_mc) # loglikelihood for best-fit
+    end
+
+    # calculate p-value
+    pval= sum(loglike_bf_mc.<=loglike_bf)./n_samples
+    return pval 
+end
+export p_value_MC
