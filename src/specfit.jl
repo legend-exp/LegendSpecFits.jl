@@ -108,6 +108,15 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
         ps = peakstats[i]
         # fit peak
         result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=low_e_tail)
+
+        # check covariance matrix for being semi positive definite (no negative uncertainties)
+        if !isposdef(result_peak.err.covmat)
+            @warn "Covariance matrix not positive definite for peak $peak - repeat fit without low energy tail"
+            pval_save = result_peak.pval
+            result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false)
+            @info "New covariance matrix is positive definite: $(isposdef(result_peak.err.covmat))"
+            @info "p-val with low-energy tail  p=$(round(pval_save,digits=5)) , without low-energy tail: p=$(round((result_peak.pval),digits=5))"
+        end
         # save results
         result[peak] = result_peak
         report[peak] = report_peak
@@ -190,7 +199,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
 
-        result = merge(v_ml, (pval = pval,chi2 = chi2, dof = dof, fwhm = fwhm, err = merge(v_ml_err, (fwhm = fwhm_err,))))
+        result = merge(v_ml, (pval = pval,chi2 = chi2, dof = dof, fwhm = fwhm, err = merge(v_ml_err, (fwhm = fwhm_err, covmat = param_covariance))))
         report = (
             v = v_ml,
             h = h,

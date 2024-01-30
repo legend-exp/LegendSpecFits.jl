@@ -19,6 +19,16 @@ function prepare_data(h::Histogram{<:Real,1})
     bin_widths = bin_edges[begin+1:end] .- bin_edges[begin:end-1]
     return counts, bin_widths, bin_centers
 end
+export prepare_data
+
+
+function get_model_counts(f_fit::Base.Callable,v_ml::NamedTuple,bin_centers::StepRangeLen,bin_widths::StepRangeLen)
+    model_func  = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
+    model_counts = bin_widths.*map(energy->model_func(energy), bin_centers) # evaluate model at bin center (= binned measured energies)
+    return model_counts
+end
+export get_model_counts
+
 
 """ baseline: p-value via least-squares """
 function p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::NamedTuple)
@@ -26,16 +36,15 @@ function p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::NamedTuple)
     counts, bin_widths, bin_centers = prepare_data(h)
 
     # get peakshape of best-fit 
-    model_func  = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
-    model_counts = bin_widths.*map(energy->model_func(energy), bin_centers) # evaluate model at bin center (= binned measured energies)
-
+    model_counts = get_model_counts(f_fit, v_ml, bin_centers,bin_widths)
+    
     # calculate chi2
     chi2    = sum((model_counts[model_counts.>0]-counts[model_counts.>0]).^2 ./ model_counts[model_counts.>0])
     npar    = length(v_ml)
     dof    = length(counts[model_counts.>0])-npar
     pval    = ccdf(Chisq(dof),chi2)
     if any(model_counts.<=5)
-              @warn "WARNING: bin with <=$(minimum(model_counts)) counts -  chi2 test might be not valid"
+              @warn "WARNING: bin with <=$(round(minimum(model_counts),digits=0)) counts -  chi2 test might be not valid"
     else  
          @debug "p-value = $(round(pval,digits=2))"
     end
@@ -49,9 +58,8 @@ function p_value_LogLikeRatio(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml:
     counts, bin_widths, bin_centers = prepare_data(h)
 
     # get peakshape of best-fit 
-    model_func  = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
-    model_counts = bin_widths.*map(energy->model_func(energy), bin_centers) # evaluate model at bin center (= binned measured energies)
-
+    model_counts =get_model_counts(f_fit, v_ml, bin_centers,bin_widths)
+    
     # calculate chi2
     chi2    = sum((model_counts[model_counts.>0]-counts[model_counts.>0]).^2 ./ model_counts[model_counts.>0])
     npar    = length(v_ml)
@@ -87,13 +95,11 @@ function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1},ps::NamedTuple{
     
     # fit every sample histogram and calculate max. loglikelihood
     loglike_bf_mc = NaN.*ones(n_samples)
-    gof_samples   = NaN.*ones(n_samples,3)
     h_mc = h # make copy of data histogram
     for i=1:n_samples
         h_mc.weights = counts_mc[i] # overwrite counts with MC values
         result_fit_mc, report = fit_single_peak_th228(h_mc, ps ; uncertainty=false) # fit MC histogram
         fit_par_mc   = result_fit_mc[(:μ, :σ, :n, :step_amplitude, :skew_fraction, :skew_width, :background)]
-        #gof_samples[i,:] = [report.pval, report.chi2, report.dof]
         model_func_sample  = Base.Fix2(f_fit, fit_par_mc) # fix the fit parameters to ML best-estimate
         loglike_bf_mc[i] = -hist_loglike(model_func_sample,h_mc) # loglikelihood for best-fit
     end
