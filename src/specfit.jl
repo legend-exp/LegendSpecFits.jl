@@ -38,7 +38,6 @@ function estimate_single_peak_stats(h::Histogram,; calib_type::Symbol=:th228)
 end
 export estimate_single_peak_stats
 
-
 function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
     W = h.weights
     E = first(h.edges)
@@ -88,16 +87,16 @@ Perform a fit of the peakshape to the data in `peakhists` using the initial valu
     * `peak_fit_plots`: array of plots of the peak fits
     * `return_vals`: dictionary of the fit results
 """
-function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Array,; calib_type::Symbol=:th228, uncertainty::Bool=true, low_e_tail::Bool=true)
+function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Array,; calib_type::Symbol=:th228, uncertainty::Bool=true, low_e_tail::Bool=true,iterative_fit::Bool=false)
     if calib_type == :th228
-        return fit_peaks_th228(peakhists, peakstats, th228_lines,; uncertainty=uncertainty, low_e_tail=low_e_tail)
+        return fit_peaks_th228(peakhists, peakstats, th228_lines,; uncertainty=uncertainty, low_e_tail=low_e_tail,iterative_fit=iterative_fit)
     else
         error("Calibration type not supported")
     end
 end
 export fit_peaks
 
-function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Array{T},; uncertainty::Bool=true, low_e_tail::Bool=true) where T<:Any
+function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Array{T},; uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false) where T<:Any
     # create return and result dicts
     result = Dict{T, NamedTuple}()
     report = Dict{T, NamedTuple}()
@@ -110,12 +109,14 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
         result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=low_e_tail)
 
         # check covariance matrix for being semi positive definite (no negative uncertainties)
-        if !isposdef(result_peak.err.covmat)
-            @warn "Covariance matrix not positive definite for peak $peak - repeat fit without low energy tail"
-            pval_save = result_peak.pval
-            result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false)
-            @info "New covariance matrix is positive definite: $(isposdef(result_peak.err.covmat))"
-            @info "p-val with low-energy tail  p=$(round(pval_save,digits=5)) , without low-energy tail: p=$(round((result_peak.pval),digits=5))"
+        if uncertainty
+             if iterative_fit && !isposdef(result_peak.covmat)
+                @warn "Covariance matrix not positive definite for peak $peak - repeat fit without low energy tail"
+                pval_save = result_peak.pval
+              result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false)
+                @info "New covariance matrix is positive definite: $(isposdef(result_peak.covmat))"
+                @info "p-val with low-energy tail  p=$(round(pval_save,digits=5)) , without low-energy tail: p=$(round((result_peak.pval),digits=5))"
+                end
         end
         # save results
         result[peak] = result_peak
@@ -133,7 +134,9 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
 """
-function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}}; uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true)) where T<:Real
+function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}}; 
+    uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
+    fit_fun::Symbol=:f_fit) where T<:Real
     # create standard pseudo priors
     standard_pseudo_prior = NamedTupleDist(
         μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Uniform(ps.peak_pos-10, ps.peak_pos+10)),
@@ -161,8 +164,8 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     # start values for MLE
     v_init = mean(pseudo_prior)
 
-    # create loglikehood function
-    f_loglike = let f_fit=th228_fit_functions.f_fit, h=h
+    # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
+    f_loglike = let f_fit=th228_fit_functions[fit_fun], h=h
         v -> hist_loglike(Base.Fix2(f_fit, v), h)
     end
 
@@ -172,8 +175,11 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    f_loglike_array = let f_fit=gamma_peakshape, h=h
-        v -> - hist_loglike(x -> f_fit(x, v...), h)
+   # f_loglike_array = let f_fit=gamma_peakshape, h=h
+    #    v -> - hist_loglike(x -> f_fit(x, v...), h)
+    #end
+    f_loglike_array = let f_fit=th228_fit_functions[fit_fun], h=h, v_keys = keys(standard_pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
+        v ->  - hist_loglike(    x -> f_fit(x,NamedTuple{v_keys}(v)), h) 
     end
 
     if uncertainty
@@ -199,7 +205,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
 
-        result = merge(v_ml, (pval = pval,chi2 = chi2, dof = dof, fwhm = fwhm, err = merge(v_ml_err, (fwhm = fwhm_err, covmat = param_covariance))))
+        result = merge(v_ml, (pval = pval, chi2 = chi2, dof = dof, covmat = param_covariance, fwhm = fwhm,),(err = merge(v_ml_err, (fwhm = fwhm_err,)),))
         report = (
             v = v_ml,
             h = h,
