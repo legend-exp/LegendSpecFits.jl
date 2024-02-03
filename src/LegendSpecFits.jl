@@ -17,6 +17,7 @@ using BAT
 using Distributions
 using FillArrays
 using ForwardDiff
+using Interpolations
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
@@ -49,6 +50,7 @@ include("simple_calibration.jl")
 include("auto_calibration.jl")
 include("aoe_calibration.jl")
 include("specfit_combined.jl")
+include("specfit_testdata.jl")
 include("ctc.jl")
 include("qc.jl")
 include("gof.jl")
