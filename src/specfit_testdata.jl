@@ -35,7 +35,6 @@ function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=th228_fit
 
         # save as intermediate result 
         model_counts_all[i] = get_model_counts(f_fit, v[i], bin_centers_all[i], bin_widths)
-        plot(bin_centers_all[i],model_counts_all[i],marker=:dot)
         PeakMax[i] = maximum(model_counts_all[i])
 
         # create CDF
