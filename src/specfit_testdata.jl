@@ -1,12 +1,12 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
-"""
+#=
 Sample Legend200 calibration data based on "Inverse Transform Sampling" method: 
 - pdf of th228 calibration calibration peak is estimated from fit model function f_fit from LegendSpecFits
 - calculate the cumulative distribution function F(x)
 - generate a random number u from a uniform distribution between 0 and 1.
 - find the value x such that  F(x) = u  by solving for  x . --> done by interpolation of the inverse cdf
 - repeat for many u  --> energy samples 
-"""
+=# 
 function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=th228_fit_functions.f_fit)
 
     th228_lines =  [583.191,  727.330,  860.564,  1592.53,    1620.50,    2103.53,    2614.51]
