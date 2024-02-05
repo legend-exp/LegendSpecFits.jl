@@ -1,12 +1,15 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
-#=
-Sample Legend200 calibration data based on "Inverse Transform Sampling" method: 
-- pdf of th228 calibration calibration peak is estimated from fit model function f_fit from LegendSpecFits
-- calculate the cumulative distribution function F(x)
-- generate a random number u from a uniform distribution between 0 and 1.
-- find the value x such that  F(x) = u  by solving for  x . --> done by interpolation of the inverse cdf
-- repeat for many u  --> energy samples 
-=# 
+
+"""
+    generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=th228_fit_functions.f_fit)
+Sample Legend200 calibration data based on "Inverse Transform Sampling" method
+# Method:
+* pdf of th228 calibration calibration peak is estimated from fit model function f_fit from LegendSpecFits
+* calculate the cumulative distribution function F(x)
+* generate a random number u from a uniform distribution between 0 and 1.
+* find the value x such that  F(x) = u  by solving for  x . done by interpolation of the inverse cdf
+* repeat for many u : energy samples 
+"""
 function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=th228_fit_functions.f_fit)
 
     th228_lines =  [583.191,  727.330,  860.564,  1592.53,    1620.50,    2103.53,    2614.51]
@@ -34,7 +37,7 @@ function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=th228_fit
         bin_widths = range(bw,bw, length=n_step) 
 
         # save as intermediate result 
-        model_counts_all[i] = get_model_counts(f_fit, v[i], bin_centers_all[i], bin_widths)
+        model_counts_all[i] =LegendSpecFits._get_model_counts(f_fit, v[i], bin_centers_all[i], bin_widths)
         PeakMax[i] = maximum(model_counts_all[i])
 
         # create CDF
@@ -50,11 +53,10 @@ function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=th228_fit
     for i=1:length(th228_lines)
         bandwidth = maximum(model_cdf_all[i])-minimum(model_cdf_all[i])
         rand_i = minimum(model_cdf_all[i]).+bandwidth.*rand(n_i[i]); # make sure sample is within model range 
-        interp_cdf_inv = LinearInterpolation(model_cdf_all[i],bin_centers_all[i]) # inverse cdf
+        interp_cdf_inv = linear_interpolation(model_cdf_all[i],bin_centers_all[i]) # inverse cdf
         energy_mc_all[i] = interp_cdf_inv.(rand_i) 
     end
 
     energy_mc = fast_flatten(energy_mc_all)
     return energy_mc, th228_lines
 end
-export generate_mc_spectrum

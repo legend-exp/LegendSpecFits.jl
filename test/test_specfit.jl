@@ -1,9 +1,13 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 using LegendSpecFits
 using Test
+using LegendDataTypes: fast_flatten
+using Interpolations
 
 @testset "specfit" begin
     # load data, simple calibration 
+    include("test_utils.jl")
+
     energy_test, th228_lines = generate_mc_spectrum(200000)
     
     # simple calibration fit 
@@ -13,3 +17,4 @@ using Test
     # fit 
     result, report = fit_peaks(result_simple.peakhists, result_simple.peakstats, th228_lines,; uncertainty=true);
 end
+

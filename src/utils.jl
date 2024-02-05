@@ -66,7 +66,6 @@ end
 
 """ 
     get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Int64)
-
 Return a `NamedTuple` with the same fields as `v` and `v_err` but with
 `Normal` distributions for each field.
 """
@@ -74,7 +73,12 @@ function get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Int64)
     vs = BAT.distprod(map(Normal, v, v_err))
     NamedTuple.(rand(vs, n))
 end
-function get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Int64)
+
+"""
+    get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Union{Int64,Int32})
+Generate `n` random samples of fit parameters using their respective best-fit values `v` and covariance matrix `v_err`
+"""
+function get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Union{Int64,Int32})
     if !isposdef(v_err)
         v_err = nearestSPD(v_err)
         @debug "Covariance matrix not positive definite. Using nearestSPD"
@@ -128,10 +132,11 @@ function get_number_of_bins(x::AbstractArray,; method::Symbol=:sqrt)
 end
 
 """
-nearestSPD(A) returns the nearest positive definite matrix to A
-calculation is based on matrix factorization techniques described in https://www.sciencedirect.com/science/article/pii/0024379588902236
+    nearestSPD(A::Matrix{<:Real}) 
+Returns the nearest positive definite matrix to A
+Calculation is based on matrix factorization techniques described in https://www.sciencedirect.com/science/article/pii/0024379588902236
 """
-function nearestSPD(A)
+function nearestSPD(A::Matrix{<:Real})
     B = (A + A') / 2  # make sure matrix is symmetric
     _, s, V = svd(B)  # singular value decomposition (SVD), s = singular values (~eigenvalues), V = right singular vector  (~eigenvector)
     H = V * diagm(0 => max.(s, 0)) * V' # symmetric polar factor of B

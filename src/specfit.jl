@@ -189,9 +189,13 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
        
         # Extract the parameter uncertainties
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
+
         # calculate p-value
         pval, chi2, dof = p_value(th228_fit_functions.f_fit, h, v_ml)
         
+        # calculate normalized residuals
+        residuals, residuals_norm, p_value_binwise, bin_centers =  get_residuals(th228_fit_functions.f_fit, h, v_ml)
+
         # get fwhm of peak
         fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, param_covariance)
 
@@ -202,7 +206,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
        
-        result = merge(v_ml, (pval = pval, chi2 = chi2, dof = dof, fwhm = fwhm,covmat = param_covariance, covmat_raw = param_covariance_raw,),(err = merge(v_ml_err, (fwhm = fwhm_err,)),))
+        result = merge(v_ml, (pval = pval, chi2 = chi2, dof = dof, fwhm = fwhm,covmat = param_covariance, covmat_raw = param_covariance_raw,residuals = residuals, residuals_norm = residuals_norm, p_value_binwise= p_value_binwise,bin_centers = bin_centers,),(err = merge(v_ml_err, (fwhm = fwhm_err,)),))
         report = (
             v = v_ml,
             h = h,
