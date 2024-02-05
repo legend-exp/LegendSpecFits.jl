@@ -21,7 +21,6 @@ using IntervalSets
 using InverseFunctions
 using IrrationalConstants
 using LegendDataManagement
-using LegendDataTypes: fast_flatten
 using LinearRegression
 using LsqFit
 using Optim

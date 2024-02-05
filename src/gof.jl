@@ -109,7 +109,6 @@ alternative p-value calculation via Monte Carlo sampling. **Warning**: computati
 """
 function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1},ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background)},v_ml::NamedTuple,;n_samples::Int64=1000)
     counts, bin_widths, bin_centers = _prepare_data(h) # get data 
-
     # get peakshape of best-fit and maximum likelihood value
     model_func  = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
     model_counts = bin_widths.*map(energy->model_func(energy), bin_centers) # evaluate model at bin center (= binned measured energies)
