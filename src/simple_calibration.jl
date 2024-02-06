@@ -15,7 +15,7 @@ Returns
     * `peakhists`: array of histograms around the calibration lines
     * `peakstats`: array of statistics for the calibration line fits
 """
-function simple_calibration(e_uncal::AbstractArray{<:Real}, th228_lines::Array{T}, window_sizes::Array{T},; n_bins::Int=15000, quantile_perc::Float64=NaN, calib_type::Symbol=:th228) where T<:Real
+function simple_calibration(e_uncal::AbstractArray{<:Real}, th228_lines::Array{T}, window_sizes::Array{Tuple{T, T}},; n_bins::Int=15000, quantile_perc::Float64=NaN, calib_type::Symbol=:th228) where T<:Real
     if calib_type == :th228
         return simple_calibration_th228(e_uncal, th228_lines, window_sizes,; n_bins=n_bins, quantile_perc=quantile_perc)
     else
@@ -24,13 +24,12 @@ function simple_calibration(e_uncal::AbstractArray{<:Real}, th228_lines::Array{T
 end
 export simple_calibration
 
-function simple_calibration_th228(e_uncal::AbstractArray{<:Real}, th228_lines::Array{T}, window_sizes::Array{T},; n_bins::Int=15000, quantile_perc::Float64=NaN) where T<:Real
+function simple_calibration_th228(e_uncal::AbstractArray{<:Real}, th228_lines::Array{T}, window_sizes::Array{Tuple{T, T}},; n_bins::Int=15000, quantile_perc::Float64=NaN) where T<:Real
     # create initial peak search histogram
     h_uncal = fit(Histogram, e_uncal, nbins=n_bins)
     # search all possible peak candidates
     _, peakpos = RadiationSpectra.peakfinder(h_uncal, σ=5.0, backgroundRemove=true, threshold=10)
     # the FEP ist the last peak in the list
-    println()
     if isnan(quantile_perc)
         fep_guess = sort(peakpos)[end]
     else
@@ -41,11 +40,11 @@ function simple_calibration_th228(e_uncal::AbstractArray{<:Real}, th228_lines::A
     e_simple = e_uncal .* c
     bin_window_cut = 2103.5 - 10 .< e_simple .< 2103.5 + 10
     # get optimal binning for simple calibration
-    bin_width   = 2 * (quantile(e_simple[bin_window_cut], 0.75) - quantile(e_simple[bin_window_cut], 0.25)) / ∛(length(e_simple[bin_window_cut]))
+    bin_width  = get_friedman_diaconis_bin_width(e_simple[bin_window_cut])
     # create histogram for simple calibration
     h_calsimple = fit(Histogram, e_simple, 0:bin_width:3000)
     # get histograms around calibration lines and peakstats
-    peakhists = LegendSpecFits.subhist.(Ref(h_calsimple), [(peak-window, peak+window) for (peak, window) in zip(th228_lines, window_sizes)])
+    peakhists = LegendSpecFits.subhist.(Ref(h_calsimple), [(peak-first(window), peak+last(window)) for (peak, window) in zip(th228_lines, window_sizes)])
     # peakhists = LegendSpecFits.subhist.([e_simple[peak-window .< e_simple .< peak+window] for (peak, window) in zip(th228_lines, window_sizes)])
     peakstats = StructArray(estimate_single_peak_stats.(peakhists))
     result = (
