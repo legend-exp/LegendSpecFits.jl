@@ -8,7 +8,6 @@ th228_fit_functions = (
     f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background),
     f_sigWithTail = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction) + lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width)
 )
-export th228_fit_functions
 """
     estimate_single_peak_stats(h::Histogram, calib_type::Symbol=:th228)
 
@@ -260,7 +259,6 @@ function estimate_fwhm(v::NamedTuple)
         return NaN
     end
 end
-export estimate_fwhm
 """
     get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::NamedTuple)
 Get the FWHM of a peak from the fit parameters while performing a MC error propagation.

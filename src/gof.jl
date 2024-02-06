@@ -1,9 +1,5 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 
-"""
-`gof.jl`
-several functions to calculate goodness-of-fit (gof) for fits (-> `specfits.jl`):
-"""
 
 """
     _prepare_data(h::Histogram{<:Real,1})
