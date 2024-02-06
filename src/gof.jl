@@ -1,4 +1,5 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
+
 """
 `gof.jl`
 several functions to calculate goodness-of-fit (gof) for fits (-> `specfits.jl`):
@@ -56,9 +57,9 @@ function p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::NamedTuple)
     dof    = length(counts[model_counts.>0])-npar
     pval    = ccdf(Chisq(dof),chi2)
     if any(model_counts.<=5)
-              @warn "WARNING: bin with <=$(round(minimum(model_counts),digits=0)) counts -  chi2 test might be not valid"
+        @warn "WARNING: bin with <=$(round(minimum(model_counts),digits=0)) counts -  chi2 test might be not valid"
     else  
-         @debug "p-value = $(round(pval,digits=2))"
+        @debug "p-value = $(round(pval,digits=2))"
     end
     return pval, chi2, dof
 end
@@ -82,9 +83,9 @@ function p_value_LogLikeRatio(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml:
     dof    = length(counts[model_counts.>0])-npar
     pval    = ccdf(Chisq(dof),chi2)
     if any(model_counts.<=5)
-              @warn "WARNING: bin with <=$(minimum(model_counts)) counts -  chi2 test might be not valid"
+        @warn "WARNING: bin with <=$(minimum(model_counts)) counts -  chi2 test might be not valid"
     else  
-         @debug "p-value = $(round(pval,digits=2))"
+        @debug "p-value = $(round(pval,digits=2))"
     end
     chi2   = 2*sum(model_counts.*log.(model_counts./counts)+model_counts-counts)
     pval   = ccdf(Chisq(dof),chi2)
@@ -94,15 +95,25 @@ export p_value_LogLikeRatio
 
 """
     p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1},ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background)},v_ml::NamedTuple,;n_samples::Int64=1000) 
-alternative p-value calculation via Monte Carlo sampling. Warning: computational more expensive than p_vaule() and p_value_LogLikeRatio()
+alternative p-value calculation via Monte Carlo sampling. **Warning**: computational more expensive than p_vaule() and p_value_LogLikeRatio()
+# Input:
+ * `f_fit`function handle of fit function (peakshape)
+ * `h` histogram of data
+ * `ps` best-fit parameters
+ * `v_ml` best-fit parameters
+ * `n_samples` number of samples
+
+# Performed Steps:
 * Create n_samples randomized histograms. For each bin, samples are drawn from a Poisson distribution with λ = model peak shape (best-fit parameter)
 * Each sample histogram is fit using the model function `f_fit`
-* For each sample fit, the max. loglikelihood fit is calculated
-% p value --> comparison of sample max. loglikelihood and max. loglikelihood of best-fit
+* For each sample fit, the max. loglikelihood fit is calculated 
+
+# Returns
+* % p value --> comparison of sample max. loglikelihood and max. loglikelihood of best-fit
 """
 function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1},ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background)},v_ml::NamedTuple,;n_samples::Int64=1000)
     counts, bin_widths, bin_centers = _prepare_data(h) # get data 
-   
+
     # get peakshape of best-fit and maximum likelihood value
     model_func  = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
     model_counts = bin_widths.*map(energy->model_func(energy), bin_centers) # evaluate model at bin center (= binned measured energies)
@@ -135,13 +146,15 @@ export p_value_MC
 
 """ 
     residuals(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::NamedTuple)
-calculate bin-wise residuals and normalized residuals 
-calcualte bin-wise p-value based on poisson distribution for each bin 
-# input:
+Calculate bin-wise residuals and normalized residuals. 
+Calcualte bin-wise p-value based on poisson distribution for each bin.
+
+# Input:
  * `f_fit`function handle of fit function (peakshape)
  * `h` histogram of data
  * `v_ml` best-fit parameters
-# returns:
+
+# Returns:
  * `residuals` difference: model - data (histogram bin count)
  * `residuals_norm` normalized residuals: model - data / sqrt(model)
  * `p_value_binwise` p-value for each bin based on poisson distribution

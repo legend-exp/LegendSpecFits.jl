@@ -374,5 +374,4 @@ end
 
 end
 
-
 end # module LegendSpecFitsRecipesBaseExt
