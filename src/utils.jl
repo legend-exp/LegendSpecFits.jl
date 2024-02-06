@@ -66,7 +66,6 @@ end
 
 """ 
     get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Int64)
-
 Return a `NamedTuple` with the same fields as `v` and `v_err` but with
 `Normal` distributions for each field.
 """
@@ -75,6 +74,29 @@ function get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Int64)
     NamedTuple.(rand(vs, n))
 end
 
+"""
+    get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Union{Int64,Int32})
+Generate `n` random samples of fit parameters using their respective best-fit values `v` and covariance matrix `v_err`
+"""
+function get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Union{Int64,Int32})
+    if !isposdef(v_err)
+        v_err = nearestSPD(v_err)
+        @debug "Covariance matrix not positive definite. Using nearestSPD"
+    end
+    v_err = v_err[1:6,1:6] #remove background, keep only relevant for sampling 
+    v_fitpar = v[keys(v)[1:size(v_err,1)]] # only fit parameter
+    dist = MvNormal([v_fitpar...], v_err) # multivariate distribution using covariance matrix)
+    v_mc = rand(dist, n) # Draw samples
+
+    # constain fit_par_samples to physical values. warning hardcoded. tbd 
+    Idx_keep = findall((v_mc[3,:].>0) .*                #  positive amplitude 
+                        (v_mc[5,:].<0.25).*             # skew fraction 
+                        (v_mc[5,:].>0) .*    #skew fraction 
+                        (v_mc[6,:].>0))                 # positive skew width
+    v_mc = v_mc[:,Idx_keep];
+    n = size(v_mc,2)
+    v_mc = [NamedTuple{keys(v)[1:size(v_err,1)]}(v_mc[:,i]) for i=1:n] # convert back to NamedTuple 
+end
 """
     get_friedman_diaconis_bin_width(x::AbstractArray)
 
@@ -108,3 +130,18 @@ function get_number_of_bins(x::AbstractArray,; method::Symbol=:sqrt)
         @assert false "Method not implemented"
     end
 end
+
+"""
+    nearestSPD(A::Matrix{<:Real}) 
+Returns the nearest positive definite matrix to A
+Calculation is based on matrix factorization techniques described in https://www.sciencedirect.com/science/article/pii/0024379588902236
+"""
+function nearestSPD(A::Matrix{<:Real})
+    B = (A + A') / 2  # make sure matrix is symmetric
+    _, s, V = svd(B)  # singular value decomposition (SVD), s = singular values (~eigenvalues), V = right singular vector  (~eigenvector)
+    H = V * diagm(0 => max.(s, 0)) * V' # symmetric polar factor of B
+    B = (B + H) / 2 # calculate nearest positive definite matrix
+    B = (B + B') / 2  # make sure matrix is symmetric
+    return B
+end 
+export nearestSPD
