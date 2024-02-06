@@ -7,6 +7,15 @@ f_aoe_mu(x, p) = p[1] .+ p[2]*x
     fit_aoe_corrections(e::Array{<:Real}, μ::Array{T}, σ::Array{T}) where T<:Real
 
 Fit the corrections for the AoE value of the detector.
+# Returns
+- `e`: Energy values
+- `μ`: Mean values
+- `σ`: Sigma values
+- `μ_scs`: Fit result for the mean values
+- `f_μ_scs`: Fit function for the mean values
+- `σ_scs`: Fit result for the sigma values
+- `f_σ_scs`: Fit function for the sigma values
+- `err`: Uncertainties
 """
 function fit_aoe_corrections(e::Array{<:Real}, μ::Array{T}, σ::Array{T}) where T<:Real
     # fit compton band mus with linear function
@@ -42,7 +51,7 @@ end
 export fit_aoe_corrections
 
 """ 
-    correctAoE!(aoe::Array{T}, e::Array{T}, aoe_corrections::NamedTuple) where T<:Real
+    correctaoe!(aoe::Array{T}, e::Array{T}, aoe_corrections::NamedTuple) where T<:Real
 
 Correct the AoE values in the `aoe` array using the corrections in `aoe_corrections`.
 """
