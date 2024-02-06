@@ -110,7 +110,7 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
 
         # check covariance matrix for being semi positive definite (no negative uncertainties)
         if uncertainty
-             if iterative_fit && !isposdef(result_peak.covmat)
+            if iterative_fit && !isposdef(result_peak.covmat)
                 @warn "Covariance matrix not positive definite for peak $peak - repeat fit without low energy tail"
                 pval_save = result_peak.pval
                 result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false)
@@ -186,7 +186,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         # Calculate the parameter covariance matrix
         param_covariance_raw = inv(H)
         param_covariance = nearestSPD(param_covariance_raw)
-       
+    
         # Extract the parameter uncertainties
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
@@ -205,7 +205,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
         @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
-       
+    
         result = merge(v_ml, (pval = pval, chi2 = chi2, dof = dof, fwhm = fwhm,covmat = param_covariance, covmat_raw = param_covariance_raw,residuals = residuals, residuals_norm = residuals_norm, p_value_binwise= p_value_binwise,bin_centers = bin_centers,),(err = merge(v_ml_err, (fwhm = fwhm_err,)),))
         report = (
             v = v_ml,
@@ -275,7 +275,7 @@ function get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple
     if !uncertainty
         return fwhm, NaN
     end
-   
+
     # get MC for FWHM err
     if isa(v_ml_err,Matrix)# use correlated fit parameter uncertainties 
         v_mc = get_mc_value_shapes(v_ml, v_ml_err, 10000)
@@ -289,7 +289,7 @@ end
 export get_peak_fwhm_th228
 
 """
-    fitCalibration
+    fitCalibration(peaks::Array, μ::Array)
 Fit the calibration lines to a linear function.
 # Returns
     * `slope`: the slope of the linear fit
