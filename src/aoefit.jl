@@ -75,6 +75,12 @@ the binning is only done in the area around the peak. The peak parameters are es
     * `peakstats`: StructArray of peak parameters for each compton band
     * `min_aoe`: Array of minimum A/E values for each compton band
     * `max_aoe`: Array of maximum A/E values for each compton band
+    * `mean_peak_pos`: Mean peak position of all compton bands
+    * `std_peak_pos`: Standard deviation of the peak position of all compton bands
+    * `simple_pars_aoe_μ`: Simple curve fit parameters for the peak position energy depencence
+    * `simple_pars_error_aoe_μ`: Simple curve fit parameter errors for the peak position energy depencence
+    * `simple_pars_aoe_σ`: Simple curve fit parameters for the peak sigma energy depencence
+    * `simple_pars_error_aoe_σ`: Simple curve fit parameter errors for the peak sigma energy depencence
 """
 function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compton_bands::Array{<:Real}, compton_window::T) where T<:Real
     # get aoe values in compton bands
