@@ -3,32 +3,30 @@
 module LegendSpecFitsRecipesBaseExt
 
 using RecipesBase
-using Unitful, Formatting
+using Unitful, Formatting, Measurements
 using StatsBase, LinearAlgebra
 
 # @recipe function f(x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where T<:Unitful.RealOrRealQuantity
-@recipe function f(report::NamedTuple{(:f_fit, :μ, :μ_err, :σ, :σ_err, :n), Tuple{Q, T, T, T, T, Int64}}, x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where {Q <: Function, T <: Unitful.RealOrRealQuantity}
+@recipe function f(report::NamedTuple{(:f_fit, :μ, :σ, :n)}, x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where {T <: Unitful.RealOrRealQuantity}
     ylabel := "Normalized Counts"
     legend := :bottomright
     @series begin
         seriestype := :histogram
         bins --> :fd
-        # bins --> 2000
         normalize --> :pdf
         label := "Data"
-        x[x .> cuts.low .&& x .< cuts.high]
-        # x
+        ustrip(x[x .> cuts.low .&& x .< cuts.high])
     end
     @series begin
         color := :red
-        label := format("Normal Fit (μ = ({:.2f} ± {:.2f}), σ = ({:.2f} ± {:.2f})", ustrip.([report.μ, report.μ_err, report.σ, report.σ_err])...)
+        label := "Normal Fit (μ = $(round(unit(report.μ), report.μ, digits=2)), σ = $(round(unit(report.σ), report.σ, digits=2)))"
         lw := 3
-        ustrip(cuts.low):0.00001:ustrip(cuts.high), t -> report.f_fit(t)
+        ustrip(cuts.low):ustrip(Measurements.value(report.σ / 1000)):ustrip(cuts.high), t -> report.f_fit(t)
     end
 end
 
-@recipe function f(report:: NamedTuple{(:rt, :min_enc, :enc_grid_rt, :enc, :enc_err)})
-    xlabel := "Rise Time (µs)"
+@recipe function f(report:: NamedTuple{(:rt, :min_enc, :enc_grid_rt, :enc)})
+    xlabel := "Rise Time ($(unit(first(report.rt))))"
     ylabel := "ENC (ADC)"
     grid := :true
     gridcolor := :black
@@ -39,13 +37,8 @@ end
     # xlims := (5e0, 2e1)
     @series begin
         seriestype := :scatter
-        u"µs", NoUnits
-    end
-    @series begin
-        seriestype := :scatter
         label := "ENC"
-        yerror --> report.enc_err
-        report.enc_grid_rt[report.enc .> 0.0]*NoUnits, report.enc[report.enc .> 0.0]
+        report.enc_grid_rt*NoUnits, report.enc
     end
     @series begin
         seriestype := :hline
@@ -57,8 +50,8 @@ end
 end
 
 @recipe function f(report:: NamedTuple{(:ft, :min_fwhm, :e_grid_ft, :fwhm)})
-    xlabel := "Flat-Top Time (µs)"
-    ylabel := "FWHM FEP (keV)"
+    xlabel := "Flat-Top Time $(unit(first(report.ft)))"
+    ylabel := "FWHM FEP"
     grid := :true
     gridcolor := :black
     gridalpha := 0.2
@@ -69,16 +62,12 @@ end
     xlims := (0.5, 5)
     @series begin
         seriestype := :scatter
-        u"µs", NoUnits
-    end
-    @series begin
-        seriestype := :scatter
         label := "FWHM"
-        report.e_grid_ft[report.fwhm .> 0.0]*NoUnits, report.fwhm[report.fwhm .> 0.0]
+        report.e_grid_ft*NoUnits, report.fwhm
     end
     @series begin
         seriestype := :hline
-        label := "Min. FWHM (FT: $(report.ft))"
+        label := "Min. FWHM $(round(u"keV", report.min_fwhm, digits=2)) (FT: $(report.ft))"
         color := :red
         linewidth := 2.5
         [report.min_fwhm]
