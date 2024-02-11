@@ -135,7 +135,7 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
 """
 function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}}; 
     uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
-    fit_fun::Symbol=:f_fit) where T<:Real
+    fit_func::Symbol=:f_fit) where T<:Real
     # create standard pseudo priors
     standard_pseudo_prior = NamedTupleDist(
         μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Uniform(ps.peak_pos-10, ps.peak_pos+10)),
@@ -164,7 +164,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     v_init = mean(pseudo_prior)
 
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
-    f_loglike = let f_fit=th228_fit_functions[fit_fun], h=h
+    f_loglike = let f_fit=th228_fit_functions[fit_func], h=h
         v -> hist_loglike(Base.Fix2(f_fit, v), h)
     end
 
@@ -174,8 +174,8 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    f_loglike_array = let f_fit=th228_fit_functions[fit_fun], h=h, v_keys = keys(standard_pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
-        v ->  - hist_loglike(    x -> f_fit(x,NamedTuple{v_keys}(v)), h) 
+    f_loglike_array = let f_fit=th228_fit_functions[fit_func], h=h, v_keys = keys(standard_pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
+        v ->  - hist_loglike(x -> f_fit(x,NamedTuple{v_keys}(v)), h) 
     end
 
     if uncertainty
@@ -193,7 +193,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         pval, chi2, dof = p_value(th228_fit_functions.f_fit, h, v_ml)
         
         # calculate normalized residuals
-        residuals, residuals_norm, p_value_binwise, bin_centers =  get_residuals(th228_fit_functions.f_fit, h, v_ml)
+        residuals, residuals_norm, p_value_binwise, bin_centers =  get_residuals(th228_fit_functions[fit_func], h, v_ml)
 
         # get fwhm of peak
         fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, param_covariance)
@@ -205,7 +205,10 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
     
-        result = merge(v_ml, (pval = pval, chi2 = chi2, dof = dof, fwhm = fwhm,covmat = param_covariance, covmat_raw = param_covariance_raw,residuals = residuals, residuals_norm = residuals_norm, p_value_binwise= p_value_binwise,bin_centers = bin_centers,),(err = merge(v_ml_err, (fwhm = fwhm_err,)),))
+        result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
+                (fwhm = measurement(fwhm, fwhm_err), pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, covmat_raw = param_covariance_raw, 
+                residuals = residuals, residuals_norm = residuals_norm, pvalue_binwise = p_value_binwise, bin_centers = bin_centers)
+                )
         report = (
             v = v_ml,
             h = h,
