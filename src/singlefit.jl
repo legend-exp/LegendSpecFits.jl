@@ -54,19 +54,15 @@ function fit_single_trunc_gauss(x::Vector{T}, cuts::NamedTuple{(:low, :high, :ma
     @debug "σ: $σ ± $σ_uncertainty"
 
     result = (
-        μ = μ * x_unit,
-        μ_err = μ_uncertainty * x_unit,
-        σ = σ * x_unit,
-        σ_err = σ_uncertainty * x_unit,
+        μ = measurement(μ, μ_uncertainty) * x_unit,
+        σ = measurement(σ, σ_uncertainty) * x_unit,
         n = length(x)
     )
     report = (
         f_fit = t -> pdf(truncated(Normal(μ, σ), cut_low, cut_high), t),
         # f_fit = t -> length(x) ./ (cut_high - cut_low) .* pdf(Normal(μ, σ), t),
         μ = result.μ,
-        μ_err = result.μ_err,
         σ = result.σ,
-        σ_err = result.σ_err,
         n = result.n
     )
     return (result = result, report = report)
@@ -128,19 +124,15 @@ function fit_half_centered_trunc_gauss(x::Vector{T}, μ::T, cuts::NamedTuple{(:l
     @debug "σ: $σ ± $σ_uncertainty"
 
     result = (
-        μ = μ * x_unit,
-        μ_err = μ_uncertainty * x_unit,
-        σ = σ * x_unit,
-        σ_err = σ_uncertainty * x_unit,
+        μ = measurement(μ, μ_uncertainty) * x_unit,
+        σ = measurement(σ, σ_uncertainty) * x_unit,
         n = length(x)
     )
     report = (
         # f_fit = t -> pdf(truncated(Normal(μ, σ), ifelse(left, cut_low, μ), ifelse(left, μ, cut_high)), t),
         f_fit = t -> pdf(Normal(μ, σ), t),
         μ = result.μ,
-        μ_err = result.μ_err,
         σ = result.σ,
-        σ_err = result.σ_err,
         n = result.n
     )
     return (result = result, report = report)
@@ -204,19 +196,15 @@ function fit_half_trunc_gauss(x::Vector{T}, cuts::NamedTuple{(:low, :high, :max)
     @debug "σ: $σ ± $σ_uncertainty"
 
     result = (
-        μ = μ * x_unit,
-        μ_err = μ_uncertainty * x_unit,
-        σ = σ * x_unit,
-        σ_err = σ_uncertainty * x_unit,
+        μ = measurement(μ, μ_uncertainty) * x_unit,
+        σ = measurement(σ, σ_uncertainty) * x_unit,
         n = length(x)
     )
     report = (
         # f_fit = t -> pdf(truncated(Normal(μ, σ), ifelse(left, cut_low, μ), ifelse(left, μ, cut_high)), t),
         f_fit = t -> pdf(Normal(μ, σ), t),
         μ = result.μ,
-        μ_err = result.μ_err,
         σ = result.σ,
-        σ_err = result.σ_err,
         n = result.n
     )
     return (result = result, report = report)
