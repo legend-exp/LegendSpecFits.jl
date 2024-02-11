@@ -19,8 +19,8 @@ function fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{Quantity{
     @assert size(enc_grid, 1) == length(enc_grid_rt) "enc_grid and enc_grid_rt must have the same number of columns"
     
     # create empty array for results
-    enc        = zeros(length(enc_grid_rt))
-    enc_err    = zeros(length(enc_grid_rt))
+    rts = Quantity{<:Real}[]
+    enc = Measurement[]
     
     for (r, rt) in enumerate(enc_grid_rt)
         # get enc for this rt
@@ -36,26 +36,24 @@ function fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{Quantity{
         result, _ = fit_single_trunc_gauss(enc_rt, cuts)
 
         # get sigma
-        enc[r] = result.σ
-        enc_err[r] = result.σ_err
+        push!(enc, result.σ)
+        push!(rts, rt)
     end
 
     # get minimal enc and rt
-    min_enc     = minimum(enc[enc .> 0])
-    rt_min_enc  = enc_grid_rt[enc .> 0][findmin(enc[enc .> 0])[2]]
+    min_enc     = minimum(enc)
+    rt_min_enc  = rts[findmin(enc)[2]]
     
     # generate result and report
     result = (
-        rt = rt_min_enc,
-        rt_err = step(enc_grid_rt),
+        rt = measurement(rt_min_enc, step(enc_grid_rt)),
         min_enc = min_enc
     )
     report = (
         rt = result.rt,
         min_enc = result.min_enc,
-        enc_grid_rt = collect(enc_grid_rt),
-        enc = enc,
-        enc_err = enc_err
+        enc_grid_rt = rts,
+        enc = enc
     )
     return result, report
 
@@ -84,15 +82,13 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
     @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"
     
     # create empty array for results
-    fwhm        = zeros(length(e_grid_ft))
-    fwhm_err    = zeros(length(e_grid_ft))
+    fts  = Quantity{<:Real}[]
+    fwhm = Float64[]
     
     for (r, ft) in enumerate(e_grid_ft)
         # if ft > rt filter doesn't make sense, continue
         if ft > rt
             @debug "FT $ft bigger than RT $rt, skipping"
-            fwhm[r]     = NaN
-            fwhm_err[r] = NaN
             continue
         end
         # get e values for this ft
@@ -102,8 +98,6 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
         # sanity check
         if count(min_e .< e_ft .< max_e) < 100
             @debug "Not enough data points for FT $ft, skipping"
-            fwhm[r]     = NaN
-            fwhm_err[r] = NaN
             continue
         end
         # cut around peak to increase performance
@@ -119,43 +113,39 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
         # check if ps guess is valid
         if any(tuple_to_array(ps) .<= 0)
             @debug "Invalid guess for peakstats, skipping"
-            fwhm[r]     = NaN
-            fwhm_err[r] = NaN
             continue
         end
         # fit peak 
         result, _ = fit_single_peak_th228(h, ps,; uncertainty=false)
         # get fwhm
-        fwhm[r]     = result.fwhm
-        # fwhm_err[r] = result.fwhm_err
+        push!(fwhm, result.fwhm)
+        push!(fts, ft)
     end
 
     # get minimal fwhm and rt
-    if isempty(fwhm[fwhm .> 0])
+    if isempty(fwhm)
         @warn "No valid FWHM found, setting to NaN"
         min_fwhm = NaN
         @warn "No valid FT found, setting to default"
         ft_min_fwhm = default_ft
     else
         # calibration constant from last fit to get rough calibration for better plotting
-        c = 2614.5 ./ result.μ
-        fwhm = fwhm .* c
+        c = 2614.5u"keV" ./ result.μ
+        fwhm = fwhm .* c 
         # get minimal fwhm and ft
-        min_fwhm    = minimum(fwhm[fwhm .> 0])
-        ft_min_fwhm = e_grid_ft[fwhm .> 0][findmin(fwhm[fwhm .> 0])[2]]
+        min_fwhm    = minimum(fwhm)
+        ft_min_fwhm = e_grid_ft[findmin(fwhm)[2]]
     end
     # generate result and report
     result = (
-        ft = ft_min_fwhm, 
-        ft_err = step(e_grid_ft),
+        ft = measurement(ft_min_fwhm, step(e_grid_ft)),
         min_fwhm = min_fwhm
     )
     report = (
         ft = result.ft, 
         min_fwhm = result.min_fwhm,
-        e_grid_ft = collect(e_grid_ft),
+        e_grid_ft = fts,
         fwhm = fwhm,
-        # fwhm_err = fwhm_err
     )
     return result, report
 
