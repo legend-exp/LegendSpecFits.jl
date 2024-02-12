@@ -204,7 +204,7 @@ function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window:
         peak = peak, 
         n_before = result_before.n,
         n_after = result_after.n,
-        sf = sf,
+        sf = sf * 100*u"percent"
     )
     report = (
         peak = result.peak, 
@@ -214,14 +214,6 @@ function get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window:
         before = report_before,
         after = report_after,
     )
-    if uncertainty
-        sf_err = sf * sqrt((result_after.err.n/result_after.n)^2 + (result_before.err.n/result_before.n)^2)
-        result = merge(result, (err = (
-            n_before = result_before.err.n,
-            n_after = result_after.err.n,
-            sf = sf_err,
-        ), ))
-    end
     return result, report
 end
 export get_peak_surrival_fraction
