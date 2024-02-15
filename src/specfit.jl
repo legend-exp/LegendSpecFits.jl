@@ -169,7 +169,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init), Optim.Options(time_limit = 120))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init), Optim.Options(time_limit = 60))
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
@@ -193,10 +193,15 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         pval, chi2, dof = p_value(th228_fit_functions.f_fit, h, v_ml)
         
         # calculate normalized residuals
-        residuals, residuals_norm, p_value_binwise, bin_centers =  get_residuals(th228_fit_functions[fit_func], h, v_ml)
+        residuals, residuals_norm, p_value_binwise, bin_centers = get_residuals(th228_fit_functions[fit_func], h, v_ml)
 
         # get fwhm of peak
-        fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, param_covariance)
+        fwhm, fwhm_err = 
+            try
+                get_peak_fwhm_th228(v_ml, param_covariance)
+            catch e
+                get_peak_fwhm_th228(v_ml, v_ml_err)
+            end
 
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
@@ -227,7 +232,9 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "n: $(v_ml.n)"
         @debug "FWHM: $(fwhm)"
 
-        result = merge(v_ml, (fwhm = fwhm, ))
+        result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
+        (fwhm = measurement(fwhm, NaN), ))
+        # result = merge(v_ml, (fwhm = fwhm, ))
         report = (
             v = v_ml,
             h = h,
@@ -270,7 +277,7 @@ Get the FWHM of a peak from the fit parameters while performing a MC error propa
     * `fwhm`: the FWHM of the peak
     * `fwhm_err`: the uncertainty of the FWHM of the peak
 """
-function get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple},uncertainty::Bool=true)
+function get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple}, uncertainty::Bool=true)
     # get fwhm for peak fit
     fwhm = estimate_fwhm(v_ml)
     if !uncertainty
@@ -278,9 +285,9 @@ function get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple
     end
 
     # get MC for FWHM err
-    if isa(v_ml_err,Matrix)# use correlated fit parameter uncertainties 
+    if isa(v_ml_err, Matrix)# use correlated fit parameter uncertainties 
         v_mc = get_mc_value_shapes(v_ml, v_ml_err, 10000)
-    elseif isa(v_ml_err,NamedTuple) # use uncorrelated fit parameter uncertainties 
+    elseif isa(v_ml_err, NamedTuple) # use uncorrelated fit parameter uncertainties 
         v_mc = get_mc_value_shapes(v_ml, v_ml_err, 1000)
     end
     fwhm_mc = estimate_fwhm.(v_mc)

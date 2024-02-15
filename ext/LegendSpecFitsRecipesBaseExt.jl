@@ -74,26 +74,32 @@ end
     end
 end
 
-@recipe function f(report:: NamedTuple{(:wl, :min_sf, :min_sf_err, :a_grid_wl_sg, :sfs, :sfs_err)})
-    xlabel := "Window Length (ns)"
-    ylabel := "SEP Surrival Fraction (%)"
+@recipe function f(report:: NamedTuple{(:wl, :min_sf, :a_grid_wl_sg, :sfs)})
+    xlabel := "Window Length ($(unit(first(report.a_grid_wl_sg))))"
+    ylabel := "SEP Surrival Fraction ($(unit(first(report.sfs))))"
     grid := :true
     gridcolor := :black
     gridalpha := 0.2
     gridlinewidth := 0.5
-    ylims := (0, 30)
+    # ylims := (0, 30)
     @series begin
         seriestype := :scatter
         label := "SF"
-        yerror --> report.sfs_err
-        ustrip.(report.a_grid_wl_sg), report.sfs
+        ustrip.(report.a_grid_wl_sg), ustrip.(report.sfs)
     end
     @series begin
         seriestype := :hline
-        label := "Min. SF (WT: $(report.wl))"
+        label := "Min. SF $(report.min_sf) (WT: $(report.wl))"
         color := :red
         linewidth := 2.5
-        [report.min_sf]
+        [ustrip(Measurements.value(report.min_sf))]
+    end
+    @series begin
+        seriestype := :hspan
+        label := ""
+        color := :red
+        alpha := 0.1
+        ustrip.([Measurements.value(report.min_sf)-Measurements.uncertainty(report.min_sf), Measurements.value(report.min_sf)+Measurements.uncertainty(report.min_sf)])
     end
 end
 

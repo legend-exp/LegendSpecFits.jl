@@ -71,7 +71,7 @@ function get_centered_gaussian_window_cut(x::Vector{T}, min_x::T, max_x::T, n_σ
     # get bin width
     bin_width = get_friedman_diaconis_bin_width(x[x .> result_fit.μ - 0.5*result_fit.σ .&& x .< result_fit.μ + 0.5*result_fit.σ])
     # prepare histogram
-    h = fit(Histogram, x, result_fit.μ-5*result_fit.σ:bin_width:result_fit.μ+5*result_fit.σ)
+    h = fit(Histogram, x, mvalue(result_fit.μ-5*result_fit.σ):mvalue(bin_width):mvalue(result_fit.μ+5*result_fit.σ))
     # norm fitted distribution for better plotting
     # n_fit = length(x[ifelse(left, cuts.low, result_fit.μ) .< x .< ifelse(left, result_fit.μ, cuts.high)])
     # n_fit = length(x)
@@ -85,18 +85,12 @@ function get_centered_gaussian_window_cut(x::Vector{T}, min_x::T, max_x::T, n_σ
         σ       = result_fit.σ*x_unit,
         low_cut_fit = ifelse(left, cuts.low, result_fit.μ), 
         high_cut_fit = ifelse(left, result_fit.μ, cuts.high),
-        max_cut_fit = cuts.max,
-        err = (
-            low_cut  = n_σ*result_fit.σ_err*x_unit,
-            high_cut = n_σ*result_fit.σ_err*x_unit,
-            center  = result_fit.μ_err*x_unit,
-            σ       = result_fit.σ_err*x_unit
-        )
+        max_cut_fit = cuts.max
     )
     report = (
         h = LinearAlgebra.normalize(h, mode=:pdf),
         f_fit = t -> report_fit.f_fit(t),
-        x_fit = ifelse(left, cuts.low:(result_fit.μ-cuts.low)/1000:result_fit.μ, result_fit.μ:(cuts.high-result_fit.μ)/1000:cuts.high),
+        x_fit = ifelse(left, cuts.low:mvalue(result_fit.μ-cuts.low)/1000:mvalue(result_fit.μ), mvalue(result_fit.μ):mvalue(cuts.high-result_fit.μ)/1000:cuts.high),
         low_cut = result.low_cut,
         high_cut = result.high_cut,
         low_cut_fit = result.low_cut_fit,

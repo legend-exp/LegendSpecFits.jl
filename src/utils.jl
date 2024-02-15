@@ -97,6 +97,7 @@ function get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Union{Int64,Int32}
     n = size(v_mc,2)
     v_mc = [NamedTuple{keys(v)[1:size(v_err,1)]}(v_mc[:,i]) for i=1:n] # convert back to NamedTuple 
 end
+
 """
     get_friedman_diaconis_bin_width(x::AbstractArray)
 
@@ -145,3 +146,7 @@ function nearestSPD(A::Matrix{<:Real})
     return B
 end 
 export nearestSPD
+
+
+Measurements.value(nt::NamedTuple) = NamedTuple{keys(nt)}([Measurements.value(nt[f]) for f in keys(nt)]...)
+Measurements.value(x::AbstractArray) = Measurements.value.(x)
