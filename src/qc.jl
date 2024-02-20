@@ -68,21 +68,32 @@ function qc_cal_energy(data::Q, qc_config::PropDict) where Q<:Table
 end
 export qc_cal_energy
 
+
+"""
+    pulser_cal_qc(data, pulser_config; n_pulser_identified=100)
+
+Perform simple QC cuts on the data and return the data for energy calibration.
+# Returns 
+    - pulser_idx: indices of the pulser events
+"""
 function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::Int=100) where Q<:Table
     # extract config
     f = pulser_config.frequency
     T = upreferred(1/f)
     # get drift time cut
-    drift_time_idx = findall(x -> pulser_config.drift_time.min < x < pulser_config.drift_time.max, data.drift_time)
-    drift_time_idx = findall(x -> x < pulser_config.drift_time.max, data.drift_time)
+    _, peakpos = RadiationSpectra.peakfinder(fit(Histogram, ustrip.(data.drift_time[pulser_config.drift_time.min .< data.drift_time .< pulser_config.drift_time.max]), ustrip(pulser_config.drift_time.min:pulser_config.drift_time.bin_width:pulser_config.drift_time.max)), σ=ustrip(pulser_config.drift_time.peak_width), backgroundRemove=true, threshold=pulser_config.drift_time.threshold)
+    pulser_drift_time_peak = minimum(peakpos)*unit(data.drift_time[1])
+    drift_time_idx = findall(x -> pulser_drift_time_peak - pulser_config.drift_time.peak_width < x < pulser_drift_time_peak + pulser_config.drift_time.peak_width, data.drift_time)
     ts = data.timestamp[drift_time_idx]
     pulser_identified_idx = findall(x -> x .== T, diff(ts))
+    if isempty(pulser_identified_idx)
+        @warn "No pulser events found in the data, try differen method"
+        pulser_identified_idx = findall(x -> T - 10u"ns" < x < T + 10u"ns", diff(ts))
+    end
     # iterate through different pulser options and return unique idxs
     pulser_idx = Int64[]
     for idx in rand(pulser_identified_idx, n_pulser_identified)
-        p_evt = data[drift_time_idx[pulser_identified_idx[1]]]
-
-        return findall(pulser_config.pulser_diff.min .< (data.timestamp .- p_evt.timestamp .+ (T/4)) .% (T/2) .- (T/4) .< pulser_config.pulser_diff.max)
+        p_evt = data[drift_time_idx[idx]]
         append!(pulser_idx, findall(pulser_config.pulser_diff.min .< (data.timestamp .- p_evt.timestamp .+ (T/4)) .% (T/2) .- (T/4) .< pulser_config.pulser_diff.max))
     end
     unique!(pulser_idx)
