@@ -15,43 +15,52 @@ Returns
     * `peakhists`: array of histograms around the calibration lines
     * `peakstats`: array of statistics for the calibration line fits
 """
-function simple_calibration(e_uncal::AbstractArray{<:Real}, th228_lines::Array{T}, window_sizes::Array{Tuple{T, T}},; n_bins::Int=15000, quantile_perc::Float64=NaN, calib_type::Symbol=:th228) where T<:Real
+function simple_calibration end
+export simple_calibration
+
+function simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:T}, window_sizes::Vector{Tuple{<:T, <:T}},; kwargs...) where T<:Unitful.RealOrRealQuantity
+    # remove calib type from kwargs
+    @assert haskey(kwargs, :calib_type) "Calibration type not specified"
+    # remove :calib_type from kwargs
+    kwargs = pairs(NamedTuple(filter(k -> !(:calib_type in k), kwargs)))
     if calib_type == :th228
-        return simple_calibration_th228(e_uncal, th228_lines, window_sizes,; n_bins=n_bins, quantile_perc=quantile_perc)
+        return simple_calibration_th228(e_uncal, th228_lines, window_sizes,; kwargs...)
     else
         error("Calibration type not supported")
     end
 end
-export simple_calibration
+simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:T}, left_window_sizes::Vector{<:T}, right_window_sizes::Vector{<:T}; kwargs...) where T<:Unitful.RealOrRealQuantity = simple_calibration(e_uncal, th228_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
 
-function simple_calibration_th228(e_uncal::AbstractArray{<:Real}, th228_lines::Array{T}, window_sizes::Array{Tuple{T, T}},; n_bins::Int=15000, quantile_perc::Float64=NaN) where T<:Real
+
+function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:T}, window_sizes::Vector{Tuple{<:T, <:T}},; n_bins::Int=15000, quantile_perc::Float64=NaN, proxy_binning_peak::T=2103.5u"keV", proxy_binning_peak_window::T=10.0u"keV") where T<:Unitful.RealOrRealQuantity
     # create initial peak search histogram
     h_uncal = fit(Histogram, e_uncal, nbins=n_bins)
     # search all possible peak candidates
     _, peakpos = RadiationSpectra.peakfinder(h_uncal, σ=5.0, backgroundRemove=true, threshold=10)
     # the FEP ist the last peak in the list
-    if isnan(quantile_perc)
-        fep_guess = sort(peakpos)[end]
+    fep_guess = if isnan(quantile_perc)
+        sort(peakpos)[end]
     else
-        fep_guess = quantile(e_uncal, quantile_perc)
+        quantile(e_uncal, quantile_perc)
     end
     # get calibration constant for simple calibration
-    c = 2614.5 / fep_guess
+    c = 2614.5*u"keV" / fep_guess
     e_simple = e_uncal .* c
-    bin_window_cut = 2103.5 - 10 .< e_simple .< 2103.5 + 10
+    bin_window_cut = proxy_binning_peak - proxy_binning_peak_window .< e_simple .< proxy_binning_peak + proxy_binning_peak_window
     # get optimal binning for simple calibration
     bin_width  = get_friedman_diaconis_bin_width(e_simple[bin_window_cut])
     # create histogram for simple calibration
-    h_calsimple = fit(Histogram, e_simple, 0:bin_width:3000)
+    e_min, e_max = 0u"keV", 3000u"keV"
+    h_calsimple = fit(Histogram, ustrip.(e_simple), ustrip(e_min:bin_width:e_max))
     # get histograms around calibration lines and peakstats
-    peakhists = LegendSpecFits.subhist.(Ref(h_calsimple), [(peak-first(window), peak+last(window)) for (peak, window) in zip(th228_lines, window_sizes)])
+    peakhists = LegendSpecFits.subhist.(Ref(h_calsimple), [ustrip.((peak-first(window), peak+last(window))) for (peak, window) in zip(th228_lines, window_sizes)])
     # peakhists = LegendSpecFits.subhist.([e_simple[peak-window .< e_simple .< peak+window] for (peak, window) in zip(th228_lines, window_sizes)])
     peakstats = StructArray(estimate_single_peak_stats.(peakhists))
     result = (
         h_calsimple = h_calsimple, 
         h_uncal = h_uncal, 
         c = c,
-        bin_width = bin_width,
+        bin_width = bin_width*u"keV",
         fep_guess = fep_guess, 
         peakhists = peakhists, 
         peakstats = peakstats

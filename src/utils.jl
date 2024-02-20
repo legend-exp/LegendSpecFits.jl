@@ -103,10 +103,12 @@ end
 
 Return the bin width for the given data `x` using the Friedman-Diaconis rule.
 """
-function get_friedman_diaconis_bin_width(x::AbstractArray)
+function get_friedman_diaconis_bin_width end
+
+function get_friedman_diaconis_bin_width(x::Vector{<:Real})
     2 * (quantile(x, 0.75) - quantile(x, 0.25)) / ∛(length(x))
 end
-
+get_friedman_diaconis_bin_width(x::Vector{<:Quantity{<:Real}}) = get_friedman_diaconis_bin_width(ustrip.(x))*unit(first(x))
 
 """
     get_number_of_bins(x::AbstractArray,; method::Symbol=:sqrt)
