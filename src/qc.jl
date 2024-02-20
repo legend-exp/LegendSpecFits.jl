@@ -44,7 +44,7 @@ function qc_cal_energy(data::Q, qc_config::PropDict) where Q<:Table
     blmean_qc = result_blmean.low_cut .< data.blmean .< result_blmean.high_cut
     @debug format("Baseline Mean cut surrival fraction {:.2f}%", count(blmean_qc) / length(data) * 100)
     # get bl slope cut
-    result_blslope, _ = get_centered_gaussian_window_cut(data.blslope, qc_config.blslope.min*u"ns^-1", qc_config.blslope.max*u"ns^-1", qc_config.blslope.sigma, ; n_bins_cut=convert(Int64, round(length(data) * qc_config.blslope.n_bins_fraction)), relative_cut=qc_config.blslope.relative_cut, fixed_center=true, left=false, center=zero(data.blslope[1]))
+    result_blslope, _ = get_centered_gaussian_window_cut(data.blslope, qc_config.blslope.min, qc_config.blslope.max, qc_config.blslope.sigma, ; n_bins_cut=convert(Int64, round(length(data) * qc_config.blslope.n_bins_fraction)), relative_cut=qc_config.blslope.relative_cut, fixed_center=true, left=false, center=zero(data.blslope[1]))
     blslope_qc = result_blslope.low_cut .< data.blslope .< result_blslope.high_cut
     @debug format("Baseline Slope cut surrival fraction {:.2f}%", count(blslope_qc) / length(data) * 100)
     # get blsigma cut
@@ -52,7 +52,7 @@ function qc_cal_energy(data::Q, qc_config::PropDict) where Q<:Table
     blsigma_qc = result_blsigma.low_cut .< data.blsigma .< result_blsigma.high_cut
     @debug format("Baseline Sigma cut surrival fraction {:.2f}%", count(blsigma_qc) / length(data) * 100)
     # get t0 cut
-    t0_qc = qc_config.t0.min*u"µs" .< data.t0 .< qc_config.t0.max*u"µs"
+    t0_qc = qc_config.t0.min .< data.t0 .< qc_config.t0.max
     @debug format("t0 cut surrival fraction {:.2f}%", count(t0_qc) / length(data) * 100)
     # get intrace pile-up cut
     inTrace_qc = .!(data.inTrace_intersect .> data.t0 .+ 2 .* data.drift_time .&& data.inTrace_n .> 1)
@@ -64,6 +64,27 @@ function qc_cal_energy(data::Q, qc_config::PropDict) where Q<:Table
     # combine all cuts
     qc_tab = TypedTables.Table(blmean = blmean_qc, blslope = blslope_qc, blsigma = blsigma_qc, t0 = t0_qc, inTrace = inTrace_qc, energy = energy_qc, qc = blmean_qc .&& blslope_qc .&& blsigma_qc .&& t0_qc .&& inTrace_qc .&& energy_qc)
     @debug format("Total QC cut surrival fraction {:.2f}%", count(qc) / length(data) * 100)
-    return qc_tab
+    return qc_tab, (blmean = result_blmean, blslope = result_blslope, blsigma = result_blsigma)
 end
 export qc_cal_energy
+
+function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::Int=100) where Q<:Table
+    # extract config
+    f = pulser_config.frequency
+    T = upreferred(1/f)
+    # get drift time cut
+    drift_time_idx = findall(x -> pulser_config.drift_time.min < x < pulser_config.drift_time.max, data.drift_time)
+    drift_time_idx = findall(x -> x < pulser_config.drift_time.max, data.drift_time)
+    ts = data.timestamp[drift_time_idx]
+    pulser_identified_idx = findall(x -> x .== T, diff(ts))
+    # iterate through different pulser options and return unique idxs
+    pulser_idx = Int64[]
+    for idx in rand(pulser_identified_idx, n_pulser_identified)
+        p_evt = data[drift_time_idx[pulser_identified_idx[1]]]
+
+        return findall(pulser_config.pulser_diff.min .< (data.timestamp .- p_evt.timestamp .+ (T/4)) .% (T/2) .- (T/4) .< pulser_config.pulser_diff.max)
+        append!(pulser_idx, findall(pulser_config.pulser_diff.min .< (data.timestamp .- p_evt.timestamp .+ (T/4)) .% (T/2) .- (T/4) .< pulser_config.pulser_diff.max))
+    end
+    unique!(pulser_idx)
+end
+export pulser_cal_qc
