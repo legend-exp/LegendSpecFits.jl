@@ -81,14 +81,21 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
     f = pulser_config.frequency
     T = upreferred(1/f)
     # get drift time cut
-    _, peakpos = RadiationSpectra.peakfinder(fit(Histogram, ustrip.(data.drift_time[pulser_config.drift_time.min .< data.drift_time .< pulser_config.drift_time.max]), ustrip(pulser_config.drift_time.min:pulser_config.drift_time.bin_width:pulser_config.drift_time.max)), σ=ustrip(pulser_config.drift_time.peak_width), backgroundRemove=true, threshold=pulser_config.drift_time.threshold)
-    pulser_drift_time_peak = minimum(peakpos)*unit(data.drift_time[1])
+    peakhist, peakpos = RadiationSpectra.peakfinder(fit(Histogram, ustrip.(data.drift_time[pulser_config.drift_time.min .< data.drift_time .< pulser_config.drift_time.max]), ustrip(pulser_config.drift_time.min:pulser_config.drift_time.bin_width:pulser_config.drift_time.max)), σ=ustrip(pulser_config.drift_time.peak_width), backgroundRemove=true, threshold=pulser_config.drift_time.threshold)
+    # select peak with highest prominence in background removed histogram
+    pulser_drift_time_peak = peakpos[last(findmax([maximum(peakhist.weights[pp-ustrip(pulser_config.drift_time.peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip(pulser_config.drift_time.peak_width)]) for pp in peakpos]))]*unit(data.drift_time[1])
+    # get drift time idx in peak
     drift_time_idx = findall(x -> pulser_drift_time_peak - pulser_config.drift_time.peak_width < x < pulser_drift_time_peak + pulser_config.drift_time.peak_width, data.drift_time)
     ts = data.timestamp[drift_time_idx]
     pulser_identified_idx = findall(x -> x .== T, diff(ts))
+    @info "Found pulser peak in drift time distribution at $(pulser_drift_time_peak)"
     if isempty(pulser_identified_idx)
         @warn "No pulser events found in the data, try differen method"
         pulser_identified_idx = findall(x -> T - 10u"ns" < x < T + 10u"ns", diff(ts))
+    end
+    if isempty(pulser_identified_idx)
+        @warn "No pulser events found in the data"
+        return Int64[]
     end
     # iterate through different pulser options and return unique idxs
     pulser_idx = Int64[]
