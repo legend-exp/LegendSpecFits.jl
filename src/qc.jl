@@ -81,14 +81,25 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
     f = pulser_config.frequency
     T = upreferred(1/f)
     # get drift time cut
-    peakhist, peakpos = RadiationSpectra.peakfinder(fit(Histogram, ustrip.(data.drift_time[pulser_config.drift_time.min .< data.drift_time .< pulser_config.drift_time.max]), ustrip(pulser_config.drift_time.min:pulser_config.drift_time.bin_width:pulser_config.drift_time.max)), σ=ustrip(pulser_config.drift_time.peak_width), backgroundRemove=true, threshold=pulser_config.drift_time.threshold)
-    # select peak with highest prominence in background removed histogram
-    pulser_drift_time_peak = peakpos[last(findmax([maximum(peakhist.weights[pp-ustrip(pulser_config.drift_time.peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip(pulser_config.drift_time.peak_width)]) for pp in peakpos]))]*unit(data.drift_time[1])
-    # get drift time idx in peak
-    drift_time_idx = findall(x -> pulser_drift_time_peak - pulser_config.drift_time.peak_width < x < pulser_drift_time_peak + pulser_config.drift_time.peak_width, data.drift_time)
-    ts = data.timestamp[drift_time_idx]
+    t50_unit = unit(data.t50[1])
+    peakhist, peakpos = RadiationSpectra.peakfinder(fit(Histogram, ustrip.(t50_unit, data.t50[pulser_config.t50.min .< data.t50 .< pulser_config.t50.max]), ustrip.(t50_unit, pulser_config.t50.min:pulser_config.t50.bin_width:pulser_config.t50.max)), backgroundRemove=true, threshold=pulser_config.t50.threshold)
+    while isempty(peakpos)
+        pulser_config.t50.threshold -= 5
+        peakhist, peakpos = RadiationSpectra.peakfinder(fit(Histogram, ustrip.(t50_unit, data.t50[pulser_config.t50.min .< data.t50 .< pulser_config.t50.max]), ustrip.(t50_unit, pulser_config.t50.min:pulser_config.t50.bin_width:pulser_config.t50.max)), backgroundRemove=true, threshold=pulser_config.t50.threshold)
+    end
+    if length(peakpos) < 2
+        @warn "No pulser peak found in t50 distribution"
+        return Int64[]
+    end
+    # select peak with second highest prominence in background removed histogram
+    pulser_t50_peak = peakpos[sortperm([maximum(peakhist.weights[pp-ustrip.(t50_unit, pulser_config.t50.peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip.(t50_unit, pulser_config.t50.peak_width)]) for pp in peakpos])][end-1]*t50_unit
+    @info "Found pulser peak in t50 distribution at $(pulser_t50_peak)"
+
+    # get t50 idx in peak
+    t50_time_idx = findall(x -> pulser_t50_peak - pulser_config.t50.peak_width < x < pulser_t50_peak + pulser_config.t50.peak_width, data.t50)
+    # get timestamps in peak which are possible pulser events
+    ts = data.timestamp[t50_time_idx]
     pulser_identified_idx = findall(x -> x .== T, diff(ts))
-    @info "Found pulser peak in drift time distribution at $(pulser_drift_time_peak)"
     if isempty(pulser_identified_idx)
         @warn "No pulser events found in the data, try differen method"
         pulser_identified_idx = findall(x -> T - 10u"ns" < x < T + 10u"ns", diff(ts))
@@ -100,7 +111,7 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
     # iterate through different pulser options and return unique idxs
     pulser_idx = Int64[]
     for idx in rand(pulser_identified_idx, n_pulser_identified)
-        p_evt = data[drift_time_idx[idx]]
+        p_evt = data[t50_time_idx[idx]]
         append!(pulser_idx, findall(pulser_config.pulser_diff.min .< (data.timestamp .- p_evt.timestamp .+ (T/4)) .% (T/2) .- (T/4) .< pulser_config.pulser_diff.max))
     end
     unique!(pulser_idx)
