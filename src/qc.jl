@@ -82,32 +82,45 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
     T = upreferred(1/f)
     # get drift time cut
     t50_unit = unit(data.t50[1])
-    peakhist, peakpos = RadiationSpectra.peakfinder(fit(Histogram, ustrip.(t50_unit, data.t50[pulser_config.t50.min .< data.t50 .< pulser_config.t50.max]), ustrip.(t50_unit, pulser_config.t50.min:pulser_config.t50.bin_width:pulser_config.t50.max)), backgroundRemove=true, threshold=pulser_config.t50.threshold)
-    while isempty(peakpos)
-        pulser_config.t50.threshold -= 5
-        peakhist, peakpos = RadiationSpectra.peakfinder(fit(Histogram, ustrip.(t50_unit, data.t50[pulser_config.t50.min .< data.t50 .< pulser_config.t50.max]), ustrip.(t50_unit, pulser_config.t50.min:pulser_config.t50.bin_width:pulser_config.t50.max)), backgroundRemove=true, threshold=pulser_config.t50.threshold)
+    t50_threshold = pulser_config.t50.threshold
+    h = fit(Histogram, ustrip.(t50_unit, data.t50[pulser_config.t50.min .< data.t50 .< pulser_config.t50.max]), ustrip.(t50_unit, pulser_config.t50.min:pulser_config.t50.bin_width:pulser_config.t50.max))
+    peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=2, backgroundRemove=true, threshold=t50_threshold)
+    while length(peakpos) < 2 && t50_threshold > 0
+        peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=2, backgroundRemove=true, threshold=t50_threshold)
+        t50_threshold -= 1
+    end
+    # same again but with different sigma threshold to find the pulser peak
+    t50_threshold = pulser_config.t50.threshold
+    while length(peakpos) < 2 && t50_threshold > 0
+        peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=1, backgroundRemove=true, threshold=t50_threshold)
+        t50_threshold -= 1
     end
     if length(peakpos) < 2
         @warn "No pulser peak found in t50 distribution"
         return Int64[]
     end
     # select peak with second highest prominence in background removed histogram
-    pulser_t50_peak = peakpos[sortperm([maximum(peakhist.weights[pp-ustrip.(t50_unit, pulser_config.t50.peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip.(t50_unit, pulser_config.t50.peak_width)]) for pp in peakpos])][end-1]*t50_unit
-    @info "Found pulser peak in t50 distribution at $(pulser_t50_peak)"
-
-    # get t50 idx in peak
-    t50_time_idx = findall(x -> pulser_t50_peak - pulser_config.t50.peak_width < x < pulser_t50_peak + pulser_config.t50.peak_width, data.t50)
-    # get timestamps in peak which are possible pulser events
-    ts = data.timestamp[t50_time_idx]
-    pulser_identified_idx = findall(x -> x .== T, diff(ts))
-    if isempty(pulser_identified_idx)
-        @warn "No pulser events found in the data, try differen method"
-        pulser_identified_idx = findall(x -> T - 10u"ns" < x < T + 10u"ns", diff(ts))
+    pulser_t50_peak_candidates = peakpos[sortperm([maximum(peakhist.weights[pp-ustrip.(t50_unit, pulser_config.t50.peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip.(t50_unit, pulser_config.t50.peak_width)]) for pp in peakpos])][1:end-1] .* t50_unit
+    pulser_identified_idx, t50_time_idx = Int64[], Int64[]
+    for pulser_t50_peak in pulser_t50_peak_candidates
+        # get t50 idx in peak
+        t50_time_idx = findall(x -> pulser_t50_peak - pulser_config.t50.peak_width < x < pulser_t50_peak + pulser_config.t50.peak_width, data.t50)
+        # get timestamps in peak which are possible pulser events
+        ts = data.timestamp[t50_time_idx]
+        pulser_identified_idx = findall(x -> x .== T, diff(ts))
+        if isempty(pulser_identified_idx)
+            pulser_identified_idx = findall(x -> T - 10u"ns" < x < T + 10u"ns", diff(ts))
+        end
+        if !isempty(pulser_identified_idx)
+            @info "Found pulser peak in t50 distribution at $(pulser_t50_peak)"
+            break
+        end
     end
     if isempty(pulser_identified_idx)
-        @warn "No pulser events found in the data"
+        @warn "No Pulser peak could be identified in t50 distribution."
         return Int64[]
     end
+
     # iterate through different pulser options and return unique idxs
     pulser_idx = Int64[]
     for idx in rand(pulser_identified_idx, n_pulser_identified)
