@@ -18,21 +18,23 @@ Returns
 function simple_calibration end
 export simple_calibration
 
-function simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:T}, window_sizes::Vector{Tuple{<:T, <:T}},; kwargs...) where T<:Unitful.RealOrRealQuantity
+function simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; kwargs...)
     # remove calib type from kwargs
     @assert haskey(kwargs, :calib_type) "Calibration type not specified"
+    calib_type = kwargs[:calib_type]
     # remove :calib_type from kwargs
     kwargs = pairs(NamedTuple(filter(k -> !(:calib_type in k), kwargs)))
     if calib_type == :th228
+        @info "Use simple calibration for Th228 lines"
         return simple_calibration_th228(e_uncal, th228_lines, window_sizes,; kwargs...)
     else
         error("Calibration type not supported")
     end
 end
-simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:T}, left_window_sizes::Vector{<:T}, right_window_sizes::Vector{<:T}; kwargs...) where T<:Unitful.RealOrRealQuantity = simple_calibration(e_uncal, th228_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
+simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = simple_calibration(e_uncal, th228_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
 
 
-function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:T}, window_sizes::Vector{Tuple{<:T, <:T}},; n_bins::Int=15000, quantile_perc::Float64=NaN, proxy_binning_peak::T=2103.5u"keV", proxy_binning_peak_window::T=10.0u"keV") where T<:Unitful.RealOrRealQuantity
+function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, proxy_binning_peak::Unitful.Energy{<:Real}=2103.5u"keV", proxy_binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
     # create initial peak search histogram
     h_uncal = fit(Histogram, e_uncal, nbins=n_bins)
     # search all possible peak candidates
@@ -51,7 +53,8 @@ function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<
     bin_width  = get_friedman_diaconis_bin_width(e_simple[bin_window_cut])
     # create histogram for simple calibration
     e_min, e_max = 0u"keV", 3000u"keV"
-    h_calsimple = fit(Histogram, ustrip.(e_simple), ustrip(e_min:bin_width:e_max))
+    e_unit = u"keV"
+    h_calsimple = fit(Histogram, ustrip.(e_unit, e_simple), ustrip.(e_unit, e_min:bin_width:e_max))
     # get histograms around calibration lines and peakstats
     peakhists = LegendSpecFits.subhist.(Ref(h_calsimple), [ustrip.((peak-first(window), peak+last(window))) for (peak, window) in zip(th228_lines, window_sizes)])
     # peakhists = LegendSpecFits.subhist.([e_simple[peak-window .< e_simple .< peak+window] for (peak, window) in zip(th228_lines, window_sizes)])
@@ -60,7 +63,7 @@ function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<
         h_calsimple = h_calsimple, 
         h_uncal = h_uncal, 
         c = c,
-        bin_width = bin_width*u"keV",
+        bin_width = bin_width,
         fep_guess = fep_guess, 
         peakhists = peakhists, 
         peakstats = peakstats
