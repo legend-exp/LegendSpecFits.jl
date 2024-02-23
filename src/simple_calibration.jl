@@ -54,7 +54,7 @@ function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<
     # create histogram for simple calibration
     e_min, e_max = 0u"keV", 3000u"keV"
     e_unit = u"keV"
-    h_calsimple = fit(Histogram, ustrip.(e_unit, e_simple), ustrip.(e_unit, e_min:bin_width:e_max))
+    h_calsimple = fit(Histogram, ustrip.(e_unit, e_simple), ustrip(e_unit, e_min):ustrip(e_unit, bin_width):ustrip(e_unit, e_max))
     # get histograms around calibration lines and peakstats
     peakhists = LegendSpecFits.subhist.(Ref(h_calsimple), [ustrip.(e_unit, (peak-first(window), peak+last(window))) for (peak, window) in zip(th228_lines, window_sizes)])
     # peakhists = LegendSpecFits.subhist.([e_simple[peak-window .< e_simple .< peak+window] for (peak, window) in zip(th228_lines, window_sizes)])
@@ -63,6 +63,7 @@ function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<
         h_calsimple = h_calsimple, 
         h_uncal = h_uncal, 
         c = c,
+        unit = e_unit,
         bin_width = bin_width,
         fep_guess = fep_guess, 
         peakhists = peakhists, 
