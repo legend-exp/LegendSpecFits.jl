@@ -238,13 +238,13 @@ end
     end
 end
 
-@recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after, :fwhm_before, :fwhm_after, :err, :report_before, :report_after)})
+@recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after, :fwhm_before, :fwhm_after, :report_before, :report_after)})
     layout := (2,2)
     thickness_scaling := 2.0
     size := (2400, 1600)
     @series begin
         seriestype := :histogram2d
-        bins := (minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
+        bins := (ustrip.(unit(first(report_ctc.e_peak)), minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak)), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
         color := :inferno
         xlabel := "Energy (keV)"
         ylabel := "Drift Time"
@@ -257,7 +257,7 @@ end
     end
     @series begin
         seriestype := :histogram2d
-        bins := (minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
+        bins := (ustrip.(unit(first(report_ctc.e_peak)), minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak)), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
         color := :magma
         xlabel := "Energy (keV)"
         ylabel := "Drift Time"
@@ -274,11 +274,12 @@ end
         label := "Before CTC"
         xlabel := "Energy (keV)"
         ylabel := "Counts"
-        title := "FWHM $(round(report_ctc.fwhm_before, digits=2))±$(round(report_ctc.err.fwhm_before, digits=2))keV"
+        title := "FWHM $(round(report_ctc.fwhm_before, digits=2))"
         yscale := :log10
         subplot := 3
         report_ctc.h_before
     end
+
     # @series begin
     #     # seriestype := :stepbins
     #     color := :red
@@ -301,6 +302,8 @@ end
     #     # report_ctc.h_before
     #     minimum(report_ctc.e_peak):0.001:maximum(report_ctc.e_peak), t -> report_ctc.report_after.f_fit(t)
     # end
+
+
     @series begin
         seriestype := :stepbins
         color := :red
@@ -317,7 +320,7 @@ end
         label := "After CTC"
         xlabel := "Energy (keV)"
         ylabel := "Counts"
-        title := "FWHM $(round(report_ctc.fwhm_after, digits=2))±$(round(report_ctc.err.fwhm_after, digits=2))keV"
+        title := "FWHM $(round(report_ctc.fwhm_after, digits=2))"
         yscale := :log10
         subplot := 4
         report_ctc.h_after
