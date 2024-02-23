@@ -82,14 +82,16 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
     T = upreferred(1/f)
     # get drift time cut
     t50_unit = unit(data.t50[1])
+    # get t50 distribution
+    h = fit(Histogram, ustrip.(t50_unit, data.t50[pulser_config.t50.min .< data.t50 .< pulser_config.t50.max]), ustrip.(t50_unit, pulser_config.t50.min:pulser_config.t50.bin_width:pulser_config.t50.max))
     # create empty arrays for identified pulser events
     pulser_identified_idx, t50_time_idx = Int64[], Int64[]
     t50_threshold = pulser_config.t50.threshold
     while t50_threshold > 0 && length(pulser_identified_idx) < 10
-        h = fit(Histogram, ustrip.(t50_unit, data.t50[pulser_config.t50.min .< data.t50 .< pulser_config.t50.max]), ustrip.(t50_unit, pulser_config.t50.min:pulser_config.t50.bin_width:pulser_config.t50.max))
         peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=2, backgroundRemove=true, threshold=t50_threshold)
         if length(peakpos) < 2 
-            t50_threshold -= 0
+            t50_threshold -= 5
+            @info "not enough peaks"
             continue
         end
             # select peak with second highest prominence in background removed histogram
@@ -109,17 +111,24 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
                 break
             end
         end
+        if length(pulser_identified_idx) > 10
+            break
+        else
+            t50_threshold -= 5
+        end
     end
+    @info "sigma 2 not working"
     # if empty try again with different sigma threshold
     if isempty(pulser_identified_idx)
         # create empty arrays for identified pulser events
         pulser_identified_idx, t50_time_idx = Int64[], Int64[]
         t50_threshold = pulser_config.t50.threshold
         while t50_threshold > 0 && length(pulser_identified_idx) < 10
-            h = fit(Histogram, ustrip.(t50_unit, data.t50[pulser_config.t50.min .< data.t50 .< pulser_config.t50.max]), ustrip.(t50_unit, pulser_config.t50.min:pulser_config.t50.bin_width:pulser_config.t50.max))
+            @info t50_threshold
             peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=1, backgroundRemove=true, threshold=t50_threshold)
-            if length(peakpos) < 2 
-                t50_threshold -= 0
+            if length(peakpos) < 2
+                t50_threshold -= 5
+                @info "not enough peaks"
                 continue
             end
                 # select peak with second highest prominence in background removed histogram
@@ -138,6 +147,11 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
                     @info "Found pulser peak in t50 distribution at $(pulser_t50_peak)"
                     break
                 end
+            end
+            if length(pulser_identified_idx) > 10
+                break
+            else
+                t50_threshold -= 5
             end
         end
     end
