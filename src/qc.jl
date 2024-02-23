@@ -91,7 +91,6 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
         peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=2, backgroundRemove=true, threshold=t50_threshold)
         if length(peakpos) < 2 
             t50_threshold -= 5
-            @info "not enough peaks"
             continue
         end
             # select peak with second highest prominence in background removed histogram
@@ -117,18 +116,15 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
             t50_threshold -= 5
         end
     end
-    @info "sigma 2 not working"
     # if empty try again with different sigma threshold
     if isempty(pulser_identified_idx)
         # create empty arrays for identified pulser events
         pulser_identified_idx, t50_time_idx = Int64[], Int64[]
         t50_threshold = pulser_config.t50.threshold
         while t50_threshold > 0 && length(pulser_identified_idx) < 10
-            @info t50_threshold
             peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=1, backgroundRemove=true, threshold=t50_threshold)
             if length(peakpos) < 2
                 t50_threshold -= 5
-                @info "not enough peaks"
                 continue
             end
                 # select peak with second highest prominence in background removed histogram
@@ -156,33 +152,7 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
         end
     end
 
-    # same again but with different sigma threshold to find the pulser peak
-    # t50_threshold = pulser_config.t50.threshold
-    # while length(peakpos) < 2 && t50_threshold > 0
-    #     peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=1, backgroundRemove=true, threshold=t50_threshold)
-    #     t50_threshold -= 1
-    # end
-    # if length(peakpos) < 2
-    #     @warn "No pulser peak found in t50 distribution"
-    #     return Int64[]
-    # end
-    # # select peak with second highest prominence in background removed histogram
-    # pulser_t50_peak_candidates = peakpos[sortperm([maximum(peakhist.weights[pp-ustrip.(t50_unit, pulser_config.t50.peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip.(t50_unit, pulser_config.t50.peak_width)]) for pp in peakpos])][1:end-1] .* t50_unit
-    
-    # for pulser_t50_peak in pulser_t50_peak_candidates
-    #     # get t50 idx in peak
-    #     t50_time_idx = findall(x -> pulser_t50_peak - pulser_config.t50.peak_width < x < pulser_t50_peak + pulser_config.t50.peak_width, data.t50)
-    #     # get timestamps in peak which are possible pulser events
-    #     ts = data.timestamp[t50_time_idx]
-    #     pulser_identified_idx = findall(x -> x .== T, diff(ts))
-    #     if isempty(pulser_identified_idx)
-    #         pulser_identified_idx = findall(x -> T - 10u"ns" < x < T + 10u"ns", diff(ts))
-    #     end
-    #     if !isempty(pulser_identified_idx)
-    #         @info "Found pulser peak in t50 distribution at $(pulser_t50_peak)"
-    #         break
-    #     end
-    # end
+    # if empty, no pulser tags found
     if isempty(pulser_identified_idx)
         @warn "No Pulser peak could be identified in t50 distribution."
         return Int64[]
