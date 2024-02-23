@@ -69,6 +69,56 @@ end
 export qc_cal_energy
 
 
+function get_pulser_identified_idx(data::Table, key::Symbol, σ_search::Vector{Int}, pulser_config::PropDict; min_identified::Int=10)
+    # extract config
+    f = pulser_config.frequency
+    T = upreferred(1/f)
+    #get data and unit
+    key_unit = unit(getproperty(data, key)[1])
+    data_key = getproperty(data, key)
+    # get t50 distribution
+    h = fit(Histogram, ustrip.(key_unit, data_key[pulser_config[key].min .< data_key .< pulser_config[key].max]), ustrip.(key_unit, pulser_config[key].min:pulser_config[key].bin_width:pulser_config[key].max))
+    # create empty arrays for identified pulser events
+    pulser_identified_idx, time_idx = Int64[], Int64[]
+    for σ in σ_search
+        threshold = pulser_config[key].threshold
+        while threshold > 0 && length(pulser_identified_idx) < min_identified
+            peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=σ, backgroundRemove=true, threshold=threshold)
+            # if length(peakpos) < 2 
+            #     threshold -= 5
+            #     continue
+            # end
+            # select peak with second highest prominence in background removed histogram
+            pulser_peak_candidates = peakpos[sortperm([maximum(peakhist.weights[pp-ustrip.(key_unit, pulser_config[key].peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip.(key_unit, pulser_config[key].peak_width)]) for pp in peakpos])] .* key_unit
+            # pulser_peak_candidates = peakpos[sortperm([maximum(peakhist.weights[pp-ustrip.(key_unit, pulser_config[key].peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip.(key_unit, pulser_config[key].peak_width)]) for pp in peakpos])][1:end-1] .* key_unit
+            
+            for pulser_peak in pulser_peak_candidates
+                # get idx in peak
+                time_idx = findall(x -> pulser_peak - pulser_config[key].peak_width < x < pulser_peak + pulser_config[key].peak_width, data_key)
+                # get timestamps in peak which are possible pulser events
+                ts = data.timestamp[time_idx]
+                pulser_identified_idx = findall(x -> x .== T, diff(ts))
+                if isempty(pulser_identified_idx)
+                    pulser_identified_idx = findall(x -> T - pulser_config.max_period_err < x < T + pulser_config.max_period_err, diff(ts))
+                end
+                if length(pulser_identified_idx) > min_identified
+                    @info "Found pulser peak in $key distribution at $(pulser_peak)"
+                    break
+                end
+            end
+            if length(pulser_identified_idx) > min_identified
+                break
+            else
+                threshold -= 5
+            end
+        end
+        if length(pulser_identified_idx) > min_identified
+            break
+        end
+    end
+    return pulser_identified_idx, time_idx
+end
+
 """
     pulser_cal_qc(data, pulser_config; n_pulser_identified=100)
 
@@ -80,88 +130,33 @@ function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::In
     # extract config
     f = pulser_config.frequency
     T = upreferred(1/f)
-    # get drift time cut
-    t50_unit = unit(data.t50[1])
-    # get t50 distribution
-    h = fit(Histogram, ustrip.(t50_unit, data.t50[pulser_config.t50.min .< data.t50 .< pulser_config.t50.max]), ustrip.(t50_unit, pulser_config.t50.min:pulser_config.t50.bin_width:pulser_config.t50.max))
-    # create empty arrays for identified pulser events
-    pulser_identified_idx, t50_time_idx = Int64[], Int64[]
-    t50_threshold = pulser_config.t50.threshold
-    while t50_threshold > 0 && length(pulser_identified_idx) < 10
-        peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=2, backgroundRemove=true, threshold=t50_threshold)
-        if length(peakpos) < 2 
-            t50_threshold -= 5
+    # empty arrays for identified idx
+    pulser_identified_idx, time_idx = Int64[], Int64[]
+    for key in Symbol.(pulser_config.search_keys)
+        if !hasproperty(data, key)
+            @error "Data does not contain key $(key) for pulser calibration."
             continue
         end
-            # select peak with second highest prominence in background removed histogram
-        pulser_t50_peak_candidates = peakpos[sortperm([maximum(peakhist.weights[pp-ustrip.(t50_unit, pulser_config.t50.peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip.(t50_unit, pulser_config.t50.peak_width)]) for pp in peakpos])][1:end-1] .* t50_unit
-        
-        for pulser_t50_peak in pulser_t50_peak_candidates
-            # get t50 idx in peak
-            t50_time_idx = findall(x -> pulser_t50_peak - pulser_config.t50.peak_width < x < pulser_t50_peak + pulser_config.t50.peak_width, data.t50)
-            # get timestamps in peak which are possible pulser events
-            ts = data.timestamp[t50_time_idx]
-            pulser_identified_idx = findall(x -> x .== T, diff(ts))
-            if isempty(pulser_identified_idx)
-                pulser_identified_idx = findall(x -> T - 10u"ns" < x < T + 10u"ns", diff(ts))
-            end
-            if length(pulser_identified_idx) > 10
-                @info "Found pulser peak in t50 distribution at $(pulser_t50_peak)"
-                break
-            end
-        end
-        if length(pulser_identified_idx) > 10
-            break
+        @debug "Search for pulser events in $key distribution"
+        pulser_identified_idx, time_idx = get_pulser_identified_idx(data, key, pulser_config.search_sigmas, pulser_config; min_identified=pulser_config.min_identified)
+        # if empty, no pulser tags found
+        if isempty(pulser_identified_idx)
+            @warn "No Pulser peak could be identified in $key distribution."
         else
-            t50_threshold -= 5
-        end
-    end
-    # if empty try again with different sigma threshold
-    if isempty(pulser_identified_idx)
-        # create empty arrays for identified pulser events
-        pulser_identified_idx, t50_time_idx = Int64[], Int64[]
-        t50_threshold = pulser_config.t50.threshold
-        while t50_threshold > 0 && length(pulser_identified_idx) < 10
-            peakhist, peakpos = RadiationSpectra.peakfinder(h, σ=1, backgroundRemove=true, threshold=t50_threshold)
-            if length(peakpos) < 2
-                t50_threshold -= 5
-                continue
-            end
-                # select peak with second highest prominence in background removed histogram
-            pulser_t50_peak_candidates = peakpos[sortperm([maximum(peakhist.weights[pp-ustrip.(t50_unit, pulser_config.t50.peak_width) .< first(peakhist.edges)[2:end] .< pp+ustrip.(t50_unit, pulser_config.t50.peak_width)]) for pp in peakpos])][1:end-1] .* t50_unit
-            
-            for pulser_t50_peak in pulser_t50_peak_candidates
-                # get t50 idx in peak
-                t50_time_idx = findall(x -> pulser_t50_peak - pulser_config.t50.peak_width < x < pulser_t50_peak + pulser_config.t50.peak_width, data.t50)
-                # get timestamps in peak which are possible pulser events
-                ts = data.timestamp[t50_time_idx]
-                pulser_identified_idx = findall(x -> x .== T, diff(ts))
-                if isempty(pulser_identified_idx)
-                    pulser_identified_idx = findall(x -> T - 10u"ns" < x < T + 10u"ns", diff(ts))
-                end
-                if length(pulser_identified_idx) > 10
-                    @info "Found pulser peak in t50 distribution at $(pulser_t50_peak)"
-                    break
-                end
-            end
-            if length(pulser_identified_idx) > 10
-                break
-            else
-                t50_threshold -= 5
-            end
+            break
         end
     end
 
     # if empty, no pulser tags found
     if isempty(pulser_identified_idx)
-        @warn "No Pulser peak could be identified in t50 distribution."
+        @warn "No Pulser events found"
         return Int64[]
     end
 
     # iterate through different pulser options and return unique idxs
     pulser_idx = Int64[]
     for idx in rand(pulser_identified_idx, n_pulser_identified)
-        p_evt = data[t50_time_idx[idx]]
+        p_evt = data[time_idx[idx]]
         append!(pulser_idx, findall(pulser_config.pulser_diff.min .< (data.timestamp .- p_evt.timestamp .+ (T/4)) .% (T/2) .- (T/4) .< pulser_config.pulser_diff.max))
     end
     unique!(pulser_idx)
