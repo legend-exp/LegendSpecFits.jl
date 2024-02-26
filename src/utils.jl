@@ -1,5 +1,7 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 
+heaviside(x) = x < zero(x) ? zero(x) : one(x)
+
 """
     expand_vars(v::NamedTuple)::StructArray
 
