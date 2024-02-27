@@ -1,10 +1,10 @@
 # f_aoe_sigma(x, p) = p[1] .+ p[2]*exp.(-p[3]./x)
 @. f_aoe_sigma(x, p) = sqrt(abs(p[1]) + abs(p[2])/x^2)
-f_aoe_mu(x, p) = p[1] .+ p[2]*x
+f_aoe_mu(x, p) = p[1] .+ p[2].*x
 
 
 """
-    fit_aoe_corrections(e::Array{<:Real}, μ::Array{T}, σ::Array{T}) where T<:Real
+fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real})
 
 Fit the corrections for the AoE value of the detector.
 # Returns
@@ -15,37 +15,37 @@ Fit the corrections for the AoE value of the detector.
 - `f_μ_scs`: Fit function for the mean values
 - `σ_scs`: Fit result for the sigma values
 - `f_σ_scs`: Fit function for the sigma values
-- `err`: Uncertainties
 """
-function fit_aoe_corrections(e::Array{<:Real}, μ::Array{T}, σ::Array{T}) where T<:Real
+function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real})
     # fit compton band mus with linear function
-    μ_cut = (mean(μ) - 2*std(μ) .< μ .&& μ .< mean(μ) + 2*std(μ))
+    μ_cut = (mean(μ) - 2*std(μ) .< μ .< mean(μ) + 2*std(μ))
     e, μ, σ = e[μ_cut], μ[μ_cut], σ[μ_cut]
     # μ_scs = linregress(e[μ_cut], μ[μ_cut])
+    e_unit = unit(first(e))
+    e = ustrip.(e_unit, e)
+    # fit compton band mus with linear function
     μ_scs = linregress(e, μ)
     μ_scs_slope, μ_scs_intercept = LinearRegression.slope(μ_scs)[1], LinearRegression.bias(μ_scs)[1]
     μ_scs = curve_fit(f_aoe_mu, e, μ, [μ_scs_intercept, μ_scs_slope])
-    μ_scs_err = stderror(μ_scs)  
+    μ_scs_param = [μ_scs.param[1], μ_scs.param[2] / e_unit]
     @debug "μ_scs_slope    : $μ_scs_slope"
     @debug "μ_scs_intercept: $μ_scs_intercept"
 
+    σ_cut = (mean(σ) - std(σ) .< σ .< mean(σ) + std(σ))
     # fit compton band sigmas with exponential function
-    σ_scs = curve_fit(f_aoe_sigma, e, σ, [median(σ)^2, 1e-5])
-    σ_scs_err = stderror(σ_scs)
-    @debug "σ_scs offset: $(σ_scs.param[1])"
-    @debug "σ_scs shift : $(σ_scs.param[2])"
+    σ_scs = curve_fit(f_aoe_sigma, e[σ_cut], σ[σ_cut], [median(σ)^2, 1])
+    σ_scs_param = [σ_scs.param[1], σ_scs.param[2] * e_unit^2]
+    @debug "σ_scs offset: $(σ_scs_param[1])"
+    @debug "σ_scs shift : $(σ_scs_param[2])"
     
     (
-        e = e,
+        e = e .* e_unit,
         μ = μ,
-        μ_scs = μ_scs.param,
-        f_μ_scs = x -> μ_scs_slope * x + μ_scs_intercept,
+        μ_scs = μ_scs_param,
+        f_μ_scs = x -> Base.Fix2(f_aoe_mu, μ_scs_param).(x),
         σ = σ,
-        σ_scs = abs.(σ_scs.param),
-        f_σ_scs = x -> Base.Fix2(f_aoe_sigma, σ_scs.param)(x),
-        err = (σ_scs = σ_scs_err, 
-        μ_scs = μ_scs_err
-        )
+        σ_scs = σ_scs_param,
+        f_σ_scs = x -> Base.Fix2(f_aoe_sigma, σ_scs_param).(x),
     )
 end
 export fit_aoe_corrections
@@ -55,14 +55,14 @@ export fit_aoe_corrections
 
 Correct the AoE values in the `aoe` array using the corrections in `aoe_corrections`.
 """
-function correct_aoe!(aoe::Array{T}, e::Array{T}, aoe_corrections::NamedTuple) where T<:Real
-    aoe ./= Base.Fix2(f_aoe_mu, aoe_corrections.μ_scs).(e)
+function correct_aoe!(aoe::Array{<:Real}, e::Array{<:Unitful.Energy{<:Real}}, aoe_corrections::NamedTuple)
+    aoe ./= Base.Fix2(f_aoe_mu, mvalue.(aoe_corrections.μ_scs)).(e)
     aoe .-= 1.0
-    aoe ./= Base.Fix2(f_aoe_sigma, aoe_corrections.σ_scs).(e)
+    aoe ./= Base.Fix2(f_aoe_sigma, mvalue.(aoe_corrections.σ_scs)).(e)
 end
 export correct_aoe!
 
-function correct_aoe!(aoe::Array{T}, e::Array{T}, aoe_corrections::PropDict) where T<:Real
+function correct_aoe!(aoe, e, aoe_corrections::PropDict)
     correct_aoe!(aoe, e, NamedTuple(aoe_corrections))
 end
 

@@ -149,7 +149,7 @@ end
 @recipe function f(report::NamedTuple{((:v, :h, :f_fit, :f_sig, :f_bck))})
     xlabel := "A/E (a.u.)"
     ylabel := "Counts"
-    legend := :bottomright
+    legend := :topleft
     ylims := (1, max(1.5*report.f_sig(report.v.μ), 1.5*maximum(report.h.weights)))
     @series begin
         seriestype := :stepbins
@@ -372,6 +372,14 @@ end
     end
 
 end
+
+
+# @recipe function f(x::AbstractArray, y::AbstractArray{<:Measurement}; plot_ribbon = false)
+# 	if plot_ribbon
+# 		ribbon := uncertainty.(y)
+#     end
+# 	x, value.(y)
+# end
 
 
 end # module LegendSpecFitsRecipesBaseExt

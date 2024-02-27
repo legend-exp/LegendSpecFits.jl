@@ -33,16 +33,3 @@ function autocal_energy(E_raw::AbstractArray{<:Real},; quantile_perc::Real=0.995
 end
 
 export autocal_energy
-
-
-"""
-    calibrate_energy!(e::AbstractArray{<:Real}, pars::PropDict)
-
-Calibrate energy values in-place.
-"""
-function calibrate_energy!(e::Array{T}, pars::PropDict) where T<:Real
-    e .*= pars.m_calib
-    e .+= pars.n_calib
-end
-export calibrate_energy!
-
