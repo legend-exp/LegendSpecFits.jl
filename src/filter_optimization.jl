@@ -83,7 +83,7 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
     
     # create empty array for results
     fts  = Quantity{<:Real}[]
-    fwhm = Float64[]
+    fwhm = Measurement[]
     
     for (r, ft) in enumerate(e_grid_ft)
         # if ft > rt filter doesn't make sense, continue
