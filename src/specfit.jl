@@ -321,3 +321,4 @@ function fit_calibration(μ::Vector{<:Real}, peaks::Vector{<:Unitful.Energy{<:Re
     return LinearRegression.slope(calib_fit_result)[1]*peaks_unit, LinearRegression.bias(calib_fit_result)[1]*peaks_unit
 end
 export fit_calibration
+fit_calibration(μ::Vector{<:Unitful.Energy{<:Real}}, peaks::Vector{<:Unitful.Energy{<:Real}}) = fit_calibration(ustrip.(μ), peaks)
