@@ -179,7 +179,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init), Optim.Options(time_limit = 60))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init), Optim.Options(time_limit = 60, iterations = 500))
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))

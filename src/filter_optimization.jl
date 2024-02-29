@@ -197,6 +197,9 @@ function fit_sg_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRan
         # prepare AoE
         max_aoe_dep_i = quantile(aoe_dep_i, optimization_config.max_aoe_quantile) + optimization_config.max_aoe_offset
         min_aoe_dep_i = quantile(aoe_dep_i, optimization_config.min_aoe_quantile) + optimization_config.min_aoe_offset
+        
+        aoe_dep_i_hist = fit(Histogram, ustrip.(aoe_dep_i), ustrip(min_aoe_dep_i):ustrip(get_friedman_diaconis_bin_width(aoe_dep_i[min_aoe_dep_i .< aoe_dep_i .< max_aoe_dep_i])):ustrip(max_aoe_dep_i))
+        max_aoe_dep_i = first(aoe_dep_i_hist.edges)[argmax(aoe_dep_i_hist.weights)]*unit(max_aoe_dep_i)
 
         try
             psd_cut = get_psd_cut(aoe_dep_i, e_dep_i; window=dep_window, cut_search_interval=(min_aoe_dep_i, max_aoe_dep_i), uncertainty=false)

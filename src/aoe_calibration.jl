@@ -123,7 +123,7 @@ The algorhithm utilizes a root search algorithm to find the cut value with a rel
 - `nsf`: Number of counts after the cut
 - `err`: Uncertainties
 """
-function get_psd_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; dep::T=1592.53u"keV", window::Vector{T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, cut_search_interval::Tuple{Quantity{<:Real}, Quantity{<:Real}}=(-25.0u"keV^-1", 0.0u"keV^-1"), rtol::Float64=0.001, bin_width_window::T=3.0u"keV", fixed_position::Bool=true, sigma_high_sided::Float64=NaN, uncertainty::Bool=true) where T<:Unitful.Energy{<:Real}
+function get_psd_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; dep::T=1592.53u"keV", window::Vector{T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, cut_search_interval::Tuple{Quantity{<:Real}, Quantity{<:Real}}=(-25.0u"keV^-1", 0.0u"keV^-1"), rtol::Float64=0.001, bin_width_window::T=3.0u"keV", fixed_position::Bool=true, sigma_high_sided::Float64=NaN, uncertainty::Bool=true, maxiters::Int=200) where T<:Unitful.Energy{<:Real}
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> dep - bin_width_window .&& e .< dep + bin_width_window])
     # create histogram
@@ -144,7 +144,7 @@ function get_psd_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},;
     nsf = result_before.n * dep_sf
     # get psd cut
     n_surrival_dep_f = cut -> get_n_after_psd_cut(cut, aoe, e, dep, window, bin_width, mvalue(result_before), depstats; uncertainty=false, fixed_position=fixed_position) - nsf
-    psd_cut = find_zero(n_surrival_dep_f, cut_search_interval, Bisection(), rtol=rtol, maxiters=100)
+    psd_cut = find_zero(n_surrival_dep_f, cut_search_interval, Bisection(), rtol=rtol, maxiters=maxiters)
     # return n_surrival_dep_f.(0.25:0.001:0.5)
     # get nsf after cut
     nsf = get_n_after_psd_cut(psd_cut, aoe, e, dep, window, bin_width, mvalue(result_before), depstats; uncertainty=uncertainty, fixed_position=fixed_position)
