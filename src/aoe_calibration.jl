@@ -55,16 +55,15 @@ export fit_aoe_corrections
 
 Correct the AoE values in the `aoe` array using the corrections in `aoe_corrections`.
 """
-function correct_aoe!(aoe::Array{<:Real}, e::Array{<:Unitful.Energy{<:Real}}, aoe_corrections::NamedTuple)
-    aoe ./= Base.Fix2(f_aoe_mu, mvalue.(aoe_corrections.μ_scs)).(e)
-    aoe .-= 1.0
+function correct_aoe!(aoe::Array{<:Unitful.RealOrRealQuantity}, e::Array{<:Unitful.Energy{<:Real}}, aoe_corrections::NamedTuple)
+    aoe .-= Base.Fix2(f_aoe_mu, mvalue.(aoe_corrections.μ_scs)).(e)
+    # aoe .-= 1.0*unit(aoe[1])
     aoe ./= Base.Fix2(f_aoe_sigma, mvalue.(aoe_corrections.σ_scs)).(e)
+    ustrip.(aoe)
 end
 export correct_aoe!
 
-function correct_aoe!(aoe, e, aoe_corrections::PropDict)
-    correct_aoe!(aoe, e, NamedTuple(aoe_corrections))
-end
+correct_aoe!(aoe, e, aoe_corrections::PropDict) = correct_aoe!(aoe, e, NamedTuple(aoe_corrections))
 
 """
     prepare_dep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
@@ -113,7 +112,7 @@ export get_n_after_psd_cut
 
 
 """
-    get_psd_cut(aoe::Array{T}, e::Array{T},; dep::T=1592.53, window::Array{T}=[12.0, 10.0], dep_sf::Float64=0.9, cut_search_interval::Tuple{T,T}=(-25.0, 0.0), rtol::T=0.001) where T<:Real
+    get_psd_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; dep::T=1592.53u"keV", window::Vector{T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, cut_search_interval::Tuple{Quantity{<:Real}, Quantity{<:Real}}=(-25.0u"keV^-1", 0.0u"keV^-1"), rtol::Float64=0.001, bin_width_window::T=3.0u"keV", fixed_position::Bool=true, sigma_high_sided::Float64=NaN, uncertainty::Bool=true, maxiters::Int=200) where T<:Unitful.Energy{<:Real}
 
 Get the PSD cut value for a given `dep` and `window` size while performing a peak fit with fixed position. The PSD cut value is determined by finding the cut value for which the number of counts after the cut is equal to `dep_sf` times the number of counts before the cut.
 The algorhithm utilizes a root search algorithm to find the cut value with a relative tolerance of `rtol`.
@@ -121,9 +120,13 @@ The algorhithm utilizes a root search algorithm to find the cut value with a rel
 - `cut`: PSD cut value
 - `n0`: Number of counts before the cut
 - `nsf`: Number of counts after the cut
-- `err`: Uncertainties
 """
-function get_psd_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; dep::T=1592.53u"keV", window::Vector{T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, cut_search_interval::Tuple{Quantity{<:Real}, Quantity{<:Real}}=(-25.0u"keV^-1", 0.0u"keV^-1"), rtol::Float64=0.001, bin_width_window::T=3.0u"keV", fixed_position::Bool=true, sigma_high_sided::Float64=NaN, uncertainty::Bool=true, maxiters::Int=200) where T<:Unitful.Energy{<:Real}
+function get_psd_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; dep::T=1592.53u"keV", window::Vector{<:T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, cut_search_interval::Tuple{<:Unitful.RealOrRealQuantity, <:Unitful.RealOrRealQuantity}=(-25.0u"keV^-1", 0.0u"keV^-1"), rtol::Float64=0.001, bin_width_window::T=3.0u"keV", fixed_position::Bool=true, sigma_high_sided::Float64=NaN, uncertainty::Bool=true, maxiters::Int=200) where T<:Unitful.Energy{<:Real}
+    # check if a high sided AoE cut should be applied before the PSD cut is generated
+    if !isnan(sigma_high_sided)
+        e   =   e[aoe .< sigma_high_sided]
+        aoe = aoe[aoe .< sigma_high_sided]
+    end
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> dep - bin_width_window .&& e .< dep + bin_width_window])
     # create histogram
@@ -133,11 +136,6 @@ function get_psd_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},;
     # cut window around peak
     aoe = aoe[dep-first(window) .< e .< dep+last(window)]
     e   =   e[dep-first(window) .< e .< dep+last(window)]
-    # check if a high sided AoE cut should be applied before the PSD cut is generated
-    if !isnan(sigma_high_sided)
-        e   =   e[aoe .< sigma_high_sided]
-        aoe = aoe[aoe .< sigma_high_sided]
-    end
     # fit before cut
     result_before, _ = fit_single_peak_th228(dephist, depstats,; uncertainty=uncertainty, fixed_position=fixed_position, low_e_tail=false)
     # get n0 before cut
@@ -148,7 +146,7 @@ function get_psd_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},;
     # return n_surrival_dep_f.(0.25:0.001:0.5)
     # get nsf after cut
     nsf = get_n_after_psd_cut(psd_cut, aoe, e, dep, window, bin_width, mvalue(result_before), depstats; uncertainty=uncertainty, fixed_position=fixed_position)
-    return (cut = measurement(psd_cut, psd_cut * rtol), n0 = result_before.n, nsf = nsf, sf = nsf / result_before.n * 100*u"percent")
+    return (lowcut = measurement(psd_cut, psd_cut * rtol), highcut = sigma_high_sided, n0 = result_before.n, nsf = nsf, sf = nsf / result_before.n * 100*u"percent")
 end
 export get_psd_cut
 
@@ -165,7 +163,7 @@ Get the surrival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `sf`: Surrival fraction
 - `err`: Uncertainties
 """
-function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, psd_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, low_e_tail::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Float64=NaN) where T<:Unitful.Energy{<:Real}
+function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, psd_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, low_e_tail::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     # get energy before cut and create histogram
@@ -181,6 +179,7 @@ function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e
     else
         e = e[psd_cut .< aoe]
     end
+    
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     # get energy after cut and create histogram
@@ -222,7 +221,7 @@ Get the surrival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `result`: Dict of results for each peak
 - `report`: Dict of reports for each peak
 """
-function get_peaks_surrival_fractions(aoe::Array{T}, e::Array{T}, peaks::Array{T}, peak_names::Array{Symbol}, windows::Array{Tuple{T, T}}, psd_cut::T,; uncertainty::Bool=true, bin_width_window::T=2.0, low_e_tail::Bool=true, sigma_high_sided::T=NaN) where T<:Real
+function get_peaks_surrival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, psd_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, bin_width_window::T=2.0u"keV", low_e_tail::Bool=true, sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
     # create return and result dicts
     result = Dict{Symbol, NamedTuple}()
     report = Dict{Symbol, NamedTuple}()
@@ -237,9 +236,10 @@ function get_peaks_surrival_fractions(aoe::Array{T}, e::Array{T}, peaks::Array{T
     return result, report
 end
 export get_peaks_surrival_fractions
+get_peaks_surrival_fractions(aoe, e, peaks, peak_names, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}, psd_cut; kwargs...) = get_peaks_surrival_fractions(aoe, e, peaks, peak_names, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)], psd_cut; kwargs...)
 
 """
-    get_continuum_surrival_fraction(aoe::Array{T}, e::Array{T}, center::T, window::T, psd_cut::T,; uncertainty=true) where T<:Real
+    get_continuum_surrival_fraction(aoe:::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, psd_cut::Unitful.RealOrRealQuantity,; sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
 
 Get the surrival fraction of a continuum after a PSD cut value `psd_cut` for a given `center` and `window` size.
 
@@ -249,35 +249,24 @@ Get the surrival fraction of a continuum after a PSD cut value `psd_cut` for a g
 - `n_before`: Number of counts before the cut
 - `n_after`: Number of counts after the cut
 - `sf`: Surrival fraction
-- `err`: Uncertainties
 """
-function get_continuum_surrival_fraction(aoe::Array{T}, e::Array{T}, center::T, window::T, psd_cut::T,; uncertainty=true, sigma_high_sided=sigma_high_sided) where T<:Real
+function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, psd_cut::Unitful.RealOrRealQuantity,; sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
     # get number of events in window before cut
-    n_before = length(e[center-window .< e .< center+window])
+    n_before = length(e[center - window .< e .< center + window])
     # get number of events after cut
-    n_after = length(e[aoe .> psd_cut .&& center-window .< e .< center+window])
+    n_after = length(e[aoe .> psd_cut .&& center - window .< e .< center + window])
     if !isnan(sigma_high_sided)
-        n_after = length(e[psd_cut .< aoe .< sigma_high_sided .&& center-window .< e .< center+window])
+        n_after = length(e[psd_cut .< aoe .< sigma_high_sided .&& center - window .< e .< center + window])
     end
-    n_after = length(e[aoe .> psd_cut .&& center-window .< e .< center+window])
+    n_after = length(e[aoe .> psd_cut .&& center - window .< e .< center + window])
     # calculate surrival fraction
     sf = n_after / n_before
     result = (
-        center = center, 
-        window = window,
-        n_before = n_before,
-        n_after = n_after,
-        sf = sf,
+        window = measurement(center, window),
+        n_before = measurement(n_before, sqrt(n_before)),
+        n_after = measurement(n_after, sqrt(n_after)),
+        sf = measurement(sf, sqrt(sf * (1-sf) / n_before)) * 100.0 * u"percent",
     )
-    if uncertainty
-        # calculate uncertainty
-        sf_err = sqrt(sf * (1-sf) / n_before)
-        result = merge(result, (err = (
-            n_before = sqrt(n_before),
-            n_after = sqrt(n_after),
-            sf = sf_err,
-        ), ))
-    end
     return result
 end
 export get_continuum_surrival_fraction
