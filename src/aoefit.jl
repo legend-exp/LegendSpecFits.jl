@@ -199,7 +199,13 @@ function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray,
             ps = merge(peakstats[i], (μ = f_aoe_μ(band, pars_aoe.μ), σ = f_aoe_σ(band, pars_aoe.σ)))
         end
         # fit peak
-        result_band, report_band = fit_single_aoe_compton(h, ps, ; uncertainty=uncertainty)
+        result_band, report_band = nothing, nothing
+        try
+            result_band, report_band = fit_single_aoe_compton(h, ps, ; uncertainty=uncertainty)
+        catch e
+            @warn "Error fitting band $band: $e"
+            continue
+        end
         # save results
         result[band] = result_band
         report[band] = report_band
