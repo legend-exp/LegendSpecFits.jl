@@ -141,13 +141,17 @@ end
 Returns the nearest positive definite matrix to A
 Calculation is based on matrix factorization techniques described in https://www.sciencedirect.com/science/article/pii/0024379588902236
 """
-function nearestSPD(A::Matrix{<:Real})
+function nearestSPD(A::Matrix{<:Real},;n_iter::Int64=1)
     B = (A + A') / 2  # make sure matrix is symmetric
     _, s, V = svd(B)  # singular value decomposition (SVD), s = singular values (~eigenvalues), V = right singular vector  (~eigenvector)
     H = V * diagm(0 => max.(s, 0)) * V' # symmetric polar factor of B
     B = (B + H) / 2 # calculate nearest positive definite matrix
     B = (B + B') / 2  # make sure matrix is symmetric
-    return B
+    if (isposdef(B)) | (n_iter > 5)
+        return B
+    else 
+        B = nearestSPD(B;n_iter=n_iter+1)
+    end
 end 
 export nearestSPD
 
