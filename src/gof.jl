@@ -51,7 +51,11 @@ function p_value(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::NamedTuple)
     chi2 = sum((model_counts[model_counts .> 0] - counts[model_counts .> 0]) .^ 2 ./ model_counts[model_counts .> 0])
     npar = length(v_ml)
     dof = length(counts[model_counts .> 0]) - npar
-    pval = ccdf(Chisq(dof), chi2)
+    if dof<0
+        pval = NaN # tbd 
+    else
+        pval = ccdf(Chisq(dof),chi2)
+    end
     if any(model_counts .<= 5)
         @warn "Bin width <= $(round(minimum(model_counts), digits=0)) counts - Chi2 test might be not valid"
     else
