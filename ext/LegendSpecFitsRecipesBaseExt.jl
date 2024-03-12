@@ -279,7 +279,6 @@ end
         subplot := 3
         report_ctc.h_before
     end
-
     # @series begin
     #     # seriestype := :stepbins
     #     color := :red
@@ -329,10 +328,8 @@ end
 
 @recipe function f(report_window_cut::NamedTuple{(:h, :f_fit, :x_fit, :low_cut, :high_cut, :low_cut_fit, :high_cut_fit, :center, :σ)})
     xlims := (value(ustrip(report_window_cut.center - 5*report_window_cut.σ)), value(ustrip(report_window_cut.center + 5*report_window_cut.σ)))
+    xlims := (ustrip(report_window_cut.center - 5*report_window_cut.σ), ustrip(report_window_cut.center + 5*report_window_cut.σ))
     @series begin
-        seriestype := :barbins
-        alpha := 0.5
-        label := "Data"
         report_window_cut.h        
     end
     @series begin
