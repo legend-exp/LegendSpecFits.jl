@@ -140,7 +140,7 @@ end
 Returns the nearest positive definite matrix to A
 Calculation is based on matrix factorization techniques described in https://www.sciencedirect.com/science/article/pii/0024379588902236
 """
-function nearestSPD(A::Matrix{<:Real},;n_iter::Int64=1)
+function nearestSPD(A::Matrix{<:Real},;n_iter::Signed=1)
     B = (A + A') / 2  # make sure matrix is symmetric
     _, s, V = svd(B)  # singular value decomposition (SVD), s = singular values (~eigenvalues), V = right singular vector  (~eigenvector)
     H = V * diagm(0 => max.(s, 0)) * V' # symmetric polar factor of B
