@@ -4,14 +4,15 @@ f_aoe_sig(x, v)     = aoe_compton_signal_peakshape(x, v.μ, v.σ, v.n)
 f_aoe_bkg(x, v)     = aoe_compton_background_peakshape(x, v.μ, v.σ, v.B, v.δ)
 
 # aoe compton centroids energy depencence
-f_aoe_μ(x::Real, v::Array{T}) where T<:Real = linear_function(x, -v[1], v[2])
-f_aoe_μ(x::Array{<:Real}, v::Array{T}) where T<:Real = linear_function.(x, -v[1], v[2])
-f_aoe_μ(x::T, v::NamedTuple) where T<:Real = f_aoe_μ(x, [v.μ_scs_slope, v.μ_scs_intercept])
+MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
+f_aoe_μ(x::T, v::Array{<:T}) where T<:Unitful.RealOrRealQuantity = -v[1] * x + v[2]
+f_aoe_μ(x::Array{<:T}, v::Array{<:T}) where T<:Unitful.RealOrRealQuantity = f_aoe_μ.(x, v)
+f_aoe_μ(x, v::NamedTuple) = f_aoe_μ(x, [v.μ_scs_slope, v.μ_scs_intercept])
 
 # aoe compton sigma energy depencence
-f_aoe_σ(x::Real, v::Array{T}) where T<:Real = exponential_decay(x, v[1], v[2], v[3])
-f_aoe_σ(x::Array{<:Real}, v::Array{T}) where T<:Real = exponential_decay.(x, v[1], v[2], v[3])
-f_aoe_σ(x::T, v::NamedTuple) where T<:Real = f_aoe_σ(x, [v.σ_scs_amplitude, v.σ_scs_decay, v.σ_scs_offset])
+f_aoe_σ(x::T, v::Array{<:T}) where T<:Unitful.RealOrRealQuantity = exponential_decay(x, v[1], v[2], v[3])
+f_aoe_σ(x::Array{<:T}, v::Array{<:T}) where T<:Unitful.RealOrRealQuantity = exponential_decay.(x, v[1], v[2], v[3])
+f_aoe_σ(x, v::NamedTuple) = f_aoe_σ(x, [v.σ_scs_amplitude, v.σ_scs_decay, v.σ_scs_offset])
 
 """
     estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
@@ -82,7 +83,8 @@ the binning is only done in the area around the peak. The peak parameters are es
     * `simple_pars_aoe_σ`: Simple curve fit parameters for the peak sigma energy depencence
     * `simple_pars_error_aoe_σ`: Simple curve fit parameter errors for the peak sigma energy depencence
 """
-function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compton_bands::Array{<:Real}, compton_window::T) where T<:Real
+function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:T}, compton_bands::Array{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
+    e_unit = u"keV"
     # get aoe values in compton bands
     aoe_compton_bands = [aoe[c .< e .< c + compton_window .&& aoe .> 0.0] for c in compton_bands]
 
@@ -114,9 +116,9 @@ function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compto
     # estimate peak positions energy depencence 
     peak_pos = peakstats.peak_pos
     mean_peak_pos, std_peak_pos = mean(peak_pos), std(peak_pos)
-    peak_pos_cut = peak_pos .< mean_peak_pos + 3*std_peak_pos .&& peak_pos .> mean_peak_pos - 3*std_peak_pos
+    peak_pos_cut = mean_peak_pos - 3*std_peak_pos .< peak_pos .< mean_peak_pos + 3*std_peak_pos
     # simple curve fit for parameter extraction
-    simple_fit_aoe_μ        = curve_fit(f_aoe_μ, compton_bands[peak_pos_cut], peak_pos[peak_pos_cut], [0.0, mean_peak_pos])
+    simple_fit_aoe_μ        = curve_fit(f_aoe_mu, ustrip.(e_unit, compton_bands[peak_pos_cut]), peak_pos[peak_pos_cut], [mean_peak_pos, 0.0])
     simple_pars_aoe_μ       = simple_fit_aoe_μ.param
     simple_pars_error_aoe_μ = zeros(length(simple_pars_aoe_μ))
     try
@@ -129,7 +131,7 @@ function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compto
     peak_sigma = peakstats.peak_sigma
     mean_peak_sigma, std_peak_sigma = mean(peak_sigma[20:end]), std(peak_sigma[20:end])
     # simple curve fit for parameter extraction
-    simple_fit_aoe_σ        = curve_fit(f_aoe_σ, compton_bands, peak_sigma, [0.0, 0.0, mean_peak_sigma])
+    simple_fit_aoe_σ        = curve_fit(f_aoe_sigma, ustrip.(e_unit, compton_bands), peak_sigma, [mean_peak_sigma^2, 1])
     simple_pars_aoe_σ       = simple_fit_aoe_σ.param
     simple_pars_error_aoe_σ = zeros(length(simple_pars_aoe_σ))
     try
@@ -159,6 +161,7 @@ function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compto
         peakhists,
         peakstats,
         min_aoe,
+        e_unit,
         max_aoe,
         mean_peak_pos,
         std_peak_pos,
@@ -183,7 +186,7 @@ Fit the A/E Compton bands using the `f_aoe_compton` function consisting of a gau
     * `result`: Dict of NamedTuples of the fit results containing values and errors for each compton band
     * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
-function fit_aoe_compton(peakhists::Array, peakstats::StructArray, compton_bands::Array{T},; pars_aoe::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Real
+function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; pars_aoe::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
     # create return and result dicts
     result = Dict{T, NamedTuple}()
     report = Dict{T, NamedTuple}()
@@ -196,7 +199,13 @@ function fit_aoe_compton(peakhists::Array, peakstats::StructArray, compton_bands
             ps = merge(peakstats[i], (μ = f_aoe_μ(band, pars_aoe.μ), σ = f_aoe_σ(band, pars_aoe.σ)))
         end
         # fit peak
-        result_band, report_band = fit_single_aoe_compton(h, ps, ; uncertainty=uncertainty)
+        result_band, report_band = nothing, nothing
+        try
+            result_band, report_band = fit_single_aoe_compton(h, ps, ; uncertainty=uncertainty)
+        catch e
+            @warn "Error fitting band $band: $e"
+            continue
+        end
         # save results
         result[band] = result_band
         report[band] = report_band
@@ -306,7 +315,8 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
         @debug "B: $(v_ml.B) ± $(v_ml_err.B)"
 
-        result = merge(merge(v_ml, (p_value = p_value, )), (err = v_ml_err, ))
+        result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
+            (p_value = p_value, ))
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"

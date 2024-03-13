@@ -1,5 +1,7 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 
+heaviside(x) = x < zero(x) ? zero(x) : one(x)
+
 """
     expand_vars(v::NamedTuple)::StructArray
 
@@ -102,10 +104,12 @@ end
 
 Return the bin width for the given data `x` using the Friedman-Diaconis rule.
 """
-function get_friedman_diaconis_bin_width(x::AbstractArray)
+function get_friedman_diaconis_bin_width end
+
+function get_friedman_diaconis_bin_width(x::Vector{<:Real})
     2 * (quantile(x, 0.75) - quantile(x, 0.25)) / ∛(length(x))
 end
-
+get_friedman_diaconis_bin_width(x::Vector{<:Quantity{<:Real}}) = get_friedman_diaconis_bin_width(ustrip.(x))*unit(first(x))
 
 """
     get_number_of_bins(x::AbstractArray,; method::Symbol=:sqrt)
@@ -136,12 +140,20 @@ end
 Returns the nearest positive definite matrix to A
 Calculation is based on matrix factorization techniques described in https://www.sciencedirect.com/science/article/pii/0024379588902236
 """
-function nearestSPD(A::Matrix{<:Real})
+function nearestSPD(A::Matrix{<:Real},;n_iter::Signed=1)
     B = (A + A') / 2  # make sure matrix is symmetric
     _, s, V = svd(B)  # singular value decomposition (SVD), s = singular values (~eigenvalues), V = right singular vector  (~eigenvector)
     H = V * diagm(0 => max.(s, 0)) * V' # symmetric polar factor of B
     B = (B + H) / 2 # calculate nearest positive definite matrix
     B = (B + B') / 2  # make sure matrix is symmetric
-    return B
+    if (isposdef(B)) | (n_iter > 5)
+        return B
+    else 
+        B = nearestSPD(B;n_iter=n_iter+1)
+    end
 end 
 export nearestSPD
+
+
+Measurements.value(nt::NamedTuple) = NamedTuple{keys(nt)}([Measurements.value(nt[f]) for f in keys(nt)]...)
+Measurements.value(x::AbstractArray) = Measurements.value.(x)

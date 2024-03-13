@@ -3,32 +3,31 @@
 module LegendSpecFitsRecipesBaseExt
 
 using RecipesBase
-using Unitful, Formatting
+using Unitful, Formatting, Measurements
+using Measurements: value, uncertainty
 using StatsBase, LinearAlgebra
 
 # @recipe function f(x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where T<:Unitful.RealOrRealQuantity
-@recipe function f(report::NamedTuple{(:f_fit, :μ, :μ_err, :σ, :σ_err, :n), Tuple{Q, T, T, T, T, Int64}}, x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where {Q <: Function, T <: Unitful.RealOrRealQuantity}
+@recipe function f(report::NamedTuple{(:f_fit, :μ, :σ, :n)}, x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where {T <: Unitful.RealOrRealQuantity}
     ylabel := "Normalized Counts"
     legend := :bottomright
     @series begin
         seriestype := :histogram
         bins --> :fd
-        # bins --> 2000
         normalize --> :pdf
         label := "Data"
-        x[x .> cuts.low .&& x .< cuts.high]
-        # x
+        ustrip(x[x .> cuts.low .&& x .< cuts.high])
     end
     @series begin
         color := :red
-        label := format("Normal Fit (μ = ({:.2f} ± {:.2f}), σ = ({:.2f} ± {:.2f})", ustrip.([report.μ, report.μ_err, report.σ, report.σ_err])...)
+        label := "Normal Fit (μ = $(round(unit(report.μ), report.μ, digits=2)), σ = $(round(unit(report.σ), report.σ, digits=2)))"
         lw := 3
-        ustrip(cuts.low):0.00001:ustrip(cuts.high), t -> report.f_fit(t)
+        ustrip(cuts.low):ustrip(Measurements.value(report.σ / 1000)):ustrip(cuts.high), t -> report.f_fit(t)
     end
 end
 
-@recipe function f(report:: NamedTuple{(:rt, :min_enc, :enc_grid_rt, :enc, :enc_err)})
-    xlabel := "Rise Time (µs)"
+@recipe function f(report:: NamedTuple{(:rt, :min_enc, :enc_grid_rt, :enc)})
+    xlabel := "Rise Time ($(unit(first(report.rt))))"
     ylabel := "ENC (ADC)"
     grid := :true
     gridcolor := :black
@@ -39,13 +38,8 @@ end
     # xlims := (5e0, 2e1)
     @series begin
         seriestype := :scatter
-        u"µs", NoUnits
-    end
-    @series begin
-        seriestype := :scatter
         label := "ENC"
-        yerror --> report.enc_err
-        report.enc_grid_rt[report.enc .> 0.0]*NoUnits, report.enc[report.enc .> 0.0]
+        report.enc_grid_rt*NoUnits, report.enc
     end
     @series begin
         seriestype := :hline
@@ -57,8 +51,8 @@ end
 end
 
 @recipe function f(report:: NamedTuple{(:ft, :min_fwhm, :e_grid_ft, :fwhm)})
-    xlabel := "Flat-Top Time (µs)"
-    ylabel := "FWHM FEP (keV)"
+    xlabel := "Flat-Top Time $(unit(first(report.ft)))"
+    ylabel := "FWHM FEP"
     grid := :true
     gridcolor := :black
     gridalpha := 0.2
@@ -69,42 +63,44 @@ end
     xlims := (0.5, 5)
     @series begin
         seriestype := :scatter
-        u"µs", NoUnits
-    end
-    @series begin
-        seriestype := :scatter
         label := "FWHM"
-        report.e_grid_ft[report.fwhm .> 0.0]*NoUnits, report.fwhm[report.fwhm .> 0.0]
+        report.e_grid_ft*NoUnits, report.fwhm
     end
     @series begin
         seriestype := :hline
-        label := "Min. FWHM (FT: $(report.ft))"
+        label := "Min. FWHM $(round(u"keV", report.min_fwhm, digits=2)) (FT: $(report.ft))"
         color := :red
         linewidth := 2.5
         [report.min_fwhm]
     end
 end
 
-@recipe function f(report:: NamedTuple{(:wl, :min_sf, :min_sf_err, :a_grid_wl_sg, :sfs, :sfs_err)})
-    xlabel := "Window Length (ns)"
-    ylabel := "SEP Surrival Fraction (%)"
+@recipe function f(report:: NamedTuple{(:wl, :min_sf, :a_grid_wl_sg, :sfs)})
+    xlabel := "Window Length ($(unit(first(report.a_grid_wl_sg))))"
+    ylabel := "SEP Surrival Fraction ($(unit(first(report.sfs))))"
     grid := :true
     gridcolor := :black
     gridalpha := 0.2
     gridlinewidth := 0.5
-    ylims := (0, 30)
+    # ylims := (0, 30)
     @series begin
         seriestype := :scatter
         label := "SF"
-        yerror --> report.sfs_err
-        ustrip.(report.a_grid_wl_sg), report.sfs
+        ustrip.(report.a_grid_wl_sg), ustrip.(report.sfs)
     end
     @series begin
         seriestype := :hline
-        label := "Min. SF (WT: $(report.wl))"
+        label := "Min. SF $(report.min_sf) (WT: $(report.wl))"
         color := :red
         linewidth := 2.5
-        [report.min_sf]
+        [ustrip(Measurements.value(report.min_sf))]
+    end
+    @series begin
+        seriestype := :hspan
+        label := ""
+        color := :red
+        alpha := 0.1
+        ustrip.([Measurements.value(report.min_sf)-Measurements.uncertainty(report.min_sf), Measurements.value(report.min_sf)+Measurements.uncertainty(report.min_sf)])
     end
 end
 
@@ -153,7 +149,7 @@ end
 @recipe function f(report::NamedTuple{((:v, :h, :f_fit, :f_sig, :f_bck))})
     xlabel := "A/E (a.u.)"
     ylabel := "Counts"
-    legend := :bottomright
+    legend := :topleft
     ylims := (1, max(1.5*report.f_sig(report.v.μ), 1.5*maximum(report.h.weights)))
     @series begin
         seriestype := :stepbins
@@ -242,13 +238,13 @@ end
     end
 end
 
-@recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after, :fwhm_before, :fwhm_after, :err, :report_before, :report_after)})
+@recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after, :fwhm_before, :fwhm_after, :report_before, :report_after)})
     layout := (2,2)
     thickness_scaling := 2.0
     size := (2400, 1600)
     @series begin
         seriestype := :histogram2d
-        bins := (minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
+        bins := (ustrip.(unit(first(report_ctc.e_peak)), minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak)), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
         color := :inferno
         xlabel := "Energy (keV)"
         ylabel := "Drift Time"
@@ -261,7 +257,7 @@ end
     end
     @series begin
         seriestype := :histogram2d
-        bins := (minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
+        bins := (ustrip.(unit(first(report_ctc.e_peak)), minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak)), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
         color := :magma
         xlabel := "Energy (keV)"
         ylabel := "Drift Time"
@@ -278,7 +274,7 @@ end
         label := "Before CTC"
         xlabel := "Energy (keV)"
         ylabel := "Counts"
-        title := "FWHM $(round(report_ctc.fwhm_before, digits=2))±$(round(report_ctc.err.fwhm_before, digits=2))keV"
+        title := "FWHM $(round(report_ctc.fwhm_before, digits=2))"
         yscale := :log10
         subplot := 3
         report_ctc.h_before
@@ -305,6 +301,8 @@ end
     #     # report_ctc.h_before
     #     minimum(report_ctc.e_peak):0.001:maximum(report_ctc.e_peak), t -> report_ctc.report_after.f_fit(t)
     # end
+
+
     @series begin
         seriestype := :stepbins
         color := :red
@@ -321,7 +319,7 @@ end
         label := "After CTC"
         xlabel := "Energy (keV)"
         ylabel := "Counts"
-        title := "FWHM $(round(report_ctc.fwhm_after, digits=2))±$(round(report_ctc.err.fwhm_after, digits=2))keV"
+        title := "FWHM $(round(report_ctc.fwhm_after, digits=2))"
         yscale := :log10
         subplot := 4
         report_ctc.h_after
@@ -329,11 +327,9 @@ end
 end
 
 @recipe function f(report_window_cut::NamedTuple{(:h, :f_fit, :x_fit, :low_cut, :high_cut, :low_cut_fit, :high_cut_fit, :center, :σ)})
+    xlims := (value(ustrip(report_window_cut.center - 5*report_window_cut.σ)), value(ustrip(report_window_cut.center + 5*report_window_cut.σ)))
     xlims := (ustrip(report_window_cut.center - 5*report_window_cut.σ), ustrip(report_window_cut.center + 5*report_window_cut.σ))
     @series begin
-        seriestype := :barbins
-        alpha := 0.5
-        label := "Data"
         report_window_cut.h        
     end
     @series begin
@@ -373,6 +369,14 @@ end
     end
 
 end
+
+
+# @recipe function f(x::AbstractArray, y::AbstractArray{<:Measurement}; plot_ribbon = false)
+# 	if plot_ribbon
+# 		ribbon := uncertainty.(y)
+#     end
+# 	x, value.(y)
+# end
 
 
 end # module LegendSpecFitsRecipesBaseExt

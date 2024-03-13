@@ -19,8 +19,8 @@ function fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{Quantity{
     @assert size(enc_grid, 1) == length(enc_grid_rt) "enc_grid and enc_grid_rt must have the same number of columns"
     
     # create empty array for results
-    enc        = zeros(length(enc_grid_rt))
-    enc_err    = zeros(length(enc_grid_rt))
+    rts = Quantity{<:Real}[]
+    enc = Measurement[]
     
     for (r, rt) in enumerate(enc_grid_rt)
         # get enc for this rt
@@ -36,26 +36,24 @@ function fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{Quantity{
         result, _ = fit_single_trunc_gauss(enc_rt, cuts)
 
         # get sigma
-        enc[r] = result.σ
-        enc_err[r] = result.σ_err
+        push!(enc, result.σ)
+        push!(rts, rt)
     end
 
     # get minimal enc and rt
-    min_enc     = minimum(enc[enc .> 0])
-    rt_min_enc  = enc_grid_rt[enc .> 0][findmin(enc[enc .> 0])[2]]
+    min_enc     = minimum(enc)
+    rt_min_enc  = rts[findmin(enc)[2]]
     
     # generate result and report
     result = (
-        rt = rt_min_enc,
-        rt_err = step(enc_grid_rt),
+        rt = measurement(rt_min_enc, step(enc_grid_rt)),
         min_enc = min_enc
     )
     report = (
         rt = result.rt,
         min_enc = result.min_enc,
-        enc_grid_rt = collect(enc_grid_rt),
-        enc = enc,
-        enc_err = enc_err
+        enc_grid_rt = rts,
+        enc = enc
     )
     return result, report
 
@@ -84,15 +82,13 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
     @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"
     
     # create empty array for results
-    fwhm        = zeros(length(e_grid_ft))
-    fwhm_err    = zeros(length(e_grid_ft))
+    fts  = Quantity{<:Real}[]
+    fwhm = Measurement[]
     
     for (r, ft) in enumerate(e_grid_ft)
         # if ft > rt filter doesn't make sense, continue
         if ft > rt
             @debug "FT $ft bigger than RT $rt, skipping"
-            fwhm[r]     = NaN
-            fwhm_err[r] = NaN
             continue
         end
         # get e values for this ft
@@ -102,8 +98,6 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
         # sanity check
         if count(min_e .< e_ft .< max_e) < 100
             @debug "Not enough data points for FT $ft, skipping"
-            fwhm[r]     = NaN
-            fwhm_err[r] = NaN
             continue
         end
         # cut around peak to increase performance
@@ -119,121 +113,133 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
         # check if ps guess is valid
         if any(tuple_to_array(ps) .<= 0)
             @debug "Invalid guess for peakstats, skipping"
-            fwhm[r]     = NaN
-            fwhm_err[r] = NaN
             continue
         end
         # fit peak 
         result, _ = fit_single_peak_th228(h, ps,; uncertainty=false)
         # get fwhm
-        fwhm[r]     = result.fwhm
-        # fwhm_err[r] = result.fwhm_err
+        push!(fwhm, result.fwhm)
+        push!(fts, ft)
     end
 
     # get minimal fwhm and rt
-    if isempty(fwhm[fwhm .> 0])
+    if isempty(fwhm)
         @warn "No valid FWHM found, setting to NaN"
-        min_fwhm = NaN
+        min_fwhm = NaN * u"keV"
         @warn "No valid FT found, setting to default"
         ft_min_fwhm = default_ft
     else
         # calibration constant from last fit to get rough calibration for better plotting
-        c = 2614.5 ./ result.μ
-        fwhm = fwhm .* c
+        c = 2614.5u"keV" ./ result.μ
+        fwhm = fwhm .* c 
         # get minimal fwhm and ft
-        min_fwhm    = minimum(fwhm[fwhm .> 0])
-        ft_min_fwhm = e_grid_ft[fwhm .> 0][findmin(fwhm[fwhm .> 0])[2]]
+        min_fwhm    = minimum(fwhm)
+        ft_min_fwhm = e_grid_ft[findmin(fwhm)[2]]
     end
     # generate result and report
     result = (
-        ft = ft_min_fwhm, 
-        ft_err = step(e_grid_ft),
+        ft = measurement(ft_min_fwhm, step(e_grid_ft)),
         min_fwhm = min_fwhm
     )
     report = (
         ft = result.ft, 
         min_fwhm = result.min_fwhm,
-        e_grid_ft = collect(e_grid_ft),
+        e_grid_ft = fts,
         fwhm = fwhm,
-        # fwhm_err = fwhm_err
     )
     return result, report
 
 end
 export fit_fwhm_ft_fep
 
+"""
+    fit_sg_wl(dep_sep_data, a_grid_wl_sg, optimization_config)
 
+Fit the SG window length for the SEP data and return the optimal window length and the corresponding survival fraction.
+
+# Arguments
+- `dep_sep_data`: NamedTuple with the DEP and SEP data
+- `a_grid_wl_sg`: range of window lengths to sweep through
+- `optimization_config`: configuration dictionary
+
+# Returns
+- `result`: optimal window length and corresponding survival fraction
+- `report`: report with all window lengths and survival fractions
+"""
 function fit_sg_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRangeLen, optimization_config::PropDict)
     # unpack config
-    dep, dep_window = optimization_config.sg.dep, Float64.(optimization_config.sg.dep_window)
-    sep, sep_window = optimization_config.sg.sep, Float64.(optimization_config.sg.sep_window)
+    dep, dep_window = optimization_config.dep, Float64.(optimization_config.dep_window)
+    sep, sep_window = optimization_config.sep, Float64.(optimization_config.sep_window)
 
     # unpack data
     e_dep, e_sep = dep_sep_data.dep.e, dep_sep_data.sep.e
     aoe_dep, aoe_sep = dep_sep_data.dep.aoe, dep_sep_data.sep.aoe
 
-
     # prepare peakhist
-    result_dep, _ = prepare_dep_peakhist(e_dep, dep; n_bins_cut=optimization_config.sg.nbins_dep_cut, relative_cut=optimization_config.sg.dep_rel_cut)
-
+    result_dep, _ = prepare_dep_peakhist(e_dep, dep; n_bins_cut=optimization_config.nbins_dep_cut, relative_cut=optimization_config.dep_rel_cut, uncertainty=false)
+    
+    yield()
+    
     # get calib constant from fit on DEP peak
-    e_dep_calib = e_dep .* result_dep.m_calib
-    e_sep_calib = e_sep .* result_dep.m_calib
+    e_dep_calib = e_dep .* mvalue(result_dep.m_calib)
+    e_sep_calib = e_sep .* mvalue(result_dep.m_calib)
 
     # create empty arrays for sf and sf_err
-    sep_sfs     = ones(length(a_grid_wl_sg)) .* 100
-    sep_sfs_err = zeros(length(a_grid_wl_sg))
-
+    sep_sfs     = Quantity{Measurement}[]
+    wls        = Quantity{<:Real}[]
 
     # for each window lenght, calculate the survival fraction in the SEP
     for (i_aoe, wl) in enumerate(a_grid_wl_sg)
 
-        aoe_dep_i = aoe_dep[i_aoe, :][isfinite.(aoe_dep[i_aoe, :])] ./ result_dep.m_calib
+        aoe_dep_i = aoe_dep[i_aoe, :][isfinite.(aoe_dep[i_aoe, :])] ./ mvalue(result_dep.m_calib)
         e_dep_i   = e_dep_calib[isfinite.(aoe_dep[i_aoe, :])]
 
         # prepare AoE
-        max_aoe_dep_i = quantile(aoe_dep_i, optimization_config.sg.max_aoe_quantile) + optimization_config.sg.max_aoe_offset
-        min_aoe_dep_i = quantile(aoe_dep_i, optimization_config.sg.min_aoe_quantile) + optimization_config.sg.min_aoe_offset
+        max_aoe_dep_i = quantile(aoe_dep_i, optimization_config.max_aoe_quantile) + optimization_config.max_aoe_offset
+        min_aoe_dep_i = quantile(aoe_dep_i, optimization_config.min_aoe_quantile) + optimization_config.min_aoe_offset
+        
+        aoe_dep_i_hist = fit(Histogram, ustrip.(aoe_dep_i), ustrip(min_aoe_dep_i):ustrip(get_friedman_diaconis_bin_width(aoe_dep_i[min_aoe_dep_i .< aoe_dep_i .< max_aoe_dep_i])):ustrip(max_aoe_dep_i))
+        max_aoe_dep_i = first(aoe_dep_i_hist.edges)[argmax(aoe_dep_i_hist.weights)]*unit(max_aoe_dep_i)
 
         try
-            psd_cut = get_psd_cut(aoe_dep_i, e_dep_i; window=dep_window, cut_search_interval=(min_aoe_dep_i, max_aoe_dep_i))
+            psd_cut = get_psd_cut(aoe_dep_i, e_dep_i; window=dep_window, cut_search_interval=(min_aoe_dep_i, max_aoe_dep_i), uncertainty=false)
 
             aoe_sep_i = aoe_sep[i_aoe, :][isfinite.(aoe_sep[i_aoe, :])] ./ result_dep.m_calib
             e_sep_i   = e_sep_calib[isfinite.(aoe_sep[i_aoe, :])]
 
-            result_sep, _ = get_peak_surrival_fraction(aoe_sep_i, e_sep_i, sep, sep_window, psd_cut.cut; uncertainty=true, low_e_tail=false)
-            sep_sfs[i_aoe]     = result_sep.sf * 100
-            sep_sfs_err[i_aoe] = result_sep.err.sf * 100
+            result_sep, _ = get_peak_surrival_fraction(aoe_sep_i, e_sep_i, sep, sep_window, psd_cut.cut; uncertainty=false, low_e_tail=false)
+
+            push!(sep_sfs, result_sep.sf)
+            push!(wls, wl)
         catch e
             @warn "Couldn't process window length $wl"
         end
+        yield()
     end
     # get minimal surrival fraction and window length
-    if isempty(sep_sfs[1.0 .< sep_sfs .< 100])
+    sep_sfs_cut = 1.0u"percent" .< sep_sfs .< 100u"percent"
+    if isempty(sep_sfs[sep_sfs_cut])
         @warn "No valid SEP SF found, setting to NaN"
-        min_sf = NaN
-        min_sf_err = NaN
+        min_sf = measurement(NaN, NaN)*u"percent"
         @warn "No valid window length found, setting to default"
-        wl_sg_min_sf = 100u"ns"
+        wl_sg_min_sf = last(a_grid_wl_sg[a_grid_wl_sg .< 110u"ns"])
     else
-        min_sf     = minimum(sep_sfs[1.0 .< sep_sfs .< 100])
-        min_sf_err = sep_sfs_err[sep_sfs .== min_sf][1]
-        wl_sg_min_sf = a_grid_wl_sg[1.0 .< sep_sfs .< 100][findmin(sep_sfs[1.0 .< sep_sfs .< 100])[2]]
+        min_sf       = minimum(sep_sfs[sep_sfs_cut])
+        wl_sg_min_sf = wls[sep_sfs_cut][findmin(sep_sfs[sep_sfs_cut])[2]]
     end
 
     # generate result and report
     result = (
-        wl = wl_sg_min_sf,
+        wl = measurement(wl_sg_min_sf, step(a_grid_wl_sg)),
         sf = min_sf,
-        sf_err = min_sf_err
+        n_dep = length(e_dep),
+        n_sep = length(e_sep)
     )
     report = (
         wl = result.wl,
         min_sf = result.sf,
-        min_sf_err = result.sf_err,
-        a_grid_wl_sg = collect(a_grid_wl_sg),
-        sfs = sep_sfs,
-        sfs_err = sep_sfs_err
+        a_grid_wl_sg = wls,
+        sfs = sep_sfs
     )
     return result, report
 end

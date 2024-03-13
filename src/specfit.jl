@@ -86,16 +86,22 @@ Perform a fit of the peakshape to the data in `peakhists` using the initial valu
     * `peak_fit_plots`: array of plots of the peak fits
     * `return_vals`: dictionary of the fit results
 """
-function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Array,; calib_type::Symbol=:th228, uncertainty::Bool=true, low_e_tail::Bool=true,iterative_fit::Bool=false)
+function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Vector; kwargs...)
+    # remove calib type from kwargs
+    @assert haskey(kwargs, :calib_type) "Calibration type not specified"
+    calib_type = kwargs[:calib_type]
+    # remove :calib_type from kwargs
+    kwargs = pairs(NamedTuple(filter(k -> !(:calib_type in k), kwargs)))
     if calib_type == :th228
-        return fit_peaks_th228(peakhists, peakstats, th228_lines,; uncertainty=uncertainty, low_e_tail=low_e_tail,iterative_fit=iterative_fit)
+        @info "Fit peaks for Th228 lines"
+        return fit_peaks_th228(peakhists, peakstats, th228_lines,; kwargs...)
     else
         error("Calibration type not supported")
     end
 end
 export fit_peaks
 
-function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Array{T},; uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false) where T<:Any
+function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Vector{T},; e_unit::Union{Nothing, Unitful.EnergyUnits}=nothing, uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false) where T<:Any
     # create return and result dicts
     result = Dict{T, NamedTuple}()
     report = Dict{T, NamedTuple}()
@@ -105,7 +111,7 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
         h  = peakhists[i]
         ps = peakstats[i]
         # fit peak
-        result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=low_e_tail)
+        result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=uncertainty, low_e_tail=low_e_tail)
 
         # check covariance matrix for being semi positive definite (no negative uncertainties)
         if uncertainty
@@ -118,6 +124,10 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
                 end
         end
         # save results
+        if !isnothing(e_unit)
+            keys_to_keep = [k for k in keys(result_peak) if k != :gof]
+            result_peak = merge(NamedTuple{Tuple(keys_to_keep)}([result_peak[k] .* e_unit for k in keys_to_keep]...), (gof = result_peak.gof, n = result_peak.n, background = n = result_peak.background))
+        end
         result[peak] = result_peak
         report[peak] = report_peak
     end
@@ -135,7 +145,7 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
 """
 function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}}; 
     uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
-    fit_fun::Symbol=:f_fit) where T<:Real
+    fit_func::Symbol=:f_fit) where T<:Real
     # create standard pseudo priors
     standard_pseudo_prior = NamedTupleDist(
         μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Uniform(ps.peak_pos-10, ps.peak_pos+10)),
@@ -164,18 +174,18 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     v_init = mean(pseudo_prior)
 
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
-    f_loglike = let f_fit=th228_fit_functions[fit_fun], h=h
+    f_loglike = let f_fit=th228_fit_functions[fit_func], h=h
         v -> hist_loglike(Base.Fix2(f_fit, v), h)
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init), Optim.Options(time_limit = 60, iterations = 500))
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    f_loglike_array = let f_fit=th228_fit_functions[fit_fun], h=h, v_keys = keys(standard_pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
-        v ->  - hist_loglike(    x -> f_fit(x,NamedTuple{v_keys}(v)), h) 
+    f_loglike_array = let f_fit=th228_fit_functions[fit_func], h=h, v_keys = keys(standard_pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
+        v ->  - hist_loglike(x -> f_fit(x,NamedTuple{v_keys}(v)), h) 
     end
 
     if uncertainty
@@ -193,10 +203,15 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         pval, chi2, dof = p_value(th228_fit_functions.f_fit, h, v_ml)
         
         # calculate normalized residuals
-        residuals, residuals_norm, p_value_binwise, bin_centers =  get_residuals(th228_fit_functions.f_fit, h, v_ml)
+        residuals, residuals_norm, p_value_binwise, bin_centers = get_residuals(th228_fit_functions[fit_func], h, v_ml)
 
         # get fwhm of peak
-        fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, param_covariance)
+        fwhm, fwhm_err = 
+            try
+                get_peak_fwhm_th228(v_ml, param_covariance)
+            catch e
+                get_peak_fwhm_th228(v_ml, v_ml_err)
+            end
 
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
@@ -205,7 +220,10 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
     
-        result = merge(v_ml, (pval = pval, chi2 = chi2, dof = dof, fwhm = fwhm,covmat = param_covariance, covmat_raw = param_covariance_raw,residuals = residuals, residuals_norm = residuals_norm, p_value_binwise= p_value_binwise,bin_centers = bin_centers,),(err = merge(v_ml_err, (fwhm = fwhm_err,)),))
+        result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
+                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, covmat_raw = param_covariance_raw, 
+                residuals = residuals, residuals_norm = residuals_norm, pvalue_binwise = p_value_binwise, bin_centers = bin_centers))
+                )
         report = (
             v = v_ml,
             h = h,
@@ -224,7 +242,9 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "n: $(v_ml.n)"
         @debug "FWHM: $(fwhm)"
 
-        result = merge(v_ml, (fwhm = fwhm, ))
+        result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
+        (fwhm = measurement(fwhm, NaN), ))
+        # result = merge(v_ml, (fwhm = fwhm, ))
         report = (
             v = v_ml,
             h = h,
@@ -267,7 +287,7 @@ Get the FWHM of a peak from the fit parameters while performing a MC error propa
     * `fwhm`: the FWHM of the peak
     * `fwhm_err`: the uncertainty of the FWHM of the peak
 """
-function get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple},uncertainty::Bool=true)
+function get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple}, uncertainty::Bool=true)
     # get fwhm for peak fit
     fwhm = estimate_fwhm(v_ml)
     if !uncertainty
@@ -275,9 +295,9 @@ function get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple
     end
 
     # get MC for FWHM err
-    if isa(v_ml_err,Matrix)# use correlated fit parameter uncertainties 
+    if isa(v_ml_err, Matrix)# use correlated fit parameter uncertainties 
         v_mc = get_mc_value_shapes(v_ml, v_ml_err, 10000)
-    elseif isa(v_ml_err,NamedTuple) # use uncorrelated fit parameter uncertainties 
+    elseif isa(v_ml_err, NamedTuple) # use uncorrelated fit parameter uncertainties 
         v_mc = get_mc_value_shapes(v_ml, v_ml_err, 1000)
     end
     fwhm_mc = estimate_fwhm.(v_mc)
@@ -287,16 +307,18 @@ end
 export get_peak_fwhm_th228
 
 """
-    fitCalibration(peaks::Array, μ::Array)
+    fit_calibration(μ::Vector{<:Real}, peaks::Vector{<:Unitful.Energy{<:Real}})
 Fit the calibration lines to a linear function.
 # Returns
     * `slope`: the slope of the linear fit
     * `intercept`: the intercept of the linear fit
 """
-function fit_calibration(peaks::Array, μ::Array)
+function fit_calibration(μ::Vector{<:Real}, peaks::Vector{<:Unitful.Energy{<:Real}})
     @assert length(peaks) == length(μ)
     @debug "Fit calibration curve with linear function"
-    calib_fit_result = linregress(peaks, μ)
-    return LinearRegression.slope(calib_fit_result)[1], LinearRegression.bias(calib_fit_result)[1]
+    peaks_unit = unit(first(peaks))
+    calib_fit_result = linregress(μ, ustrip.(peaks_unit, peaks))
+    return LinearRegression.slope(calib_fit_result)[1]*peaks_unit, LinearRegression.bias(calib_fit_result)[1]*peaks_unit
 end
 export fit_calibration
+fit_calibration(μ::Vector{<:Unitful.Energy{<:Real}}, peaks::Vector{<:Unitful.Energy{<:Real}}) = fit_calibration(ustrip.(μ), peaks)

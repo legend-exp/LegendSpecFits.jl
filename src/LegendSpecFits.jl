@@ -23,6 +23,9 @@ using IrrationalConstants
 using LegendDataManagement
 using LinearRegression
 using LsqFit
+using Measurements
+using Measurements: value as mvalue
+using Measurements: uncertainty as muncert
 using Optim
 using PropDicts
 using RadiationSpectra
