@@ -34,7 +34,7 @@ end
 simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = simple_calibration(e_uncal, th228_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
 
 
-function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, proxy_binning_peak::Unitful.Energy{<:Real}=2103.5u"keV", proxy_binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
+function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
     # create initial peak search histogram
     h_uncal = fit(Histogram, e_uncal, nbins=n_bins)
     # search all possible peak candidates
@@ -50,16 +50,17 @@ function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<
     e_simple = e_uncal .* c
     e_unit = u"keV"
     # get peakhists and peakstats
-    peakhists, peakstats, h_calsimple, bin_width = get_peakhists_th228(e_simple, th228_lines, window_sizes; proxy_binning_peak=proxy_binning_peak, proxy_binning_peak_window=proxy_binning_peak_window, e_unit=e_unit)
+    peakhists, peakstats, h_calsimple, bin_widths = get_peakhists_th228(e_simple, th228_lines, window_sizes; binning_peak_window=binning_peak_window, e_unit=e_unit)
     
     result = (
         h_calsimple = h_calsimple, 
         h_uncal = h_uncal, 
         c = c,
         unit = e_unit,
-        bin_width = bin_width,
-        fep_guess = fep_guess, 
-        peakhists = peakhists, 
+        bin_width = median(bin_widths),
+        fep_guess = fep_guess,
+        peakbinwidths = bin_widths,
+        peakhists = peakhists,
         peakstats = peakstats
         )
     report = (
@@ -82,18 +83,19 @@ Create histograms around the calibration lines and return the histograms and the
     * `peakhists`: array of histograms around the calibration lines
     * `peakstats`: array of statistics for the calibration line fits
 """
-function get_peakhists_th228(e::Vector{<:Unitful.Energy{<:Real}}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; e_unit::Unitful.EnergyUnits=u"keV", proxy_binning_peak::Unitful.Energy{<:Real}=2103.5u"keV", proxy_binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
-    bin_window_cut = proxy_binning_peak - proxy_binning_peak_window .< e .< proxy_binning_peak + proxy_binning_peak_window
+function get_peakhists_th228(e::Vector{<:Unitful.Energy{<:Real}}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; e_unit::Unitful.EnergyUnits=u"keV", binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
     # get optimal binning for simple calibration
-    bin_width  = get_friedman_diaconis_bin_width(e[bin_window_cut])
+    bin_widths = [get_friedman_diaconis_bin_width(filter(in(peak - binning_peak_window..peak + binning_peak_window), e)) for peak in th228_lines]
+
     # create histogram for simple calibration
     e_min, e_max = 0u"keV", 3000u"keV"
-    h = fit(Histogram, ustrip.(e_unit, e), ustrip(e_unit, e_min):ustrip(e_unit, bin_width):ustrip(e_unit, e_max))
+    h = fit(Histogram, ustrip.(e_unit, e), ustrip(e_unit, e_min):ustrip(e_unit, median(bin_widths)):ustrip(e_unit, e_max))
     # get histograms around calibration lines and peakstats
-    peakhists = LegendSpecFits.subhist.(Ref(h), [ustrip.(e_unit, (peak-first(window), peak+last(window))) for (peak, window) in zip(th228_lines, window_sizes)])
+    peakhists = [fit(Histogram, ustrip.(e_unit, e), ustrip(e_unit, peak - first(window)):ustrip(e_unit, bin_width):ustrip(e_unit, peak + last(window))) for (peak, window, bin_width) in zip(th228_lines, window_sizes, bin_widths)]
+    # peakhists = LegendSpecFits.subhist.(Ref(h), [ustrip.(e_unit, (peak-first(window), peak+last(window))) for (peak, window) in zip(th228_lines, window_sizes)])
     peakstats = StructArray(estimate_single_peak_stats.(peakhists))
 
-    peakhists, peakstats, h, bin_width
+    peakhists, peakstats, h, bin_widths
 end
 export get_peakhists_th228
 
