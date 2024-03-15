@@ -47,7 +47,7 @@ include("aoefit.jl")
 include("filter_optimization.jl")
 include("singlefit.jl")
 include("specfit.jl")
-include("fit_chisq.jl")
+include("chi2fit.jl")
 include("fwhm.jl")
 include("simple_calibration.jl")
 include("auto_calibration.jl")
@@ -57,5 +57,10 @@ include("ctc.jl")
 include("qc.jl")
 include("gof.jl")
 include("precompile.jl")
+
+abstract type UncertTag end
+ForwardDiff.:(≺)(::Type{<:ForwardDiff.Tag}, ::Type{UncertTag}) = true
+ForwardDiff.:(≺)(::Type{UncertTag}, ::Type{<:ForwardDiff.Tag}) = false
+ForwardDiff.:(≺)(::Type{UncertTag}, ::Type{UncertTag}) = false
 
 end # module

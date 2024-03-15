@@ -1,27 +1,23 @@
 
-using LegendSpecFits 
+using LegendSpecFits
+using Measurements
 using Test
 
 @testset "fit_chisq" begin
-    #  linear fit : simple case with and without pull term 
-    f_lin(x,p1,p2)  = p1 .* x .+ p2
-
-    x           = [1.0,2.0,3.0,4.0,5.0]
-    y           = f_lin(x,5.0,10.0)
-    yerr        = sqrt.(y)
-    @info "linear chisq fit"
-    result = fit_chisq(x,y,yerr,f_lin) 
-    @info "linear chisq fit with pull term"
-    result = fit_chisq(x,y,yerr,f_lin;pull_t = [NamedTuple(), (mean = 10.0, std = 0.1)])
-
+    par_true = [5, 2]
+    f_lin(x,p1,p2)  = p1 +  p2 * x 
+    x = [1,2,3,4,5,6,7,8,9,10] #.± ones(10)
+    y = f_lin.(x,par_true...) .+ 0.5.*randn(10)
+    @info "chisq fit without uncertainties on x and y "
+    result, report       = chi2fit(1, x, y; uncertainty=true) 
   
-    #  quadratic fit : simple case with and without pull term 
-    f_quad(x,p1,p2,p3)  = p1 .* x.^2 .+ p2 .* x .+ p3
-    x           = [1.0,2.0,3.0,4.0,5.0]
-    y           = f_quad(x,2.0,5.0,10.0)
-    yerr        = sqrt.(y)
-    @info "quadratic chisq fit"
-    result = fit_chisq(x,y,yerr,f_quad)
-    @info "quadratic chisq fit with pull term"
-    result = fit_chisq(x,y,yerr,f_quad;pull_t = [(mean = 2.0, std = 0.1),NamedTuple() ,NamedTuple(), ])
+    x = [1,2,3,4,5,6,7,8,9,10] .± ones(10)
+    y = f_lin.(x,par_true...) .+ 0.5.*randn(10)
+    @info "chisq fit with uncertainties on x and y"
+    result, report       = chi2fit(1, x, y; uncertainty=true) 
+    
+    x = [1,2,3,4,5,6,7,8,9,10] .± ones(10)
+    y = f_lin.(x,par_true...) .+ 0.5.*randn(10)
+    @info "chisq fit with uncertainties on x and y"
+    result, report       = chi2fit(1, x, y; pull_t = [(mean = par_true[1], std= 0.1),(mean = par_true[2],std= 0.1)], uncertainty=true) 
 end
