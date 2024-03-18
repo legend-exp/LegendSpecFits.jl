@@ -75,6 +75,7 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
     # sanity checks
     mean_background = ifelse(mean_background == 0, 0.01, mean_background)
     mean_background_step = ifelse(mean_background_step < 1e-2, 1e-2, mean_background_step)
+    mean_background_std = ifelse(!isfinite(mean_background_std) || mean_background_std == 0, sqrt(mean_background), mean_background_std)
 
     peak_counts = inv(0.761) * (sum(view(W,fwhm_idx_left:fwhm_idx_right)) - mean_background * peak_fwhm)
     peak_counts = ifelse(peak_counts < 0.0, inv(0.761) * sum(view(W,fwhm_idx_left:fwhm_idx_right)), peak_counts)
