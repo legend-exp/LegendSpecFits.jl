@@ -60,8 +60,8 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     opt_r   = optimize(f_opt, v_init)
     v_chi2  = Optim.minimizer(opt_r)
     par = measurement.(v_chi2,Ref(NaN)) # if ucnertainty is not calculated, return NaN
-    result = (par = par, f_fit_v = x -> f_fit(x, v_chi2...)) # fit function with optimized parameters
-    report = (par = result.par, f_fit = f_fit, x = x, y = y)
+    result = (par = par,) # fit function with optimized parameters
+    report = (par = result.par, f_fit = x -> f_fit(x, v_chi2...), x = x, y = y)
     
     if uncertainty
         covmat = inv(ForwardDiff.hessian(f_opt, v_chi2))
@@ -72,8 +72,8 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
         chi2min = minimum(opt_r)
         dof = length(x) - length(v_chi2)
         pvalue = ccdf(Chisq(dof),chi2min)  
-        result = (par = par, f_fit_v = x -> f_fit(x, par...), gof = (pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat))
-        report = merge(report, (gof = result.gof,))
+        result = (par = par, gof = (pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat))
+        report = merge(report, (par = result.par,), (gof = result.gof,), (f_fit = x -> f_fit(x, v_chi2...),))
     end 
 
     return result, report 
