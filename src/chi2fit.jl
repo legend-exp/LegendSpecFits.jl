@@ -1,8 +1,8 @@
 
 """
-fit_chisq(x::AbstractVector{<:Real},y::AbstractVector{<:Real},yerr::AbstractVector{<:Real}, f_fit::Function;pull_t::Vector{<:NamedTuple} = fill(NamedTuple(), first(methods(f_fit)).nargs - 2), v_init::Vector = [])
-- least square fit with chi2 minimization
-# input:
+    fit_chisq(x::AbstractVector{<:Real},y::AbstractVector{<:Real},yerr::AbstractVector{<:Real}, f_fit::Function;pull_t::Vector{<:NamedTuple} = fill(NamedTuple(), first(methods(f_fit)).nargs - 2), v_init::Vector = [])
+Least square fit with chi2 minimization
+# Input:
 - x : x-values
 - y : y-values
 - yerr : 1 sigma uncertainty on y
@@ -10,6 +10,10 @@ fit_chisq(x::AbstractVector{<:Real},y::AbstractVector{<:Real},yerr::AbstractVect
 The numer of fit parameter is determined with `first(methods(f_fit)).nargs - 2`. That's why it's important that f_fit has the synthax f(x,arg1,arg2,arg3,...)
 pull_t : pull term, a vector of NamedTuple with fields `mean` and `std`. A Gaussian pull term is added to the chi2 function to account for systematic uncertainties. If left blank, no pull term is used.
 v_init : initial value for fit parameter optimization. If left blank, the initial value is set to 1 or guessed roughly for all fit parameters
+# Return:
+- result : NamedTuple with the optimized fit parameter and the fit function
+- report: 
+
 """ 
 function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}}; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), first(methods(f_fit)).nargs - 2), v_init::Vector = [], uncertainty::Bool=true )
     # prepare pull terms
@@ -37,40 +41,38 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
         return chi2
     end
 
-   # function that is minimized -> chi-squared with pull terms 
+    # function that is minimized -> chi-squared with pull terms 
     f_opt = let X_val = X_val, Y_val = Y_val, X_err = X_err, Y_err = Y_err, f_pull = pull_t_sum, f_fit = f_fit
         v -> sum(chi2xy.(Ref(f_fit), X_val, X_err, Y_val, Y_err, Ref(v))) + f_pull(v)
     end
 
-   # init guess for fit parameter: this could be improved. 
+    # init guess for fit parameter: this could be improved. 
     npar = length(pull_t) # number of fit parameter (including nuisance parameters)
     if isempty(v_init) 
         if npar==2 
             v_init = [Y_val[1]/X_val[1], 1.0] # linear fit : guess slope 
         else
-             v_init = ones(npar)
+            v_init = ones(npar)
         end 
     end 
     
     # minimization and error estimation
     opt_r   = optimize(f_opt, v_init)
     v_chi2  = Optim.minimizer(opt_r)
-    f_fit_v(x) =  f_fit(x, v_chi2...) # fit function with optimized parameters
     par = measurement.(v_chi2,Ref(NaN)) # if ucnertainty is not calculated, return NaN
-    result = (par = par, f_fit_v = f_fit_v)
-    report = (par = result.par, f_fit = f_fit, x= x, y = y)
+    result = (par = par, f_fit_v = x -> f_fit(x, v_chi2...)) # fit function with optimized parameters
+    report = (par = result.par, f_fit = f_fit, x = x, y = y)
     
     if uncertainty
         covmat = inv(ForwardDiff.hessian(f_opt, v_chi2))
         v_chi2_err = sqrt.(diag(abs.(covmat)))#mvalue.(sqrt.(diag(abs.(covmat))))
-        par = measurement.(v_chi2,v_chi2_err)
-        f_fit_v(x) =  f_fit(x, par...) # fit function with optimized parameters
+        par = measurement.(v_chi2, v_chi2_err)
 
         # gof 
         chi2min = minimum(opt_r)
         dof = length(x) - length(v_chi2)
         pvalue = ccdf(Chisq(dof),chi2min)  
-        result = (par = par, f_fit_v = f_fit_v, gof = (pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat))
+        result = (par = par, f_fit_v = x -> f_fit(x, par...), gof = (pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat))
         report = merge(report, (gof = result.gof,))
     end 
 
