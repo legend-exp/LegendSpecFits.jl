@@ -40,6 +40,7 @@ export estimate_single_peak_stats
 function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
     W = h.weights
     E = first(h.edges)
+    bin_width = step(E)
     peak_amplitude, peak_idx = findmax(W)
     fwhm_idx_left = findfirst(w -> w >= (first(W) + peak_amplitude) / 2, W)
     fwhm_idx_right = findlast(w -> w >= (last(W) + peak_amplitude) / 2, W)
@@ -61,9 +62,20 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
         peak_sigma = 1.0
         peak_fwhm = 2.0
     end
-    #peak_area = peak_amplitude * peak_sigma * sqrt(2*π)
-    mean_background = (first(W) + last(W)) / 2
+    # peak_area = peak_amplitude * peak_sigma * sqrt(2*π)
+    # calculate mean background and step
+    idx_bkg_left = something(findfirst(x -> x >= peak_pos - 15*peak_sigma, E[2:end]), 7)
+    idx_bkg_right = something(findfirst(x -> x >= peak_pos + 15*peak_sigma, E[2:end]), length(W) - 7)
+    mean_background_left, mean_background_right = mean(view(W, 1:idx_bkg_left)), mean(view(W, idx_bkg_right:length(W)))
+    
+    mean_background_step = (mean_background_left - mean_background_right) / bin_width
+    mean_background = (mean_background_left + mean_background_right) / 2 / bin_width
+    mean_background_std = std(view(W, 1:idx_bkg_left)) / bin_width
+
+    # sanity checks
     mean_background = ifelse(mean_background == 0, 0.01, mean_background)
+    mean_background_step = ifelse(mean_background_step < 1e-2, 1e-2, mean_background_step)
+
     peak_counts = inv(0.761) * (sum(view(W,fwhm_idx_left:fwhm_idx_right)) - mean_background * peak_fwhm)
     peak_counts = ifelse(peak_counts < 0.0, inv(0.761) * sum(view(W,fwhm_idx_left:fwhm_idx_right)), peak_counts)
     if !isnan(peak_fwqm)
@@ -75,7 +87,9 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
         peak_fwhm = peak_fwhm,
         peak_sigma = peak_sigma, 
         peak_counts = peak_counts, 
-        mean_background = mean_background
+        mean_background = mean_background,
+        mean_background_step = mean_background_step,
+        mean_background_std = mean_background_std
     )
 end
 
@@ -125,8 +139,8 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
         end
         # save results
         if !isnothing(e_unit)
-            keys_to_keep = [k for k in keys(result_peak) if k != :gof]
-            result_peak = merge(NamedTuple{Tuple(keys_to_keep)}([result_peak[k] .* e_unit for k in keys_to_keep]...), (gof = result_peak.gof, n = result_peak.n, background = n = result_peak.background))
+            keys_with_unit = [:μ, :σ, :fwhm]
+            result_peak = merge(result_peak, NamedTuple{Tuple(keys_with_unit)}([result_peak[k] .* e_unit for k in keys_with_unit]...))
         end
         result[peak] = result_peak
         report[peak] = report_peak
@@ -143,7 +157,7 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
 """
-function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}}; 
+function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}; 
     uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
     fit_func::Symbol=:f_fit) where T<:Real
     # create standard pseudo priors
@@ -151,10 +165,10 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Uniform(ps.peak_pos-10, ps.peak_pos+10)),
         σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
         n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
-        step_amplitude = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
-        skew_fraction = ifelse(low_e_tail, Uniform(0.005, 0.25), ConstValueDist(0.0)),
-        skew_width = ifelse(low_e_tail, LogUniform(0.001, 0.1), ConstValueDist(1.0)),
-        background = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
+        step_amplitude = weibull_from_mx(ps.mean_background_step, ps.mean_background_step + 5*ps.mean_background_std),
+        skew_fraction = ifelse(low_e_tail, truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.25), ConstValueDist(0.0)),
+        skew_width = ifelse(low_e_tail, weibull_from_mx(0.001, 1e-3), ConstValueDist(1.0)),
+        background = weibull_from_mx(ps.mean_background, ps.mean_background + 5*ps.mean_background_std),
     )
     # use standard priors in case of no overwrites given
     if !(:empty in keys(pseudo_prior))
@@ -171,7 +185,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
     f_loglike = let f_fit=th228_fit_functions[fit_func], h=h
@@ -179,7 +193,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init), Optim.Options(time_limit = 60, iterations = 500))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 500))
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
