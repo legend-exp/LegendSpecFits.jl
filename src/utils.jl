@@ -67,20 +67,20 @@ end
 
 
 """ 
-    get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Int64)
+    get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Integer)
 Return a `NamedTuple` with the same fields as `v` and `v_err` but with
 `Normal` distributions for each field.
 """
-function get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Int64)
+function get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Integer)
     vs = BAT.distprod(map(Normal, v, v_err))
     NamedTuple.(rand(vs, n))
 end
 
 """
-    get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Union{Int64,Int32})
+    get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Integer)
 Generate `n` random samples of fit parameters using their respective best-fit values `v` and covariance matrix `v_err`
 """
-function get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Union{Int64,Int32})
+function get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Integer)
     if !isposdef(v_err)
         v_err = nearestSPD(v_err)
         @debug "Covariance matrix not positive definite. Using nearestSPD"
