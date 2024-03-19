@@ -242,10 +242,11 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         report = (
             v = v_ml,
             h = h,
-            f_fit = x -> Base.Fix2(th228_fit_functions.f_fit, v_ml)(x),
+            f_fit = x -> Base.Fix2(th228_fit_functions.f_fit, result)(x),
             f_sig = x -> Base.Fix2(th228_fit_functions.f_sig, v_ml)(x),
             f_lowEtail = x -> Base.Fix2(th228_fit_functions.f_lowEtail, v_ml)(x),
             f_bck = x -> Base.Fix2(th228_fit_functions.f_bck, v_ml)(x),
+            gof = result.gof
         )
     else
         # get fwhm of peak
@@ -266,7 +267,8 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
             f_fit = x -> Base.Fix2(th228_fit_functions.f_fit, v_ml)(x),
             f_sig = x -> Base.Fix2(th228_fit_functions.f_sig, v_ml)(x),
             f_lowEtail = x -> Base.Fix2(th228_fit_functions.f_lowEtail, v_ml)(x),
-            f_bck = x -> Base.Fix2(th228_fit_functions.f_bck, v_ml)(x)
+            f_bck = x -> Base.Fix2(th228_fit_functions.f_bck, v_ml)(x),
+            gof = NamedTuple()
         )
     end
     return result, report
