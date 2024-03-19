@@ -3,7 +3,7 @@
 module LegendSpecFitsRecipesBaseExt
 
 using RecipesBase
-using Unitful, Formatting, Measurements
+using Unitful, Formatting, Measurements, LaTeXStrings
 using Measurements: value, uncertainty
 using StatsBase, LinearAlgebra
 
@@ -104,47 +104,145 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck)}; show_label=true, show_fit=true)
-    xlabel := "Energy (keV)"
-    ylabel := "Counts"
-    legend := :bottomright
-    yscale := :log10
-    ylim_max = max(5*report.f_sig(report.v.μ), 5*maximum(report.h.weights))
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}; show_label=true, show_fit=true, _subplot=1)
+    # thickness_scaling := 2.0
+    legend := :topright
+    ylim_max = max(3*value(report.f_sig(report.v.μ)), 3*maximum(report.h.weights))
     ylim_max = ifelse(ylim_max == 0.0, 1e5, ylim_max)
-    ylims := (1, ylim_max)
+    ylim_min = 0.1*minimum(filter(x -> x > 0, report.h.weights))
+    framestyle --> :box
     @series begin
         seriestype := :stepbins
         label := ifelse(show_label, "Data", "")
         bins --> :sqrt
+        yscale := :log10
+        ylims := (ylim_min, ylim_max)
+        xlabel := "Energy (keV)"
+        xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
+        ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+        subplot --> _subplot
         LinearAlgebra.normalize(report.h, mode = :density)
     end
     if show_fit
         @series begin
             seriestype := :line
-            label := ifelse(show_label, "Best Fit", "")
+            if !isempty(report.gof)
+                label := ifelse(show_label, "Best Fit (p = $(round(report.gof.pvalue, digits=2)))", "")
+            else
+                label := ifelse(show_label, "Best Fit", "")
+            end
             color := :red
-            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_fit
+            subplot --> _subplot
+            # ribbon := uncertainty.(report.f_fit.(minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1])))
+            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1])))
         end
         @series begin
             seriestype := :line
             label := ifelse(show_label, "Signal", "")
+            subplot --> _subplot
             color := :green
             minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_sig
         end
         @series begin
             seriestype := :line
             label := ifelse(show_label, "Low Energy Tail", "")
+            subplot --> _subplot
             color := :blue
             minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_lowEtail
         end
         @series begin
             seriestype := :line
             label := ifelse(show_label, "Background", "")
+            subplot --> _subplot
+            margins --> (0, :mm)
+            bottom_margin --> (-4, :mm)
+            xlabel := ""
+            xticks --> ([])
+            ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+            ylims := (ylim_min, ylim_max)
+            xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
             color := :black
             minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_bck
         end
+        if !isempty(report.gof)
+            ylims_res_max, ylims_res_min = 5, -5
+            if any(report.gof.residuals_norm .> 5) || any(report.gof.residuals_norm .< -5)
+                abs_max = 1.2*maximum(abs.(report.gof.residuals_norm))
+                ylims_res_max, ylims_res_min = abs_max, -abs_max
+            end
+            layout --> @layout([a{0.8h}; b{0.2h}])
+            margins --> (0, :mm)
+            link --> :x
+            @series begin
+                seriestype := :hline
+                ribbon := 3
+                subplot --> _subplot + 1
+                fillalpha := 0.5
+                label := ""
+                fillcolor := :lightgrey
+                linecolor := :darkgrey
+                [0.0]
+            end
+            @series begin
+                seriestype := :hline
+                ribbon := 1
+                subplot --> _subplot + 1
+                fillalpha := 0.5
+                label := ""
+                fillcolor := :grey
+                linecolor := :darkgrey
+                [0.0]
+            end
+            @series begin
+                seriestype := :scatter
+                subplot --> _subplot + 1
+                label := ""
+                title := ""
+                markercolor --> :black
+                ylabel --> "Residuals (σ)"
+                xlabel := "Energy (keV)"
+                link --> :x
+                top_margin --> (0, :mm)
+                ylims --> (ylims_res_min, ylims_res_max)
+                xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
+                yscale --> :identity
+                if ylims_res_max == 5
+                    yticks --> ([-3, 0, 3])
+                end
+                report.gof.bin_centers, report.gof.residuals_norm
+            end
+        else
+            @series begin
+                seriestype := :line
+                label := ifelse(show_label, "Background", "")
+                subplot --> _subplot
+                margins --> (0, :mm)
+                bottom_margin --> (-4, :mm)
+                xlabel := "Energy (keV)"
+                xticks --> ([])
+                ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+                ylims := (ylim_min, ylim_max)
+                xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
+                color := :black
+                minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_bck
+            end
+        end
     end
 end
+
+# TODO: Add a recipe for the report_dict --> Feeeeeeeeeeeeelix :*
+# @recipe function f(report_dict::Dict{Symbol, NamedTuple})
+#     # layout := grid(length(report_dict)*2, 1, heights=vcat(fill([0.8, 0.2], length(report_dict))...))
+#     size := (1800, 1000*length(report_dict))
+#     bottom_margin := (0, :mm)
+#     for (i, k) in enumerate(string.(keys(report_dict)))
+#         @series begin
+#             title := string(k)
+#             _subplot --> 2*i-1
+#             report_dict[Symbol(k)]
+#         end
+#     end
+# end
 
 @recipe function f(report::NamedTuple{((:v, :h, :f_fit, :f_sig, :f_bck))})
     xlabel := "A/E (a.u.)"
@@ -370,6 +468,97 @@ end
 
 end
 
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof)}; plot_ribbon=true)
+    thickness_scaling := 2.0
+    xlims := (0, 1.2*maximum(report.x))
+    framestyle := :box
+    xformatter := :plain
+    yformatter := :plain
+    layout --> @layout([a{0.8h}; b{0.2h}])
+    margins --> (-15, :mm)
+    link --> :x
+    @series begin
+        seriestype := :line
+        subplot := 1
+        xticks = :none
+        if !isempty(report.gof)
+            label := "Best Fit (p = $(round(report.gof.pvalue, digits=2)))"
+        else
+            label := "Best Fit"
+        end
+        color := :orange
+        linewidth := 2
+        fillalpha := 0.2
+        if plot_ribbon
+            ribbon := uncertainty.(report.f_fit.(0:1:1.2*maximum(report.x)))
+        end
+        0:1:1.2*maximum(report.x), value.(report.f_fit.(0:1:1.2*maximum(report.x)))
+    end
+    @series begin
+        seriestype := :scatter
+        subplot := 1
+        label := "Data"
+        markercolor --> :black
+        report.x, report.y
+    end
+    @series begin
+        seriestype := :hline
+        ribbon := 3
+        subplot := 2
+        fillalpha := 0.5
+        label := ""
+        fillcolor := :lightgrey
+        linecolor := :darkgrey
+        [0.0]
+    end
+    @series begin
+        seriestype := :hline
+        ribbon := 1
+        subplot := 2
+        fillalpha := 0.5
+        label := ""
+        fillcolor := :grey
+        linecolor := :darkgrey
+        [0.0]
+    end
+    @series begin
+        seriestype := :scatter
+        subplot := 2
+        label := ""
+        markercolor --> :black
+        ylabel --> "\n\nResiduals (σ)"
+        ylims --> (-5, 5)
+        yticks --> ([-3, 0, 3])
+        report.x, report.gof.residuals_norm
+    end
+end
+
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :qbb, :type)})
+    bottom_margin --> (0, :mm)
+    if report.type == :fwhm
+        xlabel := "Energy (keV)"
+        legend := :bottomright
+        framestyle := :box
+        xlims := (0, 3000)
+        xticks := (0:500:3000, ["$i" for i in 0:500:3000])
+        @series begin
+            grid --> :all
+            (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = report.gof)
+        end
+        @series begin
+            seriestype := :hline
+            label := L"Q_{\beta \beta}:" * " $(round(u"keV", report.qbb, digits=2))"
+            color := :green
+            fillalpha := 0.2
+            linewidth := 2.5
+            xticks := :none
+            ylabel := "FWHM"
+            subplot := 1
+            ribbon := uncertainty(report.qbb)
+            [value(report.qbb)]
+        end
+    end
+end
 
 # @recipe function f(x::AbstractArray, y::AbstractArray{<:Measurement}; plot_ribbon = false)
 # 	if plot_ribbon
