@@ -60,8 +60,8 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     opt_r   = optimize(f_opt, v_init)
     v_chi2  = Optim.minimizer(opt_r)
     par = measurement.(v_chi2,Ref(NaN)) # if ucnertainty is not calculated, return NaN
-    result = (par = par,) # fit function with optimized parameters
-    report = (par = result.par, f_fit = x -> f_fit(x, v_chi2...), x = x, y = y)
+    result = (par = par, ) # fit function with optimized parameters
+    report = (par = result.par, f_fit = x -> f_fit(x, v_chi2...), x = x, y = y, gof = NamedTuple())
     
     if uncertainty
         covmat = inv(ForwardDiff.hessian(f_opt, v_chi2))
@@ -71,9 +71,10 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
         # gof 
         chi2min = minimum(opt_r)
         dof = length(x) - length(v_chi2)
-        pvalue = ccdf(Chisq(dof),chi2min)  
-        result = (par = par, gof = (pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat))
-        report = merge(report, (par = result.par,), (gof = result.gof,), (f_fit = x -> f_fit(x, v_chi2...),))
+        pvalue = ccdf(Chisq(dof), chi2min)
+        residuals_norm = (Y_val - f_fit(X_val, v_chi2...)) ./ Y_err
+        result = (par = par, gof = (pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat, residuals_norm = residuals_norm))
+        report = merge(report, (par = par, gof = result.gof, f_fit = x -> f_fit(x, par...)))
     end 
 
     return result, report 
@@ -81,11 +82,16 @@ end
 
 function chi2fit(n_poly::Int, x, y; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), n_poly+1), kwargs...) 
     @assert length(pull_t) == n_poly+1 "Length of pull_t does not match the order of the polynomial"
-    chi2fit((x, a...) -> PolCalFunc.(a...).(x), x, y; pull_t = pull_t, kwargs...)
+    chi2fit((x, a...) -> PolCalFunc(a...).(x), x, y; pull_t = pull_t, kwargs...)
 end
 
-chi2fit(f_fit, x,y::AbstractVector{<:Real},yerr::AbstractVector{<:Real};kwargs...) = chi2fit(f_fit,x,measurement.(y,yerr);kwargs...)
-chi2fit(f_fit,x::AbstractVector{<:Real}, y::AbstractVector{<:Real}, yerr::AbstractVector{<:Real}, xerr::AbstractVector{<:Real} ;kwargs...) = chi2fit(f_fit, measurement.(x,xerr), measurement.(y,yerr); kwargs...)
+function chi2fit(f_outer::Function, n_poly::Int, x, y; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), n_poly + 1), kwargs...) 
+    @assert length(pull_t) == n_poly + 1 "Length of pull_t does not match the order of the polynomial"
+    chi2fit((x, a...) -> f_outer.(PolCalFunc(a...).(x)), x, y; pull_t = pull_t, kwargs...)
+end
+
+chi2fit(f_fit, x::AbstractVector, y::AbstractVector{<:Real}, yerr::AbstractVector{<:Real}; kwargs...) = chi2fit(f_fit, x, measurement.(y,yerr); kwargs...)
+chi2fit(f_fit, x::AbstractVector{<:Real}, y::AbstractVector{<:Real}, yerr::AbstractVector{<:Real}, xerr::AbstractVector{<:Real}; kwargs...) = chi2fit(f_fit, measurement.(x, xerr), measurement.(y, yerr); kwargs...)
 
 export chi2fit
 
