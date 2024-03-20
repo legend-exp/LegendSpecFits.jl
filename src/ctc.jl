@@ -101,8 +101,8 @@ function ctc_energy(e::Array{<:Unitful.Energy{<:Real}}, qdrift::Array{<:Real}, p
         qdrift_peak = qdrift_cut,
         h_before = h_before,
         h_after = h_after,
-        fwhm_before = result_before.fwhm,
-        fwhm_after = result_after.fwhm,
+        fwhm_before = result.fwhm_before,
+        fwhm_after = result.fwhm_after,
         report_before = report_before,
         report_after = report_after
     )
