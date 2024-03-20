@@ -9,22 +9,23 @@ Fit the calibration lines with polynomial function of n_poly order
         * `gof`: godness of fit
     * `report`: 
 """
-function fit_calibration(n_poly::Int, µ::AbstractVector{<:Union{Real,Measurement{<:Real}}}, peaks::AbstractVector{<:Quantity};e_type::Union{Symbol,String}="x")
+function fit_calibration(n_poly::Int, µ::AbstractVector{<:Union{Real,Measurement{<:Real}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e")
     @assert length(peaks) == length(μ)
     e_unit = u"keV"
     @debug "Fit calibration curve with $(n_poly)-order polynominal function"
-    result_fit, report  = chi2fit(n_poly, µ, ustrip.(e_unit,peaks))
+    result_fit, report  = chi2fit(n_poly, µ, ustrip.(e_unit, peaks))
     
     par =  result_fit.par
-    par_unit = par .* e_unit 
-   
+    par_unit = par .* e_unit
+
     result = merge(result_fit, (par = par_unit,))
 
     # built function in string 
-    func = join(["$(mvalue(par[i])) * $(e_type)^$(i-1)" for i=1:length(par)], " + ")
-    func_generic = join(["p$(i-1) * $(e_type)^$(i-1)" for i=1:length(par)], " + ")
-
-    result = merge(result, (func = func, func_generic = func_generic))
+    func = join(["$(mvalue(par[i]))$e_unit * ($(e_expression))^$(i-1)" for i in eachindex(par)], " + ")
+    func_generic = join(["par[$(i-1)] * ($(e_expression))^$(i-1)" for i in eachindex(par)], " + ")
+    
+    result = merge(result, (func = func, func_generic = func_generic, µ = µ, peaks = peaks))
+    report = merge(report, (e_unit = e_unit, par = result.par, type = :cal))
     return result, report
 end
-export fit_ecal
+export fit_calibration
