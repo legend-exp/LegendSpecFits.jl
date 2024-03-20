@@ -322,20 +322,3 @@ function get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple
     return fwhm, fwhm_err
 end
 export get_peak_fwhm_th228
-
-"""
-    fit_calibration(μ::Vector{<:Real}, peaks::Vector{<:Unitful.Energy{<:Real}})
-Fit the calibration lines to a linear function.
-# Returns
-    * `slope`: the slope of the linear fit
-    * `intercept`: the intercept of the linear fit
-"""
-function fit_calibration(μ::Vector{<:Real}, peaks::Vector{<:Unitful.Energy{<:Real}})
-    @assert length(peaks) == length(μ)
-    @debug "Fit calibration curve with linear function"
-    peaks_unit = unit(first(peaks))
-    calib_fit_result = linregress(μ, ustrip.(peaks_unit, peaks))
-    return LinearRegression.slope(calib_fit_result)[1]*peaks_unit, LinearRegression.bias(calib_fit_result)[1]*peaks_unit
-end
-export fit_calibration
-fit_calibration(μ::Vector{<:Unitful.Energy{<:Real}}, peaks::Vector{<:Unitful.Energy{<:Real}}) = fit_calibration(ustrip.(μ), peaks)
