@@ -378,5 +378,23 @@ end
 # 	x, value.(y)
 # end
 
+# @recipe function f(covmat::Matrix{<:Real};mode::Symbol=:cov)
+#     if mode==:cov
+#         colormap = :viridis
+#         title_str = "covariance"
+#     elseif mode==:corr
+#         cm = cor(cm);
+#         colormap = :greys
+#         title_str = "correlation"
+#     end
+#     @series begin
+#         seriestype := :heatmap
+#         yflip := true
+#         colorbar_title_location := :right
+#         guidefontsize := 16
+#         tickfontsize := 14
+#         size := (1000, 600)
+#     end
+# end
 
 end # module LegendSpecFitsRecipesBaseExt

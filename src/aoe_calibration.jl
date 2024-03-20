@@ -20,16 +20,19 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     # fit compton band mus with linear function
     μ_cut = (mean(μ) - 2*std(μ) .< μ .< mean(μ) + 2*std(μ))
     e, μ, σ = e[μ_cut], μ[μ_cut], σ[μ_cut]
-    # μ_scs = linregress(e[μ_cut], μ[μ_cut])
     e_unit = unit(first(e))
     e = ustrip.(e_unit, e)
-    # fit compton band mus with linear function
-    μ_scs = linregress(e, μ)
-    μ_scs_slope, μ_scs_intercept = LinearRegression.slope(μ_scs)[1], LinearRegression.bias(μ_scs)[1]
-    μ_scs = curve_fit(f_aoe_mu, e, μ, [μ_scs_intercept, μ_scs_slope])
-    μ_scs_param = [μ_scs.param[1], μ_scs.param[2] / e_unit]
-    @debug "μ_scs_slope    : $μ_scs_slope"
-    @debug "μ_scs_intercept: $μ_scs_intercept"
+    
+    # fit compton band with linear function
+    result_µ, report_µ = LegendSpecFits.chi2fit(1, e, µ; uncertainty=true)
+result_µ
+    
+    # μ_scs = linregress(e, μ)
+    # μ_scs_slope, μ_scs_intercept = LinearRegression.slope(μ_scs)[1], LinearRegression.bias(μ_scs)[1]
+    # μ_scs = curve_fit(f_aoe_mu, e, μ, [μ_scs_intercept, μ_scs_slope])
+    # μ_scs_param = [μ_scs.param[1], μ_scs.param[2] / e_unit]
+    # @debug "μ_scs_slope    : $μ_scs_slope"
+    # @debug "μ_scs_intercept: $μ_scs_intercept"
 
     σ_cut = (mean(σ) - std(σ) .< σ .< mean(σ) + std(σ))
     # fit compton band sigmas with exponential function
