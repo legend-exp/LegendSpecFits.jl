@@ -468,9 +468,9 @@ end
 
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof)}; plot_ribbon=true)
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof)}; plot_ribbon=true, xerrscaling=1)
     thickness_scaling := 2.0
-    xlims := (0, 1.2*maximum(report.x))
+    xlims := (0, 1.2*value(maximum(report.x)))
     framestyle := :box
     xformatter := :plain
     yformatter := :plain
@@ -480,7 +480,7 @@ end
     @series begin
         seriestype := :line
         subplot := 1
-        xticks = :none
+        xticks --> :none
         if !isempty(report.gof)
             label := "Best Fit (p = $(round(report.gof.pvalue, digits=2)))"
         else
@@ -490,16 +490,21 @@ end
         linewidth := 2
         fillalpha := 0.2
         if plot_ribbon
-            ribbon := uncertainty.(report.f_fit.(0:1:1.2*maximum(report.x)))
+            ribbon := uncertainty.(report.f_fit.(0:1:1.2*value(maximum(report.x))))
         end
-        0:1:1.2*maximum(report.x), value.(report.f_fit.(0:1:1.2*maximum(report.x)))
+        0:1:1.2*value(maximum(report.x)), value.(report.f_fit.(0:1:1.2*value(maximum(report.x))))
     end
     @series begin
         seriestype := :scatter
         subplot := 1
-        label := "Data"
+        if xerrscaling == 1
+            label := "Data"
+        else
+            label := "Data (Error x$(xerrscaling))"
+        end
         markercolor --> :black
-        report.x, report.y
+        xerror := uncertainty.(report.x) .* xerrscaling
+        value.(report.x), report.y
     end
     @series begin
         seriestype := :hline
@@ -526,10 +531,10 @@ end
         subplot := 2
         label := ""
         markercolor --> :black
-        ylabel --> "\n\nResiduals (σ)"
+        ylabel --> "Residuals (σ)"
         ylims --> (-5, 5)
         yticks --> ([-3, 0, 3])
-        report.x, report.gof.residuals_norm
+        value.(report.x), report.gof.residuals_norm
     end
 end
 
@@ -556,6 +561,35 @@ end
             subplot := 1
             ribbon := uncertainty(report.qbb)
             [value(report.qbb)]
+        end
+    end
+end
+
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :type)}; xerrscaling=1)
+    bottom_margin --> (0, :mm)
+    if report.type == :cal
+        xlabel := "Energy (ADC)"
+        legend := :bottomright
+        framestyle := :box
+        xlims := (0, 21000)
+        xticks := (0:2000:22000)
+        @series begin
+            grid --> :all
+            xerrscaling := xerrscaling
+            (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = report.gof)
+        end
+        @series begin
+            seriestype := :hline
+            label := L"Q_{\beta \beta}"
+            color := :green
+            fillalpha := 0.2
+            linewidth := 2.5
+            xticks := :none
+            ylabel := "Energy ($(report.e_unit))"
+            ylims := (0, 1.2*value(maximum(report.y)))
+            yticks := (500:500:3000)
+            subplot := 1
+            [2039]
         end
     end
 end
