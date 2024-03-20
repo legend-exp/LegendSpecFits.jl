@@ -72,7 +72,7 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
         chi2min = minimum(opt_r)
         dof = length(x) - length(v_chi2)
         pvalue = ccdf(Chisq(dof), chi2min)
-        residuals_norm = (Y_val - f_fit(X_val, v_chi2...)) ./ Y_err
+        residuals_norm = (Y_val - f_fit(X_val, v_chi2...)) ./ ifelse(all(Y_err .== 0), ones(length(Y_val)), Y_err)
         result = (par = par, gof = (pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat, residuals_norm = residuals_norm))
         report = merge(report, (par = par, gof = result.gof, f_fit = x -> f_fit(x, par...)))
     end 
