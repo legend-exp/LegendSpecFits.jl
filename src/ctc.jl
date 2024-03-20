@@ -34,9 +34,12 @@ of `window`. The drift time dependence is given by `qdrift`.
     * `peak`: peak position
     * `window`: window size
     * `fct`: correction factor
-    * `bin_width`: optimal bin width
+    * `fwhm_before`: FWHM before correction
+    * `fwhm_after`: FWHM after correction
+    * `func`: function to correct energy
+    * `func_generic`: generic function to correct energy
 """
-function ctc_energy(e::Array{<:Unitful.Energy{<:Real}}, qdrift::Array{<:Real}, peak::Unitful.Energy{<:Real}, window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}})
+function ctc_energy(e::Array{<:Unitful.Energy{<:Real}}, qdrift::Array{<:Real}, peak::Unitful.Energy{<:Real}, window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}, m_cal_simple::Unitful.Energy{<:Real}=1.0u"keV"; e_expression::Union{Symbol, String}="e")
     # create cut window around peak
     cut = peak - first(window) .< e .< peak + last(window)
     e_cut, qdrift_cut = e[cut], qdrift[cut]
@@ -65,17 +68,25 @@ function ctc_energy(e::Array{<:Unitful.Energy{<:Real}}, qdrift::Array{<:Real}, p
 
     # calculate drift time corrected energy
     e_ctc = e_cut .+ fct .* qdrift_cut
+    
     # get FWHM after correction
     # fit peak
     h_after = fit(Histogram, ustrip.(e_unit, e_ctc), ustrip(e_unit, minimum(e_ctc)):ustrip(e_unit, bin_width):ustrip(e_unit, maximum(e_ctc)))
     ps_after = estimate_single_peak_stats(h_after)
     result_after, report_after = fit_single_peak_th228(h_after, ps_after; uncertainty=true)
+
+    # get ADC fct factor and cal PropertyFunctions
+    fct = fct / m_cal_simple
+    e_ctc_func = "$e_expression + $(mvalue(fct)) * qdrift"
+    e_ctc_func_generic = "$e_expression + fct * qdrift"
+
     result = (
         peak = peak,
         window = window,
+        m_cal_simple = m_cal_simple,
+        func = e_ctc_func,
+        func_generic = e_ctc_func_generic,
         fct = fct,
-        bin_width = bin_width,
-        bin_width_qdrift = bin_width_qdrift,
         fwhm_before = result_before.fwhm*e_unit,
         fwhm_after = result_after.fwhm*e_unit,
     )
@@ -83,8 +94,8 @@ function ctc_energy(e::Array{<:Unitful.Energy{<:Real}}, qdrift::Array{<:Real}, p
         peak = result.peak,
         window = result.window,
         fct = result.fct,
-        bin_width = result.bin_width,
-        bin_width_qdrift = result.bin_width_qdrift,
+        bin_width = bin_width,
+        bin_width_qdrift = bin_width_qdrift,
         e_peak = e_cut,
         e_ctc = e_ctc, 
         qdrift_peak = qdrift_cut,
