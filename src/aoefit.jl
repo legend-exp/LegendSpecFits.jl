@@ -276,22 +276,6 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v...) : 0, h)
     end
 
-    # get p-value
-    mle = f_loglike(v_ml)
-
-    weights_rand = rand(Product(Poisson.(h.weights)), 10000)
-
-    f_loglike_h = let f_fit=f_aoe_compton, v=v_ml
-        w -> hist_loglike.(
-            x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, 
-            fit.(Histogram, Ref(midpoints(h.edges[1])), weights.(w), Ref(h.edges[1]))
-        )
-    end
-
-    mle_rand = f_loglike_h(eachcol(weights_rand))
-
-    p_value = count(mle_rand .> mle) / length(mle_rand)
-
     if uncertainty
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
@@ -304,10 +288,16 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
             # Calculate the parameter covariance matrix
             param_covariance = inv(H)
         end
-
+        if ~isposdef(param_covariance)
+            param_covariance = nearestSPD(param_covariance)
+        end
         # Extract the parameter uncertainties
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
+        # get p-value 
+        pval, chi2, dof = p_value(f_aoe_compton, h, v_ml)
+        # calculate normalized residuals
+        residuals, residuals_norm, _, bin_centers = get_residuals(f_aoe_compton, h, v_ml)
 
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
@@ -316,7 +306,8 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         @debug "B: $(v_ml.B) ± $(v_ml_err.B)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-            (p_value = p_value, ))
+                  (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                  residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"
@@ -324,7 +315,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         @debug "n: $(v_ml.n)"
         @debug "B: $(v_ml.B)"
 
-        result = merge(v_ml, (p_value = p_value, ))
+        result = merge(v_ml, )
     end
     report = (
             v = v_ml,
