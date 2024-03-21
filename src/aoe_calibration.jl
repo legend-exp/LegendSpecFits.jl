@@ -1,8 +1,6 @@
 # f_aoe_sigma(x, p) = p[1] .+ p[2]*exp.(-p[3]./x)
 @. f_aoe_sigma(x, p) = sqrt(abs(p[1]) + abs(p[2])/x^2)
 f_aoe_mu(x, p) = p[1] .+ p[2].*x
-
-
 """
 fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real})
 
@@ -16,40 +14,45 @@ Fit the corrections for the AoE value of the detector.
 - `σ_scs`: Fit result for the sigma values
 - `f_σ_scs`: Fit function for the sigma values
 """
-function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real})
+function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real}; e_expression::Union{String,Symbol}="e")
     # fit compton band mus with linear function
     μ_cut = (mean(μ) - 2*std(μ) .< μ .< mean(μ) + 2*std(μ))
     e, μ, σ = e[μ_cut], μ[μ_cut], σ[μ_cut]
     e_unit = unit(first(e))
     e = ustrip.(e_unit, e)
     
-    # fit compton band with linear function
-    result_µ, report_µ = LegendSpecFits.chi2fit(1, e, µ; uncertainty=true)
-result_µ
-    
-    # μ_scs = linregress(e, μ)
-    # μ_scs_slope, μ_scs_intercept = LinearRegression.slope(μ_scs)[1], LinearRegression.bias(μ_scs)[1]
-    # μ_scs = curve_fit(f_aoe_mu, e, μ, [μ_scs_intercept, μ_scs_slope])
-    # μ_scs_param = [μ_scs.param[1], μ_scs.param[2] / e_unit]
-    # @debug "μ_scs_slope    : $μ_scs_slope"
-    # @debug "μ_scs_intercept: $μ_scs_intercept"
+    # fit compton band µ with linear function
+    result_µ, report_µ = chi2fit(1, e, µ; uncertainty=true)
+    func_µ = "$(mvalue(result_µ.par[1])) + ($e_expression) * $(mvalue(result_µ.par[2]))$e_unit^-1"
+    func_generic_µ = "p[1] + ($e_expression) * p[2]"
+    par_µ = [result_µ.par[i] ./ e_unit^(i-1) for i=1:length(result_µ.par)] # add units
+    result_µ = merge(result_µ, (par = par_µ, func = func_µ, func_generic = func_generic_µ, µ = µ)) 
+    @debug "Compton band µ correction: $(result_µ.func)"
 
+    # fit compton band σ with sqrt function 
     σ_cut = (mean(σ) - std(σ) .< σ .< mean(σ) + std(σ))
-    # fit compton band sigmas with exponential function
-    σ_scs = curve_fit(f_aoe_sigma, e[σ_cut], σ[σ_cut], [median(σ)^2, 1])
-    σ_scs_param = [σ_scs.param[1], σ_scs.param[2] * e_unit^2]
-    @debug "σ_scs offset: $(σ_scs_param[1])"
-    @debug "σ_scs shift : $(σ_scs_param[2])"
-    
-    (
-        e = e .* e_unit,
-        μ = μ,
-        μ_scs = μ_scs_param,
-        f_μ_scs = x -> Base.Fix2(f_aoe_mu, μ_scs_param).(x),
-        σ = σ,
-        σ_scs = σ_scs_param,
-        f_σ_scs = x -> Base.Fix2(f_aoe_sigma, σ_scs_param).(x),
-    )
+    f_fit_σ = f_aoe_sigma # fit function 
+    result_σ, report_σ = chi2fit((x, p1, p2) -> f_fit_σ(x,[p1,p2]), e[σ_cut], µ[σ_cut]; uncertainty=true)
+    par_σ = [result_σ.par[1], result_σ.par[2] * e_unit^2] # add unit 
+    func_σ = nothing
+    func_generic_σ = nothing
+    if string(f_fit_σ) == "f_aoe_sigma"
+        func_σ = "sqrt( abs($(mvalue(result_σ.par[1]))) + abs($(mvalue(result_σ.par[2]))$(e_unit)^2) / ($e_expression)^2)" # add units!! 
+        func_generic_σ = "sqrt(abs(p[1]) + abs(p[2]) / ($e_expression)^2)" 
+   end
+   result_σ = merge(result_σ, (par = par_σ, func = func_σ, func_generic = func_generic_σ, σ = σ)) 
+    @debug "Compton band σ normalization: $(result_σ.func)"
+
+    # put everything together into A/E correction/normalization function 
+    aoe_str = "(a / (($e_expression)$e_unit^-1))" # get aoe, but without unit. 
+    func_aoe_corr = "($aoe_str - ($(result_µ.func))) / ($(result_σ.func))"
+    func_generic_aoe_corr = "(aoe - $(result_µ.func_generic)) / $(result_σ.func_generic)"
+    func_aoe_corr_ecal = replace(func_aoe_corr,e_expression => "e_cal") # function that can be used for already calibrated energies 
+
+    result = (µ_compton = result_µ, σ_compton = result_σ, compton_bands = (e = e,), func = func_aoe_corr, func_generic = func_generic_aoe_corr, func_ecal = func_aoe_corr_ecal)
+    report = (report_µ = report_µ, report_σ = report_σ)
+
+    return result, report 
 end
 export fit_aoe_corrections
 
