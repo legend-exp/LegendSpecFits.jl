@@ -24,15 +24,16 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     # fit compton band µ with linear function
     result_µ, report_µ = chi2fit(1, e, µ; uncertainty=true)
     func_µ = "$(mvalue(result_µ.par[1])) + ($e_expression) * $(mvalue(result_µ.par[2]))$e_unit^-1"
-    func_generic_µ = "p[1] + ($e_expression) * p[2]"
+    func_generic_µ = "p1 + ($e_expression) * p2" #  "p[1] + ($e_expression) * p[2]"
     par_µ = [result_µ.par[i] ./ e_unit^(i-1) for i=1:length(result_µ.par)] # add units
     result_µ = merge(result_µ, (par = par_µ, func = func_µ, func_generic = func_generic_µ, µ = µ)) 
+   # report_µ = merge(report_µ, (µ_fit = ustrip.(result_µ.par[1]) .+ ustrip.(result_µ.par[2] .* e), e_fit = e*e_unit))
     @debug "Compton band µ correction: $(result_µ.func)"
-
+   
     # fit compton band σ with sqrt function 
     σ_cut = (mean(σ) - std(σ) .< σ .< mean(σ) + std(σ))
     f_fit_σ = f_aoe_sigma # fit function 
-    result_σ, report_σ = chi2fit((x, p1, p2) -> f_fit_σ(x,[p1,p2]), e[σ_cut], µ[σ_cut]; uncertainty=true)
+    result_σ, report_σ = chi2fit((x, p1, p2) -> f_fit_σ(x,[p1,p2]), e[σ_cut], σ[σ_cut]; uncertainty=true)
     par_σ = [result_σ.par[1], result_σ.par[2] * e_unit^2] # add unit 
     func_σ = nothing
     func_generic_σ = nothing
