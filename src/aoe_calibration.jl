@@ -29,7 +29,7 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     result_µ = merge(result_µ, (par = par_µ, func = func_µ, func_generic = func_generic_µ, µ = µ)) 
     report_µ = merge(report_µ, (e_unit = e_unit, label_y = "µ", label_fit = "Best Fit: $(mvalue(round(result_µ.par[1], digits=2))) + E * $(mvalue(round(ustrip(result_µ.par[2]) * 1e6, digits=2)))1e-6"))
     @debug "Compton band µ correction: $(result_µ.func)"
-   
+
     # fit compton band σ with sqrt function 
     σ_cut = (mean(σ) - std(σ) .< σ .< mean(σ) + std(σ))
     f_fit_σ = f_aoe_sigma # fit function 
@@ -40,10 +40,10 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     if string(f_fit_σ) == "f_aoe_sigma"
         func_σ = "sqrt( abs($(mvalue(result_σ.par[1]))) + abs($(mvalue(result_σ.par[2]))$(e_unit)^2) / ($e_expression)^2)" # add units!! 
         func_generic_σ = "sqrt(abs(p[1]) + abs(p[2]) / ($e_expression)^2)" 
-   end
-   result_σ = merge(result_σ, (par = par_σ, func = func_σ, func_generic = func_generic_σ, σ = σ)) 
-   report_σ = merge(report_σ, (e_unit = e_unit, label_y = "σ", label_fit = "Best fit: sqrt($(round(mvalue(result_σ.par[1])*1e6, digits=1))e-6 + $(round(ustrip(mvalue(result_σ.par[2])), digits=2)) / E^2)"))
-   @debug "Compton band σ normalization: $(result_σ.func)"
+    end
+    result_σ = merge(result_σ, (par = par_σ, func = func_σ, func_generic = func_generic_σ, σ = σ)) 
+    report_σ = merge(report_σ, (e_unit = e_unit, label_y = "σ", label_fit = "Best fit: sqrt($(round(mvalue(result_σ.par[1])*1e6, digits=1))e-6 + $(round(ustrip(mvalue(result_σ.par[2])), digits=2)) / E^2)"))
+    @debug "Compton band σ normalization: $(result_σ.func)"
 
     # put everything together into A/E correction/normalization function 
     aoe_str = "(a / (($e_expression)$e_unit^-1))" # get aoe, but without unit. 
@@ -57,21 +57,6 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     return result, report 
 end
 export fit_aoe_corrections
-
-""" 
-    correctaoe!(aoe::Array{T}, e::Array{T}, aoe_corrections::NamedTuple) where T<:Real
-
-Correct the AoE values in the `aoe` array using the corrections in `aoe_corrections`.
-"""
-function correct_aoe!(aoe::Array{<:Unitful.RealOrRealQuantity}, e::Array{<:Unitful.Energy{<:Real}}, aoe_corrections::NamedTuple)
-    aoe .-= Base.Fix2(f_aoe_mu, mvalue.(aoe_corrections.μ_scs)).(e)
-    # aoe .-= 1.0*unit(aoe[1])
-    aoe ./= Base.Fix2(f_aoe_sigma, mvalue.(aoe_corrections.σ_scs)).(e)
-    ustrip.(aoe)
-end
-export correct_aoe!
-
-correct_aoe!(aoe, e, aoe_corrections::PropDict) = correct_aoe!(aoe, e, NamedTuple(aoe_corrections))
 
 """
     prepare_dep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
