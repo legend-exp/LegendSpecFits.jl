@@ -65,7 +65,7 @@ function estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
 end
 
 """
-    generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:Real}, compton_bands::Array{<:Real}, compton_window::T) where T<:Real
+    generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton_bands::Vector{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
 
 Generate histograms for the A/E Compton bands and estimate peak parameters. 
 The compton bands are cutted out of the A/E spectrum and then binned using the Freedman-Diaconis Rule. For better performance
@@ -83,7 +83,8 @@ the binning is only done in the area around the peak. The peak parameters are es
     * `simple_pars_aoe_σ`: Simple curve fit parameters for the peak sigma energy depencence
     * `simple_pars_error_aoe_σ`: Simple curve fit parameter errors for the peak sigma energy depencence
 """
-function generate_aoe_compton_bands(aoe::Array{<:Real}, e::Array{<:T}, compton_bands::Array{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
+function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton_bands::Vector{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
+    @assert length(aoe) == length(e) "A/E and Energy arrays must have the same length"
     e_unit = u"keV"
     # get aoe values in compton bands
     aoe_compton_bands = [aoe[c .< e .< c + compton_window .&& aoe .> 0.0] for c in compton_bands]
