@@ -27,7 +27,7 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     func_generic_µ = "p1 + ($e_expression) * p2" #  "p[1] + ($e_expression) * p[2]"
     par_µ = [result_µ.par[i] ./ e_unit^(i-1) for i=1:length(result_µ.par)] # add units
     result_µ = merge(result_µ, (par = par_µ, func = func_µ, func_generic = func_generic_µ, µ = µ)) 
-   # report_µ = merge(report_µ, (µ_fit = ustrip.(result_µ.par[1]) .+ ustrip.(result_µ.par[2] .* e), e_fit = e*e_unit))
+    report_µ = merge(report_µ, (e_unit = e_unit, label_y = "µ", label_fit = "Best Fit: $(mvalue(round(result_µ.par[1], digits=2))) + E * $(mvalue(round(ustrip(result_µ.par[2]) * 1e6, digits=2)))1e-6"))
     @debug "Compton band µ correction: $(result_µ.func)"
    
     # fit compton band σ with sqrt function 
@@ -42,7 +42,8 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
         func_generic_σ = "sqrt(abs(p[1]) + abs(p[2]) / ($e_expression)^2)" 
    end
    result_σ = merge(result_σ, (par = par_σ, func = func_σ, func_generic = func_generic_σ, σ = σ)) 
-    @debug "Compton band σ normalization: $(result_σ.func)"
+   report_σ = merge(report_σ, (e_unit = e_unit, label_y = "σ", label_fit = "Best fit: sqrt($(round(mvalue(result_σ.par[1])*1e6, digits=1))e-6 + $(round(ustrip(mvalue(result_σ.par[2])), digits=2)) / E^2)"))
+   @debug "Compton band σ normalization: $(result_σ.func)"
 
     # put everything together into A/E correction/normalization function 
     aoe_str = "(a / (($e_expression)$e_unit^-1))" # get aoe, but without unit. 
