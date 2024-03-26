@@ -16,7 +16,7 @@ Fit the corrections for the AoE value of the detector.
 """
 function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real}; e_expression::Union{String,Symbol}="e")
     # fit compton band mus with linear function
-    μ_cut = (mean(μ) - 2*std(μ) .< μ .< mean(μ) + 2*std(μ))
+    μ_cut = (mean(μ) - 2*std(μ) .< μ .< mean(μ) + 2*std(μ)) .&& muncert.(μ) .> 0.0
     e, μ, σ = e[μ_cut], μ[μ_cut], σ[μ_cut]
     e_unit = unit(first(e))
     e = ustrip.(e_unit, e)
@@ -31,7 +31,7 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     @debug "Compton band µ correction: $(result_µ.func)"
 
     # fit compton band σ with sqrt function 
-    σ_cut = (mean(σ) - std(σ) .< σ .< mean(σ) + std(σ))
+    σ_cut = (mean(σ) - std(σ) .< σ .< mean(σ) + std(σ)) .&& muncert.(σ) .> 0.0
     f_fit_σ = f_aoe_sigma # fit function 
     result_σ, report_σ = chi2fit((x, p1, p2) -> f_fit_σ(x,[p1,p2]), e[σ_cut], σ[σ_cut]; uncertainty=true)
     par_σ = [result_σ.par[1], result_σ.par[2] * e_unit^2] # add unit 
