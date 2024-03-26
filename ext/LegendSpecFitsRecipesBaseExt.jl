@@ -626,10 +626,11 @@ end
         ms := 3
         linewidth := 3
         label := report.label_fit
-        report.x, report.f_fit(report.x)
+        ribbon := uncertainty.(report.f_fit(report.x))
+        report.x, value.(report.f_fit(report.x))
     end
     @series begin
-           ylabel := "$(report.label_y) (a.u.)"
+            ylabel := "$(report.label_y) (a.u.)"
             seriestype := :scatter
             subplot --> 1
             color := :black 
