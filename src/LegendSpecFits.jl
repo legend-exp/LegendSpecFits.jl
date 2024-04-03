@@ -16,6 +16,7 @@ using ArraysOfArrays
 using BAT
 using Distributions
 using FillArrays
+using Format
 using ForwardDiff
 using IntervalSets
 using InverseFunctions
