@@ -307,8 +307,8 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         @debug "B: $(v_ml.B) ± $(v_ml_err.B)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                  (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                  residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"
