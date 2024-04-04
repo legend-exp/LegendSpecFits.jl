@@ -1,5 +1,6 @@
 # f_aoe_sigma(x, p) = p[1] .+ p[2]*exp.(-p[3]./x)
-@. f_aoe_sigma(x, p) = sqrt(abs(p[1]) + abs(p[2])/x^2)
+# @. f_aoe_sigma(x, p) = sqrt(abs(p[1]) + abs(p[2])/x^2)
+@. f_aoe_sigma(x, p) = sqrt(p[1]^2 + p[2]^2/x^2)
 f_aoe_mu(x, p) = p[1] .+ p[2].*x
 """
 fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real})
@@ -34,27 +35,29 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     σ_cut = (mean(σ) - std(σ) .< σ .< mean(σ) + std(σ)) .&& muncert.(σ) .> 0.0
     f_fit_σ = f_aoe_sigma # fit function 
     result_σ, report_σ = chi2fit((x, p1, p2) -> f_fit_σ(x,[p1,p2]), e[σ_cut], σ[σ_cut]; uncertainty=true)
-    par_σ = [result_σ.par[1], result_σ.par[2] * e_unit^2] # add unit 
+    par_σ = [result_σ.par[1], result_σ.par[2] * e_unit^2]
     func_σ = nothing
     func_generic_σ = nothing
     if string(f_fit_σ) == "f_aoe_sigma"
-        func_σ = "sqrt( abs($(mvalue(result_σ.par[1]))) + abs($(mvalue(result_σ.par[2]))$(e_unit)^2) / ($e_expression)^2)" # add units!! 
-        func_generic_σ = "sqrt(abs(p[1]) + abs(p[2]) / ($e_expression)^2)" 
+        # func_σ = "sqrt( abs($(mvalue(result_σ.par[1]))) + abs($(mvalue(result_σ.par[2]))$(e_unit)^2) / ($e_expression)^2)"
+        func_σ = "sqrt( ($(mvalue(result_σ.par[1])))^2 + ($(mvalue(result_σ.par[2]))$(e_unit))^2 / ($e_expression)^2 )" 
+        # func_generic_σ = "sqrt(abs(p[1]) + abs(p[2]) / ($e_expression)^2)"
+        func_generic_σ = "sqrt( (p[1])^2 + (p[2])^2 / ($e_expression)^2 )"
     end
-    result_σ = merge(result_σ, (par = par_σ, func = func_σ, func_generic = func_generic_σ, σ = σ)) 
+    result_σ = merge(result_σ, (par = par_σ, func = func_σ, func_generic = func_generic_σ, σ = σ))
     report_σ = merge(report_σ, (e_unit = e_unit, label_y = "σ", label_fit = "Best fit: sqrt($(round(mvalue(result_σ.par[1])*1e6, digits=1))e-6 + $(round(ustrip(mvalue(result_σ.par[2])), digits=2)) / E^2)"))
     @debug "Compton band σ normalization: $(result_σ.func)"
 
     # put everything together into A/E correction/normalization function 
-    aoe_str = "(a / (($e_expression)$e_unit^-1))" # get aoe, but without unit. 
-    func_aoe_corr = "($aoe_str - ($(result_µ.func))) / ($(result_σ.func))"
+    aoe_str = "(a / ( ($e_expression) $e_unit^-1) )" # get aoe, but without unit. 
+    func_aoe_corr = "($aoe_str - ($(result_µ.func)) ) / ($(result_σ.func))"
     func_generic_aoe_corr = "(aoe - $(result_µ.func_generic)) / $(result_σ.func_generic)"
-    func_aoe_corr_ecal = replace(func_aoe_corr,e_expression => "e_cal") # function that can be used for already calibrated energies 
+    func_aoe_corr_ecal = replace(func_aoe_corr, e_expression => "e_cal") # function that can be used for already calibrated energies 
 
     result = (µ_compton = result_µ, σ_compton = result_σ, compton_bands = (e = e,), func = func_aoe_corr, func_generic = func_generic_aoe_corr, func_ecal = func_aoe_corr_ecal)
     report = (report_µ = report_µ, report_σ = report_σ)
 
-    return result, report 
+    return result, report
 end
 export fit_aoe_corrections
 
