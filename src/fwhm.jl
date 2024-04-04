@@ -33,7 +33,7 @@ function fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitfu
     # get fwhm at Qbb
     qbb = report_chi2.f_fit(2039) * e_unit
     result = merge(result_chi2, (par = par_unit , qbb = qbb, func = func, func_cal = func_cal, func_generic = func_generic, peaks = peaks, fwhm = fwhm))
-    report = merge(report_chi2, (par = result.par, qbb = result.qbb, type = :fwhm))
+    report = merge(report_chi2, (e_unit = e_unit, par = result.par, qbb = result.qbb, type = :fwhm))
 
     return result, report
 end
