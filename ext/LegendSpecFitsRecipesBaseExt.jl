@@ -112,8 +112,8 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}; show_label=true, show_fit=true, _subplot=1)
-    # thickness_scaling := 2.0
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
+    f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     legend := :topright
     ylim_max = max(3*value(report.f_sig(report.v.μ)), 3*maximum(report.h.weights))
     ylim_max = ifelse(ylim_max == 0.0, 1e5, ylim_max)
@@ -142,21 +142,21 @@ end
             color := :red
             subplot --> _subplot
             # ribbon := uncertainty.(report.f_fit.(minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1])))
-            minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1])))
+            minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1])))
         end
         @series begin
             seriestype := :line
             label := ifelse(show_label, "Signal", "")
             subplot --> _subplot
             color := :green
-            minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_sig
+            minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_sig
         end
         @series begin
             seriestype := :line
             label := ifelse(show_label, "Low Energy Tail", "")
             subplot --> _subplot
             color := :blue
-            minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_lowEtail
+            minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_lowEtail
         end
         @series begin
             seriestype := :line
@@ -170,7 +170,7 @@ end
             ylims := (ylim_min, ylim_max)
             xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
             color := :black
-            minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_bck
+            minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_bck
         end
         if !isempty(report.gof)
             ylims_res_max, ylims_res_min = 5, -5
@@ -232,27 +232,14 @@ end
                 ylims := (ylim_min, ylim_max)
                 xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
                 color := :black
-                minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_bck
+                minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_bck
             end
         end
     end
 end
 
-# TODO: Add a recipe for the report_dict --> Feeeeeeeeeeeeelix :*
-# @recipe function f(report_dict::Dict{Symbol, NamedTuple})
-#     # layout := grid(length(report_dict)*2, 1, heights=vcat(fill([0.8, 0.2], length(report_dict))...))
-#     size := (1800, 1000*length(report_dict))
-#     bottom_margin := (0, :mm)
-#     for (i, k) in enumerate(string.(keys(report_dict)))
-#         @series begin
-#             title := string(k)
-#             _subplot --> 2*i-1
-#             report_dict[Symbol(k)]
-#         end
-#     end
-# end
-
-@recipe function f(report::NamedTuple{((:v, :h, :f_fit, :f_sig, :f_bck))})
+@recipe function f(report::NamedTuple{((:v, :h, :f_fit, :f_sig, :f_bck))}; f_fit_x_step_scaling=1/100)
+    f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     xlabel := "A/E (a.u.)"
     ylabel := "Counts"
     legend := :topleft
@@ -267,19 +254,19 @@ end
         seriestype := :line
         label := "Best Fit"
         color := :red
-        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_fit
+        minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_fit
     end
     @series begin
         seriestype := :line
         label := "Signal"
         color := :green
-        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_sig
+        minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_sig
     end
     @series begin
         seriestype := :line
         label := "Background"
         color := :black
-        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_bck
+        minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_bck
     end
 end
 
@@ -387,41 +374,6 @@ end
         subplot := 3
         report_ctc.e_ctc, report_ctc.qdrift_peak
     end
-    # @series begin
-    #     seriestype := :stepbins
-    #     color := :red
-    #     label := "Before CTC"
-    #     xlabel := "Energy (keV)"
-    #     ylabel := "Counts"
-    #     title := "FWHM $(round(report_ctc.fwhm_before, digits=2))"
-    #     yscale := :log10
-    #     subplot := 3
-    #     report_ctc.h_before
-    # end
-    # @series begin
-    #     # seriestype := :stepbins
-    #     color := :red
-    #     # label := "Before CTC"
-    #     # xlabel := "Energy (keV)"
-    #     # ylabel := "Counts"
-    #     # yscale := :log10
-    #     subplot := 3
-    #     # report_ctc.h_before
-    #     minimum(report_ctc.e_peak):0.001:maximum(report_ctc.e_peak), t -> report_ctc.report_before.f_fit(t)
-    # end
-    # @series begin
-    #     # seriestype := :stepbins
-    #     color := :red
-    #     # label := "Before CTC"
-    #     # xlabel := "Energy (keV)"
-    #     # ylabel := "Counts"
-    #     # yscale := :log10
-    #     subplot := 4
-    #     # report_ctc.h_before
-    #     minimum(report_ctc.e_peak):0.001:maximum(report_ctc.e_peak), t -> report_ctc.report_after.f_fit(t)
-    # end
-
-
     @series begin
         seriestype := :stepbins
         color := :red
@@ -469,13 +421,6 @@ end
         linewidth := 3
         ustrip.([report_window_cut.low_cut, report_window_cut.high_cut])
     end
-    # @series begin
-    #     seriestype := :vline
-    #     label := "Center"
-    #     color := :blue
-    #     linewidth := 3
-    #     ustrip.([report_window_cut.center])
-    # end
     @series begin
         seriestype := :vline
         label := "Fit Window"
@@ -493,14 +438,14 @@ end
 
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof)}; plot_ribbon=true, xerrscaling=1)
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof)}; plot_ribbon=true, xerrscaling=1, additional_pts=NamedTuple())
     thickness_scaling := 2.0
     xlims := (0, 1.2*value(maximum(report.x)))
     framestyle := :box
     xformatter := :plain
     yformatter := :plain
     layout --> @layout([a{0.8h}; b{0.2h}])
-    margins --> (-15, :mm)
+    margins --> (-11.5, :mm)
     link --> :x
     @series begin
         seriestype := :line
@@ -528,33 +473,63 @@ end
             label := "Data (Error x$(xerrscaling))"
         end
         markercolor --> :black
-        xerror := uncertainty.(report.x) .* xerrscaling
         value.(report.x), report.y
     end
-    @series begin
-        seriestype := :hline
-        ribbon := 3
-        subplot := 2
-        fillalpha := 0.5
-        label := ""
-        fillcolor := :lightgrey
-        linecolor := :darkgrey
-        [0.0]
+    if !isempty(additional_pts)
+        @series begin
+            seriestype := :scatter
+            subplot --> 1
+            if xerrscaling == 1
+                label := "Data not used for fit"
+            else
+                label := "Data not used for fit (Error x$(xerrscaling))"
+            end
+            ms --> 3
+            markershape --> :circle
+            markerstrokecolor --> :black
+            linewidth --> 0.5
+            markercolor --> :silver
+            xerror := uncertainty.(additional_pts.x) .* xerrscaling
+            value.(additional_pts.x), additional_pts.y
+        end
     end
     @series begin
         seriestype := :hline
-        ribbon := 1
-        subplot := 2
-        fillalpha := 0.5
-        label := ""
-        fillcolor := :grey
-        linecolor := :darkgrey
+        ribbon --> 3
+        subplot --> 2
+        fillalpha --> 0.5
+        label --> ""
+        fillcolor --> :lightgrey
+        linecolor --> :darkgrey
         [0.0]
     end
     @series begin
-        seriestype := :scatter
-        subplot := 2
-        label := ""
+        seriestype --> :hline
+        ribbon --> 1
+        subplot --> 2
+        fillalpha --> 0.5
+        label --> ""
+        fillcolor --> :grey
+        linecolor --> :darkgrey
+        [0.0]
+    end
+    if !isempty(additional_pts)
+        @series begin
+            seriestype := :scatter
+            label --> :none
+            ms --> 3
+            markershape --> :circle
+            markerstrokecolor --> :black
+            linewidth --> 0.5
+            markercolor --> :silver
+            subplot --> 2
+            value.(additional_pts.x), additional_pts.residuals_norm
+        end
+    end
+    @series begin
+        seriestype --> :scatter
+        subplot --> 2
+        label --> ""
         markercolor --> :black
         ylabel --> "Residuals (σ)"
         ylims --> (-5, 5)
@@ -563,9 +538,18 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :qbb, :type)})
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :qbb, :type)}; additional_pts=NamedTuple())
     bottom_margin --> (0, :mm)
     if report.type == :fwhm
+        y_max = value(maximum(report.y))
+        additional_pts = if !isempty(additional_pts)
+            fwhm_cal = report.f_fit.(ustrip.(additional_pts.peaks)) .* report.e_unit
+            y_max = max(y_max, value(maximum(ustrip.(report.e_unit, additional_pts.fwhm))))
+            (x = additional_pts.peaks, y = additional_pts.fwhm,
+                residuals_norm = (value.(fwhm_cal) .- additional_pts.fwhm)./ uncertainty.(fwhm_cal))
+        else
+            NamedTuple()
+        end
         xlabel := "Energy (keV)"
         legend := :bottomright
         framestyle := :box
@@ -573,6 +557,8 @@ end
         xticks := (0:500:3000, ["$i" for i in 0:500:3000])
         @series begin
             grid --> :all
+            xerrscaling --> 1
+            additional_pts --> additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = report.gof)
         end
         @series begin
@@ -583,6 +569,7 @@ end
             linewidth := 2.5
             xticks := :none
             ylabel := "FWHM"
+            ylims := (0, 1.2*y_max)
             subplot := 1
             ribbon := uncertainty(report.qbb)
             [value(report.qbb)]
@@ -590,9 +577,16 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :type)}; xerrscaling=1)
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :type)}; xerrscaling=1, additional_pts=NamedTuple())
     bottom_margin --> (0, :mm)
     if report.type == :cal
+        additional_pts = if !isempty(additional_pts)
+            μ_cal = report.f_fit.(additional_pts.μ) .* report.e_unit
+            (x = additional_pts.μ, y = additional_pts.peaks, 
+                residuals_norm = (value.(μ_cal) .- additional_pts.peaks)./ uncertainty.(μ_cal))
+        else
+            NamedTuple()
+        end
         xlabel := "Energy (ADC)"
         legend := :bottomright
         framestyle := :box
@@ -601,6 +595,7 @@ end
         @series begin
             grid --> :all
             xerrscaling := xerrscaling
+            additional_pts := additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = report.gof)
         end
         @series begin
