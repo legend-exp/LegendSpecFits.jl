@@ -72,7 +72,16 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
         chi2min = minimum(opt_r)
         dof = length(x) - length(v_chi2)
         pvalue = ccdf(Chisq(dof), chi2min)
-        residuals_norm = (Y_val - f_fit(X_val, v_chi2...)) ./ ifelse(all(Y_err .== 0), ones(length(Y_val)), Y_err)
+        function get_y_pred_err(f_fit, x_val, x_err, pars)  # get final uncertainties for normalized residuals
+            dual_x = ForwardDiff.Dual{UncertTag}(x_val, x_err)
+            dual_y = f_fit(dual_x, pars...)
+            y_pred_err = only(ForwardDiff.partials(UncertTag, dual_y))
+            return y_pred_err
+        end
+        Y_pred_err = get_y_pred_err.(Ref(f_fit), X_val, X_err, Ref(v_chi2))
+        Y_err_tot = sqrt.(Y_err.^2 .+ Y_pred_err.^2)
+        Y_err_tot = ifelse(all(Y_err_tot .== 0), ones(length(Y_val)), Y_err_tot)
+        residuals_norm = (Y_val - f_fit(X_val, v_chi2...)) ./ Y_err_tot
         result = (par = par, gof = (pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat, residuals_norm = residuals_norm))
         report = merge(report, (par = par, gof = result.gof, f_fit = x -> f_fit(x, par...)))
     end 
