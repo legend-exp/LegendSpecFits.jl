@@ -7,6 +7,14 @@ using Unitful, Formatting, Measurements, LaTeXStrings
 using Measurements: value, uncertainty
 using StatsBase, LinearAlgebra
 
+function round_wo_units(x::Unitful.RealOrRealQuantity, digits::Integer=2)
+    if unit(x) == NoUnits
+        round(x, digits=digits)
+    else
+        round(unit(x), x, digits=2)
+    end
+end
+
 # @recipe function f(x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where T<:Unitful.RealOrRealQuantity
 @recipe function f(report::NamedTuple{(:f_fit, :μ, :σ, :n)}, x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where {T <: Unitful.RealOrRealQuantity}
     ylabel := "Normalized Counts"
@@ -20,7 +28,7 @@ using StatsBase, LinearAlgebra
     end
     @series begin
         color := :red
-        label := "Normal Fit (μ = $(round(unit(report.μ), report.μ, digits=2)), σ = $(round(unit(report.σ), report.σ, digits=2)))"
+        label := "Normal Fit (μ = $(round_wo_units(report.μ, digits=2)), σ = $(round_wo_units(report.σ, digits=2)))"
         lw := 3
         ustrip(cuts.low):ustrip(Measurements.value(report.σ / 1000)):ustrip(cuts.high), t -> report.f_fit(t)
     end
@@ -134,21 +142,21 @@ end
             color := :red
             subplot --> _subplot
             # ribbon := uncertainty.(report.f_fit.(minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1])))
-            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1])))
+            minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1])))
         end
         @series begin
             seriestype := :line
             label := ifelse(show_label, "Signal", "")
             subplot --> _subplot
             color := :green
-            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_sig
+            minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_sig
         end
         @series begin
             seriestype := :line
             label := ifelse(show_label, "Low Energy Tail", "")
             subplot --> _subplot
             color := :blue
-            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_lowEtail
+            minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_lowEtail
         end
         @series begin
             seriestype := :line
@@ -162,7 +170,7 @@ end
             ylims := (ylim_min, ylim_max)
             xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
             color := :black
-            minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_bck
+            minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_bck
         end
         if !isempty(report.gof)
             ylims_res_max, ylims_res_min = 5, -5
@@ -224,7 +232,7 @@ end
                 ylims := (ylim_min, ylim_max)
                 xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
                 color := :black
-                minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1]), report.f_bck
+                minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_bck
             end
         end
     end
@@ -259,19 +267,19 @@ end
         seriestype := :line
         label := "Best Fit"
         color := :red
-        minimum(report.h.edges[1]):1e-4:maximum(report.h.edges[1]), report.f_fit
+        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_fit
     end
     @series begin
         seriestype := :line
         label := "Signal"
         color := :green
-        minimum(report.h.edges[1]):1e-4:maximum(report.h.edges[1]), report.f_sig
+        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_sig
     end
     @series begin
         seriestype := :line
         label := "Background"
         color := :black
-        minimum(report.h.edges[1]):1e-4:maximum(report.h.edges[1]), report.f_bck
+        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_bck
     end
 end
 
