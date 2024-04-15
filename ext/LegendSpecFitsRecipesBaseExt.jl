@@ -238,6 +238,69 @@ end
     end
 end
 
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}, mode::Symbol)
+    if mode == :cormat 
+        cm = cor(report.gof.covmat)
+    elseif  mode == :covmat
+        cm = report.gof.covmat
+    else
+        @debug "mode $mode not supported - has to be :cormat or :covmat"
+        return
+    end
+   
+    cm_plt  = NaN .* cm
+    for i in range(1, stop = size(cm)[1])
+        cm_plt[i:end,i] = cm[i:end,i]
+    end
+
+    # prepare labels 
+    par_names = fieldnames(report.v)
+    tick_names =  String.(collect(par_names))
+    tick_names[tick_names .== "step_amplitude"] .= L"\textrm{bkg}_\textrm{step}"
+    tick_names[tick_names .== "background"] .= "bkg"
+    tick_names[tick_names .== "skew_width"] .= L"\textrm{tail}_\textrm{skew}"
+    tick_names[tick_names .== "skew_fraction"] .= L"\textrm{tail}_\textrm{frac}"
+
+    @series begin
+        seriestype := :heatmap
+       # c := cgrad(:grays, rev = true)
+       c := :RdBu_3#:bam
+        cm_plt
+    end
+
+    # annotation for correlation coefficient 
+    cm_vec = round.(vec(cm_plt), digits = 2)
+    xvec  = vec(hcat([fill(i, 7) for i in 1:7]...))
+    yvec  = vec(hcat([fill(i, 7) for i in 1:7]...)')
+    xvec = xvec[isfinite.(cm_vec)]
+    yvec = yvec[isfinite.(cm_vec)]
+    cm_vec = cm_vec[isfinite.(cm_vec)]
+    @series begin
+        seriestype := :scatter
+        xticks := (1:length(par_names),tick_names)
+        yticks := (1:length(par_names),tick_names)
+        yflip --> true
+        markeralpha := 0
+        colorbar --> false 
+        label --> false
+        legend --> false
+        thickness_scaling := 1.0
+        xtickfontsize --> 12
+        xlabelfontsize --> 14
+        ylabelfontsize --> 14
+        tickfontsize --> 12
+        legendfontsize --> 10
+        xlims --> (0.5, length(par_names)+0.5)
+        ylims --> (0.5, length(par_names)+0.5)
+        size --> (600, 575)
+        grid --> false
+        title --> "Correlation Matrix" 
+        series_annotations := [("$(cm_vec[i])", :center, :center, :black, 12, "Helvetica Bold") for i in eachindex(xvec)]
+        xvec, yvec
+    end
+
+end
+
 @recipe function f(report::NamedTuple{((:v, :h, :f_fit, :f_sig, :f_bck))}; f_fit_x_step_scaling=1/100)
     f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     xlabel := "A/E (a.u.)"
