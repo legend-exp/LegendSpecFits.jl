@@ -238,13 +238,13 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}, mode::Symbol = :cormat)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}, mode::Symbol)
     if mode == :cormat 
         cm = cor(report.gof.covmat)
     elseif  mode == :covmat
         cm = report.gof.covmat
     else
-        @debug "mode $mode not supported"
+        @debug "mode $mode not supported - has to be :cormat or :covmat"
         return
     end
    
