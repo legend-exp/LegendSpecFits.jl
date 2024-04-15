@@ -238,8 +238,16 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}, cormat::Bool = true)
-    cm = cor(report.gof.covmat)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}, mode::Symbol = :cormat)
+    if mode == :cormat 
+        cm = cor(report.gof.covmat)
+    elseif  mode == :covmat
+        cm = report.gof.covmat
+    else
+        @debug "mode $mode not supported"
+        return
+    end
+   
     cm_plt  = NaN .* cm
     for i in range(1, stop = size(cm)[1])
         cm_plt[i:end,i] = cm[i:end,i]
