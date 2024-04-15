@@ -279,22 +279,22 @@ end
         seriestype := :scatter
         xticks := (1:length(par_names),tick_names)
         yticks := (1:length(par_names),tick_names)
-        yflip := true
+        yflip --> true
         markeralpha := 0
-        colorbar := false 
-        label := false
-        legend := false
+        colorbar --> false 
+        label --> false
+        legend --> false
         thickness_scaling := 1.0
-        xtickfontsize := 12
-        xlabelfontsize := 14
-        ylabelfontsize := 14
-        tickfontsize:= 12
-        legendfontsize := 10
-        xlims := (0.5, 7.5)
-        ylims := (0.5, 7.5)
-        size := (600, 575)
-        grid := false
-        title := "Correlation Matrix" 
+        xtickfontsize --> 12
+        xlabelfontsize --> 14
+        ylabelfontsize --> 14
+        tickfontsize --> 12
+        legendfontsize --> 10
+        xlims --> (0.5, length(par_names)+0.5)
+        ylims --> (0.5, length(par_names)+0.5)
+        size --> (600, 575)
+        grid --> false
+        title --> "Correlation Matrix" 
         series_annotations := [("$(cm_vec[i])", :center, :center, :black, 12, "Helvetica Bold") for i in eachindex(xvec)]
         xvec, yvec
     end
