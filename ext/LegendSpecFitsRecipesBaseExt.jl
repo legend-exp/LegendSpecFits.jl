@@ -3,11 +3,11 @@
 module LegendSpecFitsRecipesBaseExt
 
 using RecipesBase
-using Unitful, Formatting, Measurements, LaTeXStrings
+using Unitful, Format, Measurements, LaTeXStrings
 using Measurements: value, uncertainty
 using StatsBase, LinearAlgebra
 
-function round_wo_units(x::Unitful.RealOrRealQuantity, digits::Integer=2)
+function round_wo_units(x::Unitful.RealOrRealQuantity; digits::Integer=2)
     if unit(x) == NoUnits
         round(x, digits=digits)
     else
@@ -19,12 +19,13 @@ end
 @recipe function f(report::NamedTuple{(:f_fit, :μ, :σ, :n)}, x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where {T <: Unitful.RealOrRealQuantity}
     ylabel := "Normalized Counts"
     legend := :bottomright
+    framestyle := :box
     @series begin
         seriestype := :histogram
         bins --> :fd
         normalize --> :pdf
         label := "Data"
-        ustrip(x[x .> cuts.low .&& x .< cuts.high])
+        ustrip.(x[x .> cuts.low .&& x .< cuts.high])
     end
     @series begin
         color := :red
