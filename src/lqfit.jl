@@ -1,7 +1,12 @@
 # lq compton region peakshapes
-f_lq_compton(x, v) = lq_compton_peakshape(x, v.μ, v.σ, v.n, v.B, v.δ)
-f_lq_sig(x, v)     = lq_compton_signal_peakshape(x, v.μ, v.σ, v.n)
-f_lq_bkg(x, v)     = lq_compton_background_peakshape(x, v.μ, v.σ, v.B, v.δ)
+f_lq_compton(x, v) = aoe_compton_peakshape(x, v.μ, v.σ, v.n, v.B, v.δ)
+f_lq_sig(x, v)     = aoe_compton_signal_peakshape(x, v.μ, v.σ, v.n)
+f_lq_bkg(x, v)     = aoe_compton_background_peakshape(x, v.μ, v.σ, v.B, v.δ)
+
+#######
+f_lq_mu(x, p) = p[1] .+ p[2].*x
+@. f_lq_sigma(x, p) = sqrt(abs(p[1]) + abs(p[2])/x^2)
+#######
 
 # lq compton centroids energy depencence
 MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
@@ -26,7 +31,7 @@ Estimate peak parameters for a single peak in a histogram using the maximum, the
     * `peak_counts`: Counts of the peak
     * `mean_background`: Mean background of the peak
 """
-function estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
+function estimate_single_peak_stats_psd_lq(h::Histogram{T}) where T<:Real
     W = h.weights
     E = first(h.edges)
     peak_amplitude, peak_idx = findmax(W)
@@ -239,11 +244,11 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
                 # n = Uniform(0.8*ps.peak_counts, 1.2*ps.peak_counts),
                 # B = weibull_from_mx(ps.mean_background, 1.2*ps.mean_background),
                 # B = Normal(ps.mean_background, 0.8*ps.mean_background),
-                B = LogUniform(0.1*ps.mean_background, 10*ps.mean_background),
+                B = Uniform(0.1*ps.mean_background, 100*ps.mean_background),
                 # B = Uniform(0.8*ps.mean_background, 1.2*ps.mean_background),
                 # B = Uniform(0.8*ps.mean_background, 1.2*ps.mean_background),
                 # δ = weibull_from_mx(0.1, 0.8)
-                δ = LogUniform(0.01, 1.0)
+                δ = Uniform(0.01, 1e7)
             )
     if haskey(ps, :μ)
         # create pseudo priors
@@ -255,7 +260,7 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
                     δ = weibull_from_mx(0.1, 0.8)
                 )
     end
-        
+    
     # transform back to frequency space
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
@@ -273,7 +278,7 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    f_loglike_array = let f_fit=lq_compton_peakshape, h=h
+    f_loglike_array = let f_fit=aoe_compton_peakshape, h=h
         v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v...) : 0, h)
     end
 

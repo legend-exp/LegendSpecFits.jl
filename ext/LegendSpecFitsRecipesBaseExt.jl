@@ -256,7 +256,8 @@ end
     xlabel := "A/E (a.u.)"
     ylabel := "Counts"
     legend := :topleft
-    ylims := (1, max(1.5*report.f_sig(report.v.μ), 1.5*maximum(report.h.weights)))
+    ylims := (0, max(1.5*report.f_fit(report.v.μ), #1.5*maximum(report.h.weights)
+    ))
     @series begin
         seriestype := :stepbins
         label := "Data"
@@ -267,19 +268,19 @@ end
         seriestype := :line
         label := "Best Fit"
         color := :red
-        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_fit
+        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/100:maximum(report.h.edges[1]), report.f_fit
     end
     @series begin
         seriestype := :line
         label := "Signal"
         color := :green
-        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_sig
+        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/100:maximum(report.h.edges[1]), report.f_sig
     end
     @series begin
         seriestype := :line
-        label := "Background"
+        label := "Background_test"
         color := :black
-        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/1000:maximum(report.h.edges[1]), report.f_bck
+        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/100:maximum(report.h.edges[1]), report.f_bck
     end
 end
 
