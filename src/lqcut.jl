@@ -4,7 +4,7 @@ f_lq_DEP(x, v) = aoe_compton_signal_peakshape(x, v.μ, v.σ, v.n)
 """
     fit_lq_DEP_ampl(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
 
-Perform a fit of the peakshape to the data in `h` using the initial values in `ps` while using the `f_lq_DEP` function consisting of a gaussian SSE peak and a step like background for MSE events.
+Perform a fit of the peakshape to the data in `h` using the initial values in `ps` while using the `f_lq_DEP` function consisting of a gaussian peak.
 
 # Returns
     * `result`: NamedTuple of the fit results containing values and errors
@@ -14,9 +14,7 @@ function fit_lq_DEP(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
     # create pseudo priors
     pseudo_prior = NamedTupleDist(
                 μ = Uniform(ps.peak_pos-5*ps.peak_sigma, ps.peak_pos+5*ps.peak_sigma),
-                # σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
                 σ = Uniform(0.5*ps.peak_sigma, 10*ps.peak_sigma),
-                # σ = Normal(ps.peak_sigma, 0.01*ps.peak_sigma),
                 n = Uniform(0.001*ps.peak_counts, 50*ps.peak_counts),
             )
         
@@ -89,3 +87,47 @@ function fit_lq_DEP(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
     return result, report
 end
 export fit_lq_DEP
+
+function lq_drift_time_correction(lq_DEP_dt, t_tcal)
+    #lq box
+    #sort array to exclude outliers
+    sort_lq = sort(lq_DEP_dt)
+    low_cut = Int(round(length(sort_lq) *0.02))
+    high_cut = Int(round(length(sort_lq) *0.995))
+    lq_prehist = fit(Histogram, lq_DEP_dt, range(sort_lq[low_cut], sort_lq[high_cut], length=100))
+    lq_prestats = estimate_single_peak_stats(lq_prehist)
+    lq_start = lq_prestats.peak_pos - 3*lq_prestats.peak_sigma
+    lq_stop = lq_prestats.peak_pos + 3*lq_prestats.peak_sigma
+
+    lq_edges = range(lq_start, stop=lq_stop, length=51) 
+    # Create histograms with the same bin edges
+    lq_hist_DEP = fit(Histogram, lq_DEP_dt, lq_edges)
+
+    lq_DEP_stats = estimate_single_peak_stats(lq_hist_DEP)
+    lq_result, lq_report = LegendSpecFits.fit_lq_DEP(lq_hist_DEP, lq_DEP_stats)
+    µ_lq = mvalue(lq_result.μ)
+    σ_lq = mvalue(lq_result.σ)
+
+    #t_tcal box
+
+    drift_prehist = fit(Histogram, t_tcal, range(minimum(t_tcal), stop=maximum(t_tcal), length=100))
+    drift_prestats = estimate_single_peak_stats(drift_prehist)
+    drift_start = drift_prestats.peak_pos - 3*drift_prestats.peak_sigma
+    drift_stop = drift_prestats.peak_pos + 3*drift_prestats.peak_sigma
+    
+    drift_edges = range(drift_start, stop=drift_stop, length=71)
+    drift_hist_DEP = fit(Histogram, t_tcal, drift_edges)
+    
+    drift_DEP_stats = estimate_single_peak_stats(drift_hist_DEP)
+    drift_r1, drift_r2 = LegendSpecFits.fit_lq_DEP(drift_hist_DEP, drift_DEP_stats)
+    µ_t = mvalue(drift_r1.μ)
+    σ_t = mvalue(drift_r1.σ)
+
+    #create 
+    box_edges = (lq_lower = µ_lq - 2 * σ_lq, 
+    lq_upper = µ_lq + 2 * σ_lq, 
+    t_lower = µ_t - 2 * σ_t, 
+    t_upper = µ_t + 2 * σ_t)
+    return box_edges
+end
+export lq_drift_time_correction
