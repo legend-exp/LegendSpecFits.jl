@@ -321,6 +321,31 @@ end
     end
 end
 
+@recipe function f(report::NamedTuple{(:survived, :cut, :sf, :bsf)}; cut_value = missing)
+    size --> (1200,400)
+    left_margin --> (10, :mm)
+    layout := @layout ([A{0.01h}; [B{0.75h}; C{0.175h}] [D{0.7h}; E{0.175h}]])
+    @series begin
+        title := (ismissing(cut_value) ? "" : "Cut value: $(cut_value)   ") * "Survival fraction: $(round(report.sf * 100, digits = 2))%"
+        grid := false
+        showaxis := false
+        label := nothing
+        bottom_margin := (-20, :px)
+        []
+    end
+    @series begin
+        title := "Survived\n\n"
+        _subplot := 2
+        report.survived
+    end
+    @series begin
+        title := "Cut\n\n"
+        _subplot := 4
+        report.cut
+    end
+end
+
+
 @recipe function f(x::Vector{T}, cut::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where T<:Unitful.RealOrRealQuantity
     ylabel := "Counts"
     legend := :topright
