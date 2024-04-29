@@ -324,7 +324,7 @@ end
 @recipe function f(report::NamedTuple{(:survived, :cut, :sf, :bsf)}; cut_value = missing)
     size --> (1200,400)
     left_margin --> (10, :mm)
-    layout := @layout ([A{0.01h}; [B{0.75h}; C{0.175h}] [D{0.7h}; E{0.175h}]])
+    layout := @layout ([A{0.01h}; [B{0.75h}; C{0.175h}] [D{0.75h}; E{0.175h}]])
     @series begin
         title := (ismissing(cut_value) ? "" : "Cut value: $(cut_value)   ") * "Survival fraction: $(round(report.sf * 100, digits = 2))%"
         grid := false
