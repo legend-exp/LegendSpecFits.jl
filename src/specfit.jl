@@ -337,24 +337,26 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
 """
 function fit_subpeaks_th228(
     h_survived::Histogram, h_cut::Histogram, h_result; 
-    uncertainty::Bool=false, low_e_tail::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:f_fit
+    uncertainty::Bool=false, low_e_tail::Bool=true, fix_σ::Bool = true, fix_skew_fraction::Bool = true, fix_skew_width::Bool = true, 
+    pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:f_fit
 )
 
     # create standard pseudo priors
     standard_pseudo_prior = let ps = h_result, ps_cut = estimate_single_peak_stats(h_cut), ps_survived = estimate_single_peak_stats(h_survived)
         NamedTupleDist(
-            μ = ConstValueDist(Measurements.value(ps.μ)),
-            σ = ConstValueDist(Measurements.value(ps.σ)),
-            n = ConstValueDist(Measurements.value(ps.n)),
-            sf = Uniform(0,1),
-            bsf = Uniform(0,1),
-            step_amplitude_survived = weibull_from_mx(ps_survived.mean_background_step, ps_survived.mean_background_step + 5*ps_survived.mean_background_std),
-            skew_fraction_survived = ifelse(low_e_tail, truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1), ConstValueDist(0.0)),
-            skew_width_survived = ifelse(low_e_tail, weibull_from_mx(0.001, 1e-2), ConstValueDist(1.0)),
-            step_amplitude_cut = weibull_from_mx(ps_cut.mean_background_step, ps_cut.mean_background_step + 5*ps_cut.mean_background_std),
-            skew_fraction_cut = ifelse(low_e_tail, truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1), ConstValueDist(0.0)),
-            skew_width_cut = ifelse(low_e_tail, weibull_from_mx(0.001, 1e-2), ConstValueDist(1.0)),
-            background = ConstValueDist(Measurements.value(ps.background))
+            μ = ConstValueDist(mvalue(ps.μ)),
+            σ_survived = ifelse(fix_σ, ConstValueDist(mvalue(ps.σ)), weibull_from_mx(mvalue(ps.σ), 2*mvalue(ps.σ))),
+            σ_cut = ifelse(fix_σ, ConstValueDist(mvalue(ps.σ)), weibull_from_mx(mvalue(ps.σ), 2*mvalue(ps.σ))),
+            n = ConstValueDist(mvalue(ps.n)),
+            sf = Uniform(0,1), # signal survival fraction
+            bsf = Uniform(0,1), # background survival fraction 
+            sasf = Uniform(0,1), # step amplitude survival fraction
+            step_amplitude = ConstValueDist(mvalue(ps.step_amplitude)),
+            skew_fraction_survived = ifelse(low_e_tail, ifelse(fix_skew_fraction, ConstValueDist(mvalue(ps.skew_fraction)), truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1)), ConstValueDist(0.0)),
+            skew_fraction_cut = ifelse(low_e_tail, ifelse(fix_skew_fraction, ConstValueDist(mvalue(ps.skew_fraction)), truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1)), ConstValueDist(0.0)),
+            skew_width_survived = ifelse(low_e_tail, ifelse(fix_skew_width, mvalue(ps.skew_width), weibull_from_mx(0.001, 1e-2)), ConstValueDist(1.0)),
+            skew_width_cut = ifelse(low_e_tail, ifelse(fix_skew_width, mvalue(ps.skew_width), weibull_from_mx(0.001, 1e-2)), ConstValueDist(1.0)),
+            background = ConstValueDist(mvalue(ps.background))
         )
     end
 
@@ -378,14 +380,14 @@ function fit_subpeaks_th228(
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
     f_loglike = let f_fit=th228_fit_functions[fit_func], h_cut=h_cut, h_survived=h_survived
         v -> begin
-            v_survived = (μ = v.μ, σ = v.σ, n = v.n * v.sf, 
-                step_amplitude = v.step_amplitude_survived,
+            v_survived = (μ = v.μ, σ = v.σ_survived, n = v.n * v.sf, 
+                step_amplitude = v.step_amplitude * v.sasf,
                 skew_fraction = v.skew_fraction_survived,
                 skew_width = v.skew_width_survived,
                 background = v.background * v.bsf
             )
-            v_cut = (μ = v.μ, σ = v.σ, n = v.n * (1 - v.sf), 
-                step_amplitude = v.step_amplitude_cut,
+            v_cut = (μ = v.μ, σ = v.σ_cut, n = v.n * (1 - v.sf), 
+                step_amplitude = v.step_amplitude * (1 - v.sasf),
                 skew_fraction = v.skew_fraction_cut,
                 skew_width = v.skew_width_cut,
                 background = v.background * (1 - v.bsf)
@@ -402,9 +404,9 @@ function fit_subpeaks_th228(
 
     v_ml_survived = (
         μ = v_ml.μ, 
-        σ = v_ml.σ, 
+        σ = v_ml.σ_survived, 
         n = v_ml.n * v_ml.sf, 
-        step_amplitude = v_ml.step_amplitude_survived,
+        step_amplitude = v_ml.step_amplitude * v_ml.sasf,
         skew_fraction = v_ml.skew_fraction_survived,
         skew_width = v_ml.skew_width_survived,
         background = v_ml.background * v_ml.bsf
@@ -412,9 +414,9 @@ function fit_subpeaks_th228(
             
     v_ml_cut = (
         μ = v_ml.μ, 
-        σ = v_ml.σ, 
+        σ = v_ml.σ_cut, 
         n = v_ml.n * (1 - v_ml.sf), 
-        step_amplitude = v_ml.step_amplitude_cut,
+        step_amplitude = v_ml.step_amplitude * (1 - v_ml.sasf),
         skew_fraction = v_ml.skew_fraction_cut,
         skew_width = v_ml.skew_width_cut,
         background = v_ml.background * (1 - v_ml.bsf)
@@ -469,12 +471,12 @@ function fit_subpeaks_th228(
                 get_peak_fwhm_th228(v_ml, v_ml_err)
             end
 
-        @debug "Best Fit values for $(part)"
-        @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
-        @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
-        @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
-        @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
-        @debug "FWHM: $(fwhm) ± $(fwhm_err)"
+        # @debug "Best Fit values for $(part)"
+        # @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
+        # @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
+        # @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
+        # @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
+        # @debug "FWHM: $(fwhm) ± $(fwhm_err)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
                 (fwhm = measurement(fwhm, fwhm_err),), NamedTuple{(:gof_survived, :gof_cut)}(gofs))
@@ -483,11 +485,11 @@ function fit_subpeaks_th228(
         # get fwhm of peak
         fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, v_ml, false)
 
-        @debug "Best Fit values"
-        @debug "μ: $(v_ml.μ)"
-        @debug "σ: $(v_ml.σ)"
-        @debug "n: $(v_ml.n)"
-        @debug "FWHM: $(fwhm)"
+        # @debug "Best Fit values"
+        # @debug "μ: $(v_ml.μ)"
+        # @debug "σ: $(v_ml.σ)"
+        # @debug "n: $(v_ml.n)"
+        # @debug "FWHM: $(fwhm)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
         (fwhm = measurement(fwhm, NaN), gof_survived = NamedTuple(), gof_cut = NamedTuple()))
