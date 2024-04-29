@@ -175,7 +175,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     # use standard priors in case of no overwrites given
     if !(:empty in keys(pseudo_prior))
         # check if input overwrite prior has the same fields as the standard prior set
-        @assert all(f -> f in keys(standard_pseudo_prior), keys(standard_pseudo_prior)) "Pseudo priors can only have $(keys(standard_pseudo_prior)) as fields."
+        @assert all(f -> f in keys(standard_pseudo_prior), keys(pseudo_prior)) "Pseudo priors can only have $(keys(standard_pseudo_prior)) as fields."
         # replace standard priors with overwrites
         pseudo_prior = merge(standard_pseudo_prior, pseudo_prior)
     else
@@ -363,7 +363,7 @@ function fit_subpeaks_th228(
     # use standard priors in case of no overwrites given
     if !(:empty in keys(pseudo_prior))
         # check if input overwrite prior has the same fields as the standard prior set
-        @assert all(f -> f in keys(standard_pseudo_prior), keys(standard_pseudo_prior)) "Pseudo priors can only have $(keys(standard_pseudo_prior)) as fields."
+        @assert all(f -> f in keys(standard_pseudo_prior), keys(pseudo_prior)) "Pseudo priors can only have $(keys(standard_pseudo_prior)) as fields."
         # replace standard priors with overwrites
         pseudo_prior = merge(standard_pseudo_prior, pseudo_prior)
     else
