@@ -6,7 +6,6 @@
 Equivalent to `pdf(Normal(μ, σ), x)`
 """
 gauss_pdf(x::Real, μ::Real, σ::Real) = inv(σ * sqrt2π) * exp(-((x - μ) / σ)^2  / 2)
-export gauss_pdf
 
 """
     ex_gauss_pdf(x::Real, μ::Real, σ::Real, θ::Real)
