@@ -64,33 +64,12 @@ Perform a fit of the peakshape to the data in `h` using the initial values in `p
 function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
     # create pseudo priors
     pseudo_prior = NamedTupleDist(
-                μ = Uniform(ps.peak_pos-0.5*ps.peak_sigma, ps.peak_pos+0.5*ps.peak_sigma),
-                # σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
-                σ = Uniform(0.95*ps.peak_sigma, 1.05*ps.peak_sigma),
-                # σ = Normal(ps.peak_sigma, 0.01*ps.peak_sigma),
-                # n = weibull_from_mx(ps.peak_counts, 1.1*ps.peak_counts),
-                # n = Normal(ps.peak_counts, 0.5*ps.peak_counts),
-                # n = Normal(0.9*ps.peak_counts, 0.5*ps.peak_counts),
+                μ = Uniform(ps.peak_pos-0.5*ps.peak_sigma, ps.peak_pos+2*ps.peak_sigma),
+                σ = Uniform(0.85*ps.peak_sigma, 1.2*ps.peak_sigma),
                 n = LogUniform(0.01*ps.peak_counts, 5*ps.peak_counts),
-                # n = Uniform(0.8*ps.peak_counts, 1.2*ps.peak_counts),
-                # B = weibull_from_mx(ps.mean_background, 1.2*ps.mean_background),
-                # B = Normal(ps.mean_background, 0.8*ps.mean_background),
-                B = Uniform(0.1*ps.mean_background, 100*ps.mean_background),
-                # B = Uniform(0.8*ps.mean_background, 1.2*ps.mean_background),
-                # B = Uniform(0.8*ps.mean_background, 1.2*ps.mean_background),
-                # δ = weibull_from_mx(0.1, 0.8)
-                δ = Uniform(0.01, 1e7)
+                B = Uniform(0.1*ps.mean_background, 10*ps.mean_background),
+                δ = Uniform(0.01, 1e2)
             )
-    if haskey(ps, :μ)
-        # create pseudo priors
-        pseudo_prior = NamedTupleDist(
-                    μ = weibull_from_mx(ps.μ, 2*ps.μ),
-                    σ = weibull_from_mx(ps.σ, 2*ps.σ),
-                    n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
-                    B = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
-                    δ = weibull_from_mx(0.1, 0.8)
-                )
-    end
     
     # transform back to frequency space
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)

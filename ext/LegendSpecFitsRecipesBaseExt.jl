@@ -268,19 +268,19 @@ end
         seriestype := :line
         label := "Best Fit"
         color := :red
-        minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_fit
+        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/100:maximum(report.h.edges[1]), report.f_fit
     end
     @series begin
         seriestype := :line
         label := "Signal"
         color := :green
-        minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_sig
+        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/100:maximum(report.h.edges[1]), report.f_sig
     end
     @series begin
         seriestype := :line
         label := "Background_test"
         color := :black
-        minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_bck
+        minimum(report.h.edges[1]):ustrip(value(report.v.σ))/100:maximum(report.h.edges[1]), report.f_bck
     end
 end
 
