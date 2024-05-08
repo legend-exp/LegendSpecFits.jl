@@ -47,8 +47,8 @@ function fit_single_trunc_gauss(x::Vector{T}, cuts::NamedTuple{(:low, :high, :ma
     param_covariance = inv(H)
 
     # Extract the parameter uncertainties
-    μ_uncertainty = sqrt(param_covariance[1, 1])
-    σ_uncertainty = sqrt(param_covariance[2, 2])
+    μ_uncertainty = sqrt(abs(param_covariance[1, 1]))
+    σ_uncertainty = sqrt(abs(param_covariance[2, 2]))
 
     @debug "μ: $μ ± $μ_uncertainty"
     @debug "σ: $σ ± $σ_uncertainty"
