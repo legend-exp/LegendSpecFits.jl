@@ -125,7 +125,7 @@ end
         label := ifelse(show_label, "Data", "")
         bins --> :sqrt
         yscale := :log10
-        ylims := (ylim_min, ylim_max)
+        ylims --> (ylim_min, ylim_max)
         xlabel := "Energy (keV)"
         xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
         ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
@@ -165,10 +165,12 @@ end
             subplot --> _subplot
             margins --> (0, :mm)
             bottom_margin --> (-4, :mm)
-            xlabel := ""
-            xticks --> ([])
+            if !isempty(report.gof)
+                xlabel := ""
+                xticks --> ([])
+            end
             ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
-            ylims := (ylim_min, ylim_max)
+            ylims --> (ylim_min, ylim_max)
             xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
             color := :black
             minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_bck
@@ -208,32 +210,17 @@ end
                 label := ""
                 title := ""
                 markercolor --> :black
-                ylabel --> "Residuals (σ)"
+                ylabel := "Residuals (σ)"
                 xlabel := "Energy (keV)"
                 link --> :x
                 top_margin --> (0, :mm)
-                ylims --> (ylims_res_min, ylims_res_max)
+                ylims := (ylims_res_min, ylims_res_max)
                 xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
                 yscale --> :identity
                 if ylims_res_max == 5
-                    yticks --> ([-3, 0, 3])
+                    yticks := ([-3, 0, 3])
                 end
                 report.gof.bin_centers, report.gof.residuals_norm
-            end
-        else
-            @series begin
-                seriestype := :line
-                label := ifelse(show_label, "Background", "")
-                subplot --> _subplot
-                margins --> (0, :mm)
-                bottom_margin --> (-4, :mm)
-                xlabel := "Energy (keV)"
-                xticks --> ([])
-                ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
-                ylims := (ylim_min, ylim_max)
-                xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
-                color := :black
-                minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_bck
             end
         end
     end
@@ -333,6 +320,31 @@ end
         minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_bck
     end
 end
+
+@recipe function f(report::NamedTuple{(:survived, :cut, :sf, :bsf)}; cut_value = missing)
+    size --> (1200,400)
+    left_margin --> (10, :mm)
+    layout := @layout ([A{0.01h}; [B{0.75h}; C{0.175h}] [D{0.75h}; E{0.175h}]])
+    @series begin
+        title := (ismissing(cut_value) ? "" : "Cut value: $(cut_value)   ") * "Survival fraction: $(round(report.sf * 100, digits = 2))%"
+        grid := false
+        showaxis := false
+        label := nothing
+        bottom_margin := (-20, :px)
+        []
+    end
+    @series begin
+        title := "Survived\n\n"
+        _subplot := 2
+        report.survived
+    end
+    @series begin
+        title := "Cut\n\n"
+        _subplot := 4
+        report.cut
+    end
+end
+
 
 @recipe function f(x::Vector{T}, cut::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where T<:Unitful.RealOrRealQuantity
     ylabel := "Counts"
