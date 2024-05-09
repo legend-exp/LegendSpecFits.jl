@@ -168,8 +168,8 @@ Fit the SG window length for the SEP data and return the optimal window length a
 """
 function fit_sg_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRangeLen, optimization_config::PropDict; uncertainty::Bool = false)
     # unpack config
-    dep, dep_window = optimization_config.dep, Float64.(optimization_config.dep_window)
-    sep, sep_window = optimization_config.sep, Float64.(optimization_config.sep_window)
+    dep, dep_window = optimization_config.dep, optimization_config.dep_window
+    sep, sep_window = optimization_config.sep, optimization_config.sep_window
 
     # unpack data
     e_dep, e_sep = dep_sep_data.dep.e, dep_sep_data.sep.e
@@ -192,8 +192,8 @@ function fit_sg_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRan
     # for each window lenght, calculate the survival fraction in the SEP
     for (i_aoe, wl) in enumerate(a_grid_wl_sg)
 
-        aoe_dep_i = aoe_dep[i_aoe, :][isfinite.(aoe_dep[i_aoe, :])] ./ mvalue(result_dep.m_calib)
-        e_dep_i   = e_dep_calib[isfinite.(aoe_dep[i_aoe, :])]
+        aoe_dep_i = flatview(aoe_dep)[i_aoe, :][isfinite.(flatview(aoe_dep)[i_aoe, :])] ./ mvalue(result_dep.m_calib)
+        e_dep_i   = e_dep_calib[isfinite.(flatview(aoe_dep)[i_aoe, :])]
 
         # prepare AoE
         max_aoe_dep_i = quantile(aoe_dep_i, optimization_config.max_aoe_quantile) + optimization_config.max_aoe_offset
@@ -205,8 +205,8 @@ function fit_sg_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRan
         try
             psd_cut = get_aoe_cut(aoe_dep_i, e_dep_i; window=dep_window, cut_search_interval=(min_aoe_dep_i, max_aoe_dep_i), uncertainty=uncertainty)
 
-            aoe_sep_i = aoe_sep[i_aoe, :][isfinite.(aoe_sep[i_aoe, :])] ./ result_dep.m_calib
-            e_sep_i   = e_sep_calib[isfinite.(aoe_sep[i_aoe, :])]
+            aoe_sep_i = flatview(aoe_sep)[i_aoe, :][isfinite.(flatview(aoe_sep)[i_aoe, :])] ./ result_dep.m_calib
+            e_sep_i   = e_sep_calib[isfinite.(flatview(aoe_sep)[i_aoe, :])]
 
             result_sep, _ = get_peak_surrival_fraction(aoe_sep_i, e_sep_i, sep, sep_window, psd_cut.lowcut; uncertainty=uncertainty, low_e_tail=false)
 
