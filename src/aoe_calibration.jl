@@ -224,6 +224,7 @@ function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e
 
     # get e after cut
     if !isnan(sigma_high_sided)
+        # TODO: decide how to deal with the high sided cut!
         e = e[aoe .< sigma_high_sided]
     else
         e_survived = e[aoe_cut .<= aoe]
@@ -254,7 +255,7 @@ function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e
         before = report_before,
         after = report_after,
     )
-    return result, report_after
+    return result, report
 end
 export get_peak_surrival_fraction
 
