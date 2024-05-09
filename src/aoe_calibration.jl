@@ -193,7 +193,6 @@ function get_aoe_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},;
     aoe_cut = find_zero(sf_dep_f, cut_search_interval, Bisection(), rtol=rtol, maxiters=maxiters)
     # get sf after cut
     sf = get_sf_after_aoe_cut(aoe_cut, aoe, e, dep, window, bin_width, mvalue(result_before); uncertainty=uncertainty)
-    @info sf
     return (lowcut = measurement(aoe_cut, aoe_cut * rtol), highcut = sigma_high_sided, n0 = result_before.n, nsf = result_before.n * sf, sf = sf * 100*u"percent")
 end
 export get_aoe_cut
