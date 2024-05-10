@@ -24,8 +24,9 @@ function fit_single_trunc_gauss(x::Vector{T}, cuts::NamedTuple{(:low, :high, :ma
     pseudo_prior = NamedTupleDist(
         μ = Uniform(ps.peak_pos-20, ps.peak_pos+20),
         σ = weibull_from_mx(ps.peak_sigma, 3*ps.peak_sigma),
-        n = Uniform(ps.peak_counts-100, ps.peak_counts+100)
+        n = weibull_from_mx(ps.peak_counts, 3*ps.peak_counts)
     )
+
     # create fit model
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
     # f_trafo = LegendSpecFitsBATExt.get_distribution_transform(Normal, pseudo_prior)
@@ -94,8 +95,9 @@ function fit_half_centered_trunc_gauss(x::Vector{T}, μ::T, cuts::NamedTuple{(:l
     pseudo_prior = NamedTupleDist(
         μ = ConstValueDist(μ),
         σ = weibull_from_mx(ps.peak_sigma, 3*ps.peak_sigma),
-        n = Uniform(ps.peak_counts-100, ps.peak_counts+100)
+        n = weibull_from_mx(ps.peak_counts, 3*ps.peak_counts)
     )
+
     # create fit model
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
     # f_trafo = LegendSpecFitsBATExt.get_distribution_transform(Normal, pseudo_prior)
@@ -144,7 +146,7 @@ export fit_half_centered_trunc_gauss
 """
     fit_half_centered_trunc_gauss(x::Array, cuts::NamedTuple{(:low, :high, :max), Tuple{Float64, Float64, Float64}})
 Fit a single truncated Gaussian to the data `x` between `cut.low` and `cut.high`. The peak center is fixed at `μ` and the peak is cut in half either in the left or right half.
-# Returns `report` and `result`` with:
+# Returns `report` and `result` with:
     * `f_fit`: fitted function
     * `μ`: mean of the Gaussian
     * `μ_err`: error of the mean
@@ -166,7 +168,7 @@ function fit_half_trunc_gauss(x::Vector{T}, cuts::NamedTuple{(:low, :high, :max)
     pseudo_prior = NamedTupleDist(
         μ = Uniform(ps.peak_pos-2*ps.peak_sigma, ps.peak_pos+2*ps.peak_sigma),
         σ = weibull_from_mx(ps.peak_sigma, 3*ps.peak_sigma),
-        n = Uniform(ps.peak_counts-100, ps.peak_counts+100)
+        n = weibull_from_mx(ps.peak_counts, 3*ps.peak_counts)
     )
     # create fit model
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
