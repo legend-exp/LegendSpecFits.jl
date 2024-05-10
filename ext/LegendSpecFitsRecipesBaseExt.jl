@@ -478,10 +478,14 @@ end
 end
 
 @recipe function f(report_window_cut::NamedTuple{(:h, :f_fit, :x_fit, :low_cut, :high_cut, :low_cut_fit, :high_cut_fit, :center, :σ)})
-    xlims := (value(ustrip(report_window_cut.center - 5*report_window_cut.σ)), value(ustrip(report_window_cut.center + 5*report_window_cut.σ)))
+    xlims := (value(ustrip(report_window_cut.center - 7*report_window_cut.σ)), value(ustrip(report_window_cut.center + 7*report_window_cut.σ)))
+    ylabel := "Density"
+    framestyle := :box
     @series begin
-        report_window_cut.h        
+        label := "Data"
+        report_window_cut.h
     end
+    ylims --> (0, 1.1*maximum(report_window_cut.h.weights))
     @series begin
         seriestype := :line
         label := "Best Fit"
