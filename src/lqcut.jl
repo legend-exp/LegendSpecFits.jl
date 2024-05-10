@@ -6,17 +6,17 @@ Perform the drift time correction on the LQ data using the DEP peak. The functio
     * `result`: NamedTuple of the corrected lq data, the box used for the linear fit and the drift time function
     * `report`: NamedTuple of the histograms used for the fit
 """
-function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_left=1589u"keV", DEP_right=1596u"keV")
+function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_left=1589u"keV", DEP_right=1596u"keV", lower_exclusion=0.02, upper_exclusion=0.995, drift_cutoff_sgima=2.0)
 
     #Using fixed values for DEP, can be changed to use values from DEP fit from Energy calibration 
     lq_DEP_dt = lq_norm[DEP_left .< e_cal .< DEP_right]
     t_tcal = ustrip.(tdrift[DEP_left .< e_cal .< DEP_right])
 
-    #lq box
+    #lq cutoff
     #sort array to exclude outliers
     sort_lq = sort(lq_DEP_dt)
-    low_cut = Int(round(length(sort_lq) *0.02)) # cut lower 2%
-    high_cut = Int(round(length(sort_lq) *0.995)) # cut upper 0.5%
+    low_cut = Int(round(length(sort_lq) * lower_exclusion)) # cut lower 2%
+    high_cut = Int(round(length(sort_lq) * upper_exclusion)) # cut upper 0.5%
     lq_prehist = fit(Histogram, lq_DEP_dt, range(sort_lq[low_cut], sort_lq[high_cut], length=100))
     lq_prestats = estimate_single_peak_stats(lq_prehist)
     lq_start = lq_prestats.peak_pos - 3*lq_prestats.peak_sigma
@@ -30,8 +30,7 @@ function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_l
     µ_lq = mvalue(lq_result.μ)
     σ_lq = mvalue(lq_result.σ)
 
-    #t_tcal box
-
+    #t_tcal cutoff
     drift_prehist = fit(Histogram, t_tcal, range(minimum(t_tcal), stop=maximum(t_tcal), length=100))
     drift_prestats = estimate_single_peak_stats(drift_prehist)
     drift_start = drift_prestats.peak_pos - 3*drift_prestats.peak_sigma
@@ -46,11 +45,14 @@ function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_l
     σ_t = mvalue(drift_result.σ)
 
     #create box 
-    box = (lq_lower = µ_lq - 2 * σ_lq, 
-    lq_upper = µ_lq + 2 * σ_lq, 
-    t_lower = µ_t - 2 * σ_t, 
-    t_upper = µ_t + 2 * σ_t)
+    box = (
+    lq_lower = µ_lq - drift_cutoff_sgima * σ_lq, 
+    lq_upper = µ_lq + drift_cutoff_sgima * σ_lq, 
+    t_lower = µ_t - drift_cutoff_sgima * σ_t, 
+    t_upper = µ_t + drift_cutoff_sgima * σ_t
+    )
 
+    #cut data according to box
     lq_box = lq_DEP_dt[box.lq_lower .< lq_DEP_dt .< box.lq_upper .&& box.t_lower .< t_tcal .< box.t_upper]
     t_box = t_tcal[box.lq_lower .< lq_DEP_dt .< box.lq_upper .&& box.t_lower .< t_tcal .< box.t_upper]
 
@@ -87,7 +89,7 @@ Evaluates the cutoff value for the LQ cut. The function performs a binned gaussi
     * `result`: NamedTuple of the cutoff value and the fit result
     * `report`: NamedTuple of the histograms used for the fit
 """
-function LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier)
+function LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier; lower_exclusion=0.02, upper_exclusion=0.995, cut_sigma=3.0)
     # Define sidebands
     lq_DEP = lq_classifier[DEP_µ - 4.5 * DEP_σ .< e_cal .< DEP_µ + 4.5 * DEP_σ]
     lq_sb1 = lq_classifier[DEP_µ -  2 * 4.5 * DEP_σ .< e_cal .< DEP_µ - 4.5 * DEP_σ]
@@ -96,8 +98,8 @@ function LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier)
     # Generate values for histogram edges
     #exclude outliers
     sort_lq = sort(lq_DEP)
-    low_cut = Int(round(length(sort_lq) *0.02)) # cut lower 2%
-    high_cut = Int(round(length(sort_lq) *0.995)) # cut upper 0.5%
+    low_cut = Int(round(length(sort_lq) * lower_exclusion)) # cut lower 2%
+    high_cut = Int(round(length(sort_lq) * upper_exclusion)) # cut upper 0.5%
     prehist = fit(Histogram, lq_DEP, range(sort_lq[low_cut], sort_lq[high_cut], length=100))
     prestats = estimate_single_peak_stats(prehist)
     start = prestats.peak_pos - 3*prestats.peak_sigma
@@ -122,7 +124,8 @@ function LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier)
 
     lq_DEP_stats = estimate_single_peak_stats(hist_corrected)
     fit_result, fit_report = fit_binned_gauss(hist_corrected, lq_DEP_stats)
-    cut_3σ = fit_result.μ - 3fit_result.σ
+    #final cutoff value
+    cut_3σ = fit_result.μ - cut_sigma * fit_result.σ
 
     result = (
         cut = cut_3σ,
