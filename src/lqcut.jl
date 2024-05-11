@@ -6,7 +6,7 @@ Perform the drift time correction on the LQ data using the DEP peak. The functio
     * `result`: NamedTuple of the corrected lq data, the box used for the linear fit and the drift time function
     * `report`: NamedTuple of the histograms used for the fit
 """
-function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_left=1589u"keV", DEP_right=1596u"keV", lower_exclusion=0.02, upper_exclusion=0.995, drift_cutoff_sgima=2.0)
+function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_left=1589u"keV", DEP_right=1596u"keV", lower_exclusion=0.005, upper_exclusion=0.98, drift_cutoff_sgima=2.0)
 
     #Using fixed values for DEP, can be changed to use values from DEP fit from Energy calibration 
     lq_DEP_dt = lq_norm[DEP_left .< e_cal .< DEP_right]
@@ -15,8 +15,8 @@ function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_l
     #lq cutoff
     #sort array to exclude outliers
     sort_lq = sort(lq_DEP_dt)
-    low_cut = Int(round(length(sort_lq) * lower_exclusion)) # cut lower 2%
-    high_cut = Int(round(length(sort_lq) * upper_exclusion)) # cut upper 0.5%
+    low_cut = Int(round(length(sort_lq) * lower_exclusion)) # cut lower 0.5%
+    high_cut = Int(round(length(sort_lq) * upper_exclusion)) # cut upper 2%
     lq_prehist = fit(Histogram, lq_DEP_dt, range(sort_lq[low_cut], sort_lq[high_cut], length=100))
     lq_prestats = estimate_single_peak_stats(lq_prehist)
     lq_start = lq_prestats.peak_pos - 3*lq_prestats.peak_sigma
@@ -89,7 +89,7 @@ Evaluates the cutoff value for the LQ cut. The function performs a binned gaussi
     * `result`: NamedTuple of the cutoff value and the fit result
     * `report`: NamedTuple of the histograms used for the fit
 """
-function LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier; lower_exclusion=0.02, upper_exclusion=0.995, cut_sigma=3.0)
+function LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier; lower_exclusion=0.005, upper_exclusion=0.98, cut_sigma=3.0)
     # Define sidebands
     lq_DEP = lq_classifier[DEP_µ - 4.5 * DEP_σ .< e_cal .< DEP_µ + 4.5 * DEP_σ]
     lq_sb1 = lq_classifier[DEP_µ -  2 * 4.5 * DEP_σ .< e_cal .< DEP_µ - 4.5 * DEP_σ]
@@ -98,8 +98,8 @@ function LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier; lower_exclusion=0.02, uppe
     # Generate values for histogram edges
     #exclude outliers
     sort_lq = sort(lq_DEP)
-    low_cut = Int(round(length(sort_lq) * lower_exclusion)) # cut lower 2%
-    high_cut = Int(round(length(sort_lq) * upper_exclusion)) # cut upper 0.5%
+    low_cut = Int(round(length(sort_lq) * lower_exclusion)) # cut lower 0.5%
+    high_cut = Int(round(length(sort_lq) * upper_exclusion)) # cut upper 2%
     prehist = fit(Histogram, lq_DEP, range(sort_lq[low_cut], sort_lq[high_cut], length=100))
     prestats = estimate_single_peak_stats(prehist)
     start = prestats.peak_pos - 3*prestats.peak_sigma
@@ -125,7 +125,7 @@ function LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier; lower_exclusion=0.02, uppe
     lq_DEP_stats = estimate_single_peak_stats(hist_corrected)
     fit_result, fit_report = fit_binned_gauss(hist_corrected, lq_DEP_stats)
     #final cutoff value
-    cut_3σ = fit_result.μ - cut_sigma * fit_result.σ
+    cut_3σ = fit_result.μ + cut_sigma * fit_result.σ
 
     result = (
         cut = cut_3σ,
