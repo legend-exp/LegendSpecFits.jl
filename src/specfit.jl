@@ -108,7 +108,6 @@ function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Vector
     # remove :calib_type from kwargs
     kwargs = pairs(NamedTuple(filter(k -> !(:calib_type in k), kwargs)))
     if calib_type == :th228
-        @info "Fit peaks for Th228 lines"
         return fit_peaks_th228(peakhists, peakstats, th228_lines,; kwargs...)
     else
         error("Calibration type not supported")
