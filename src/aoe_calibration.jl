@@ -140,37 +140,6 @@ The algorhithm utilizes a root search algorithm to find the cut value with a rel
 - `n0`: Number of counts before the cut
 - `nsf`: Number of counts after the cut
 """
-#=
-function get_aoe_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; dep::T=1592.53u"keV", window::Vector{<:T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, cut_search_interval::Tuple{<:Unitful.RealOrRealQuantity, <:Unitful.RealOrRealQuantity}=(-25.0*unit(first(aoe)), 1.0*unit(first(aoe))), rtol::Float64=0.001, bin_width_window::T=3.0u"keV", fixed_position::Bool=true, sigma_high_sided::Float64=NaN, uncertainty::Bool=true, maxiters::Int=200) where T<:Unitful.Energy{<:Real}
-    # check if a high sided AoE cut should be applied before the AoE cut is generated
-    if !isnan(sigma_high_sided)
-        e   =   e[aoe .< sigma_high_sided]
-        aoe = aoe[aoe .< sigma_high_sided]
-    end
-    # cut window around peak
-    aoe = aoe[dep-first(window) .< e .< dep+last(window)]
-    e   =   e[dep-first(window) .< e .< dep+last(window)]
-    # estimate bin width
-    bin_width = get_friedman_diaconis_bin_width(e[dep - bin_width_window .< e .< dep + bin_width_window])
-    # create histogram
-    dephist = fit(Histogram, ustrip.(e), ustrip(dep-first(window):bin_width:dep+last(window)))
-    # get peakstats
-    depstats = estimate_single_peak_stats(dephist)
-    # fit before cut
-    result_before, _ = fit_single_peak_th228(dephist, depstats,; uncertainty=uncertainty, fixed_position=fixed_position, low_e_tail=false)
-    # get n0 before cut
-    nsf = result_before.n * dep_sf
-    # get aoe cut
-    n_surrival_dep_f = cut -> get_n_after_aoe_cut(cut, aoe, e, dep, window, bin_width, mvalue(result_before), depstats; uncertainty=false, fixed_position=fixed_position) - nsf
-    aoe_cut = find_zero(n_surrival_dep_f, cut_search_interval, Bisection(), rtol=rtol, maxiters=maxiters)
-    # return n_surrival_dep_f.(0.25:0.001:0.5)
-    # get nsf after cut
-    nsf = get_n_after_aoe_cut(aoe_cut, aoe, e, dep, window, bin_width, mvalue(result_before), depstats; uncertainty=uncertainty, fixed_position=fixed_position)
-    return (lowcut = measurement(aoe_cut, aoe_cut * rtol), highcut = sigma_high_sided, n0 = result_before.n, nsf = nsf, sf = nsf / result_before.n * 100*u"percent")
-end
-export get_aoe_cut
-=#
-
 function get_aoe_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; dep::T=1592.53u"keV", window::Vector{<:T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, cut_search_interval::Tuple{<:Unitful.RealOrRealQuantity, <:Unitful.RealOrRealQuantity}=(-25.0*unit(first(aoe)), 1.0*unit(first(aoe))), rtol::Float64=0.001, bin_width_window::T=3.0u"keV", fixed_position::Bool=true, sigma_high_sided::Float64=NaN, uncertainty::Bool=true, maxiters::Int=200) where T<:Unitful.Energy{<:Real}
     # check if a high sided AoE cut should be applied before the AoE cut is generated
     if !isnan(sigma_high_sided)
@@ -225,6 +194,7 @@ function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e
     if !isnan(sigma_high_sided)
         # TODO: decide how to deal with the high sided cut!
         e = e[aoe .< sigma_high_sided]
+        aoe = aoe[aoe .< sigma_high_sided]
     end
     e_survived = e[aoe_cut .<= aoe]
     e_cut = e[aoe_cut .> aoe]
@@ -236,7 +206,6 @@ function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e
     cut      = fit(Histogram, ustrip(e_cut),      ustrip(peak-first(window):bin_width:peak+last(window)))
     # fit peak and return number of signal counts
     result_after, report_after = fit_subpeaks_th228(survived, cut, result_before; uncertainty=uncertainty, low_e_tail=low_e_tail)
-    # result_after, report_after = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=low_e_tail, pseudo_prior=pseudo_prior)
     # calculate surrival fraction
     sf = result_after.sf * 100u"percent"
     result = (
