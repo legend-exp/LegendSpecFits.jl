@@ -669,8 +669,8 @@ end
         xlabel := "Energy (ADC)"
         legend := :bottomright
         framestyle := :box
-        xlims := (0, 21000)
-        xticks := (0:2000:22000)
+        xlims := (0, 168000)
+        xticks := (0:16000:176000)
         @series begin
             grid --> :all
             xerrscaling := xerrscaling
