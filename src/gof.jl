@@ -29,7 +29,7 @@ end
 
 """ 
     p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::NamedTuple) 
-calculate p-value based on least-squares
+calculate p-value based on least-squares, assuming poisson uncertainty
 baseline method to get goodness-of-fit (gof)
 # input:
  * `f_fit`function handle of fit function (peakshape)
@@ -57,7 +57,7 @@ function p_value(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::NamedTuple)
         pval = ccdf(Chisq(dof),chi2)
     end
     if any(model_counts .<= 5)
-        @warn "Bin width <= $(round(minimum(model_counts), digits=0)) counts - Chi2 test might be not valid"
+        @debug "Bin width <= $(round(minimum(model_counts), digits=0)) counts - Chi2 test might be not valid"
     else
         @debug "p-value = $(round(pval, digits=2))"
     end

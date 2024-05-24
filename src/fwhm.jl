@@ -1,6 +1,7 @@
 # f_fwhm(x, p) = sqrt.((x .* x .* p[3] .+ x .* p[2] .+ p[1]) .* heaviside.(x .* x .* p[3] .+ x .* p[2] .+ p[1]))
 f_fwhm(x::T, p::AbstractArray{<:T}) where T<:Unitful.RealOrRealQuantity = sqrt((x * x * p[3] + x * p[2] + p[1]) * heaviside(x^2 * p[3] + x * p[2] + p[1]))
 f_fwhm(x::Array{<:T}, p::AbstractArray{<:T}) where T<:Unitful.RealOrRealQuantity = Base.Fix2(f_fwhm, p).(x)
+f_fwhm(x, p1, p2, p3) = f_fwhm(x, [p1, p2, p3])
 
 """
     fitFWHM(fit_fwhm(peaks::Vector{T}, fwhm::Vector{T}) where T<:Real
@@ -11,37 +12,29 @@ Fit the FWHM of the peaks to a quadratic function.
     * `v`: the fit result parameters
     * `f_fit`: the fitted function
 """
-function fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}})
+function fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; pol_order::Int=1, e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true)
+    @assert length(peaks) == length(fwhm) "Peaks and FWHM must have the same length"
     # fit FWHM fit function
     e_unit = u"keV"
-    p_start = [1*e_unit^2, 0.001*e_unit, 0.0*e_unit]
-    lower_bound = [0.0*e_unit^2, 0.0*e_unit, 0.0*e_unit]
-    fwhm_fit_result = curve_fit(f_fwhm, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm), ustrip.(p_start), lower=ustrip.(lower_bound))
+    p_start = append!([1, 2.96e-3*0.11], fill(0.0, pol_order-1)) .* [e_unit^i for i in pol_order:-1:0]
+    
+    # fit FWHM fit function as a square root of a polynomial
+    result_chi2, report_chi2 = chi2fit(x -> LegendSpecFits.heaviside(x)*sqrt(abs(x)), pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm); v_init=ustrip.(p_start), uncertainty=uncertainty)
+    
+    # get pars and apply unit
+    par =  result_chi2.par
+    par_unit = par .* [e_unit^i for i in pol_order:-1:0]
 
-    # get FWHM at Qbb with error
-    err = standard_errors(fwhm_fit_result)
-    enc, fano, ct = fwhm_fit_result.param[1]*e_unit^2, fwhm_fit_result.param[2]*e_unit, fwhm_fit_result.param[3]
-    fwhm_qbb = f_fwhm(2039u"keV", [enc, fano, ct])
-    fwhm_pars_rand = rand(MvNormal(fwhm_fit_result.param, estimate_covar(fwhm_fit_result)), 10000)
-    # prevent negative parameter values in fit
-    # TODO: check if this is the right way to do this
-    fwhm_pars_rand_cleaned = fwhm_pars_rand[:, findall(x -> all(x .> 0), eachcol(fwhm_pars_rand))]
-    fwhm_pars_rand_cleaned = [[p1, p2, p3] for (p1, p2, p3) in zip(fwhm_pars_rand_cleaned[1,:] .*e_unit^2, fwhm_pars_rand_cleaned[2,:] .* e_unit, fwhm_pars_rand_cleaned[3,:])]
-    # get all FWHM at Qbb with error
-    fwhm_qbb_rand = f_fwhm.(2039u"keV", fwhm_pars_rand_cleaned)
-    fwhm_qbb_err = std(fwhm_qbb_rand)
+    # built function in string
+    func = "sqrt($(join(["$(mvalue(par[i])) * ($(e_expression))^$(i-1)" for i in eachindex(length(par))], " + ")))$e_unit"
+    func_cal = "sqrt($(join(["$(mvalue(par[i])) * $(e_type_cal)^$(i-1) * keV^$(length(par)+1-i)" for i in eachindex(length(par))], " + ")))"
+    func_generic = "sqrt($(join(["par[$(i-1)] * $(e_type_cal)^$(i-1)" for i in eachindex(length(par))], " + ")))"
 
-    result = (
-        qbb = measurement(fwhm_qbb, fwhm_qbb_err),
-        enc = measurement(fwhm_fit_result.param[1]*e_unit^2, err[1]*e_unit^2), 
-        fano = measurement(fwhm_fit_result.param[2]*e_unit, err[2]*e_unit), 
-        ct = measurement(fwhm_fit_result.param[3], err[3])
-    )
-    report = (
-        qbb = result.qbb,
-        v = [enc, fano, ct],
-        f_fit = x -> Base.Fix2(f_fwhm, [enc, fano, ct])(x)
-    )
+    # get fwhm at Qbb
+    qbb = report_chi2.f_fit(2039) * e_unit
+    result = merge(result_chi2, (par = par_unit , qbb = qbb, func = func, func_cal = func_cal, func_generic = func_generic, peaks = peaks, fwhm = fwhm))
+    report = merge(report_chi2, (e_unit = e_unit, par = result.par, qbb = result.qbb, type = :fwhm))
+
     return result, report
 end
 export fit_fwhm
