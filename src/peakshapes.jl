@@ -205,4 +205,18 @@ function aoe_compton_background_peakshape(
 end
 export aoe_compton_background_peakshape
 
+"""
+    double_gaussian(
+        x::Real, μ1::Real, σ1::Real, n1::Real, 
+        μ2::Real, σ2::Real, n2::Real
+    )
 
+Evaluates the sum of two gaussians at `x` with parameters `μ1`, `σ1`, `n1`, `μ2`, `σ2`, `n2`.
+"""
+function double_gaussian(
+    x::Real, μ1::Real, σ1::Real, n1::Real, 
+    μ2::Real, σ2::Real, n2::Real
+)
+    return n1 * gauss_pdf(x, μ1, σ1) + n2 * gauss_pdf(x, μ2, σ2)  
+end
+export double_gaussian
