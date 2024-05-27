@@ -25,7 +25,7 @@ function simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitf
     # remove :calib_type from kwargs
     kwargs = pairs(NamedTuple(filter(k -> !(:calib_type in k), kwargs)))
     if calib_type == :th228
-        @info "Use simple calibration for Th228 lines"
+        @debug "Use simple calibration for Th228 lines"
         return simple_calibration_th228(e_uncal, th228_lines, window_sizes,; kwargs...)
     else
         error("Calibration type not supported")
@@ -35,13 +35,20 @@ simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy
 
 
 function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
+    # initial binning
+    bin_width = get_friedman_diaconis_bin_width(filter(in(quantile(e_uncal, 0.05)..quantile(e_uncal, 0.5)), e_uncal))
     # create initial peak search histogram
-    h_uncal = fit(Histogram, e_uncal, nbins=n_bins)
-    # search all possible peak candidates
-    _, peakpos = RadiationSpectra.peakfinder(h_uncal, σ=5.0, backgroundRemove=true, threshold=10)
-    # the FEP ist the last peak in the list
+    h_uncal = fit(Histogram, e_uncal, 0:bin_width:maximum(e_uncal))
     fep_guess = if isnan(quantile_perc)
-        sort(peakpos)[end]
+        # expect FEP in the last 10% of the data
+        min_e_fep = quantile(e_uncal, 0.9)
+        h_fepsearch = fit(Histogram, e_uncal, min_e_fep:bin_width:maximum(e_uncal))
+        # search all possible peak candidates
+        h_decon, peakpos = RadiationSpectra.peakfinder(h_fepsearch, σ=5.0, backgroundRemove=true, threshold=10)
+        # the FEP is the most prominent peak in the deconvoluted histogram
+        peakpos_idxs = StatsBase.binindex.(Ref(h_decon), peakpos)
+        cts_peakpos = h_decon.weights[peakpos_idxs]
+        peakpos[argmax(cts_peakpos)]
     else
         quantile(e_uncal, quantile_perc)
     end
