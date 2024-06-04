@@ -6,7 +6,7 @@ Perform the drift time correction on the LQ data using the DEP peak. The functio
     * `result`: NamedTuple of the corrected lq data, the box used for the linear fit and the drift time function
     * `report`: NamedTuple of the histograms used for the fit
 """
-function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_left=1589u"keV", det_icpc = false, DEP_right=1596u"keV", lower_exclusion=0.005, upper_exclusion=0.98, drift_cutoff_sgima=2.0)
+function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal, detectortype; DEP_left=1589u"keV", DEP_right=1596u"keV", lower_exclusion=0.005, upper_exclusion=0.98, drift_cutoff_sgima=2.0)
 
     #Using fixed values for DEP, can be changed to use values from DEP fit from Energy calibration 
     lq_DEP_dt = lq_norm[DEP_left .< e_cal .< DEP_right]
@@ -35,7 +35,7 @@ function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_l
     lq_upper = µ_lq + drift_cutoff_sgima * σ_lq 
 
     #t_tcal cutoff; method dependant on detector type
-    if det_icpc == false
+    if detectortype in [:ppc, :bege, :coax] 
         drift_prehist = fit(Histogram, t_tcal, range(minimum(t_tcal), stop=maximum(t_tcal), length=100))
         drift_prestats = estimate_single_peak_stats(drift_prehist)
         drift_start = drift_prestats.peak_pos - 3*drift_prestats.peak_sigma
@@ -52,7 +52,7 @@ function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_l
         #set cutoff in drift time dimension for later fit
         t_lower = µ_t - drift_cutoff_sgima * σ_t
         t_upper = µ_t + drift_cutoff_sgima * σ_t
-    else
+    elseif detectortype == :icpc
         #create histogram for drift time
         drift_prehist = fit(Histogram, t_tcal, range(minimum(t_tcal), stop=maximum(t_tcal), length=100))
         drift_prestats = estimate_single_peak_stats(drift_prehist)
@@ -61,7 +61,7 @@ function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_l
         drift_result, drift_report = fit_binned_double_gauss(drift_prehist, drift_prestats)
         
         #set cutoff at the x-value where the fit function is 10% of its maximum value
-        x_values = -10:1:1000  
+        x_values = -1000:0.5:5000  
         max_value = maximum(drift_report.f_fit.(x_values))
         threshold = 0.1 * max_value
 
@@ -70,6 +70,8 @@ function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_l
 
         t_lower = minimum(x_at_threshold)
         t_upper = maximum(x_at_threshold)
+    else
+        error("Detector type $detectortype not supported")
     end
 
     #store cutoff values in box to return later    

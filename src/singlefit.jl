@@ -319,11 +319,15 @@ The priors for the first gaussian peak are given by the `ps` tuple. For the prio
 function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
     # create pseudo priors
     pseudo_prior = NamedTupleDist(
-                μ1 = Normal(ps.peak_pos, 5*ps.peak_sigma),
-                σ1 = Normal(ps.peak_sigma, 2*ps.peak_sigma),
+                #μ1 = Normal(ps.peak_pos, 5*ps.peak_sigma),
+                μ1 = Uniform(ps.peak_pos-5*ps.peak_sigma, ps.peak_pos+5*ps.peak_sigma),
+                #σ1 = Normal(ps.peak_sigma, 2*ps.peak_sigma),
+                σ1 = Uniform(0.1*ps.peak_sigma, 5*ps.peak_sigma),
                 n1 = Uniform(0.01*ps.peak_counts, 5*ps.peak_counts),
-                µ2 = Normal(ps.peak_pos, 5*ps.peak_sigma),
-                σ2 = Normal(ps.peak_sigma, 2*ps.peak_sigma),
+                #µ2 = Normal(ps.peak_pos, 5*ps.peak_sigma),
+                µ2 = Uniform(0, 1200),
+                #σ2 = Normal(ps.peak_sigma, 2*ps.peak_sigma),
+                σ2 = Uniform(0.5*ps.peak_sigma, 5*ps.peak_sigma),
                 n2 = Uniform(0.01*ps.peak_counts, 5*ps.peak_counts)
             )
         
