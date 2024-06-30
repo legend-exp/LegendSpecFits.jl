@@ -171,7 +171,7 @@ export get_aoe_cut
 """
     get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, aoe_cut::T,; uncertainty::Bool=true, low_e_tail::Bool=true) where T<:Real
 
-Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size whiile performing a peak fit with fixed position.
+Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size while performing a peak fit with fixed position.
     
 # Returns
 - `peak`: Peak position
@@ -180,7 +180,7 @@ Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given 
 - `sf`: Surrival fraction
 - `err`: Uncertainties
 """
-function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, low_e_tail::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
+function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, lq_mode::Bool=false ,low_e_tail::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     # get energy before cut and create histogram
@@ -196,8 +196,16 @@ function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e
         e = e[aoe .< sigma_high_sided]
         aoe = aoe[aoe .< sigma_high_sided]
     end
-    e_survived = e[aoe_cut .<= aoe]
-    e_cut = e[aoe_cut .> aoe]
+
+    if lq_mode == false
+        #normal aoe version
+        e_survived = e[aoe_cut .<= aoe]
+        e_cut = e[aoe_cut .> aoe]
+    else
+        #lq version
+        e_survived = e[aoe_cut .>= aoe]
+        e_cut = e[aoe_cut .< aoe]
+    end
     
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
@@ -264,7 +272,7 @@ Get the surrival fraction of a continuum after a AoE cut value `aoe_cut` for a g
 - `n_after`: Number of counts after the cut
 - `sf`: Surrival fraction
 """
-function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
+function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; lq_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
     # get number of events in window before cut
     n_before = length(e[center - window .< e .< center + window])
     # get number of events after cut
@@ -272,7 +280,10 @@ function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantit
     if !isnan(sigma_high_sided)
         n_after = length(e[aoe_cut .< aoe .< sigma_high_sided .&& center - window .< e .< center + window])
     end
-    n_after = length(e[aoe .> aoe_cut .&& center - window .< e .< center + window])
+    if lq_mode == true
+        n_after = length(e[aoe .< aoe_cut .&& center - window .< e .< center + window])
+    end
+
     # calculate surrival fraction
     sf = n_after / n_before
     result = (

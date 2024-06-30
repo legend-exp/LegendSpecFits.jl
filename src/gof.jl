@@ -164,16 +164,17 @@ function get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Named
 
     # get peakshape of best-fit 
     model_counts = _get_model_counts(f_fit, v_ml, bin_centers, bin_widths)
-
+    
     # calculate bin-wise residuals 
     residuals = model_counts[model_counts .> 0] - counts[model_counts .> 0]
     sigma = sqrt.(model_counts[model_counts .> 0])
     residuals_norm = residuals ./ sigma
 
     # calculate something like a bin-wise p-value (in case that makes sense)
-    dist = Poisson.(model_counts) # each bin: poisson distributed 
-    cdf_value_low = cdf.(dist, model_counts .- abs.(residuals))
-    cdf_value_up = 1 .- cdf.(dist, model_counts .+ abs.(residuals))
+    dist = Poisson.(model_counts[model_counts .> 0]) # each bin: poisson distributed
+
+    cdf_value_low = cdf.(dist, model_counts[model_counts .> 0] .- abs.(residuals))
+    cdf_value_up = 1 .- cdf.(dist, model_counts[model_counts .> 0] .+ abs.(residuals))
     p_value_binwise = cdf_value_low .+ cdf_value_up # significance of residuals -> ~proabability that residual (for a given bin) is as large as observed or larger
     return residuals, residuals_norm, p_value_binwise, bin_centers
 end
