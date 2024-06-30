@@ -10,7 +10,7 @@ The relative cut is the fraction of the maximum counts to use for the cut.
     * `low`: lower edge of the cut peak
     * `high`: upper edge of the cut peak
 """
-function cut_single_peak(x::Vector{T}, min_x::T, max_x::T,; n_bins::Int=1000, relative_cut::Float64=0.5) where T<:Unitful.RealOrRealQuantity
+function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T,; n_bins::Int=1000, relative_cut::Float64=0.5) where T<:Unitful.RealOrRealQuantity
     @assert unit(min_x) == unit(max_x) == unit(x[1]) "Units of min_x, max_x and x must be the same"
     x_unit = unit(x[1])
     x, min_x, max_x = ustrip.(x), ustrip(min_x), ustrip(max_x)
