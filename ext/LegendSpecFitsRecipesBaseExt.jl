@@ -15,23 +15,63 @@ function round_wo_units(x::Unitful.RealOrRealQuantity; digits::Integer=2)
     end
 end
 
-# @recipe function f(x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where T<:Unitful.RealOrRealQuantity
-@recipe function f(report::NamedTuple{(:f_fit, :μ, :σ, :n)}, x::Vector{T}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}) where {T <: Unitful.RealOrRealQuantity}
+@recipe function f(report::NamedTuple{(:f_fit, :h, :μ, :σ, :gof)})
     ylabel := "Normalized Counts"
-    legend := :bottomright
+    margins := (4, :mm)
     framestyle := :box
+    legend := :bottomleft
+    xlims := (ustrip(Measurements.value(report.μ - 5*report.σ)), ustrip(Measurements.value(report.μ + 5*report.σ)))
     @series begin
-        seriestype := :histogram
-        bins --> :fd
-        normalize --> :pdf
         label := "Data"
-        ustrip.(x[x .> cuts.low .&& x .< cuts.high])
+        subplot --> 1
+        report.h
     end
     @series begin
         color := :red
+        subplot --> 1
         label := "Normal Fit (μ = $(round_wo_units(report.μ, digits=2)), σ = $(round_wo_units(report.σ, digits=2)))"
         lw := 3
-        ustrip(cuts.low):ustrip(Measurements.value(report.σ / 1000)):ustrip(cuts.high), t -> report.f_fit(t)
+        bottom_margin --> (-4, :mm)
+        first(report.h.edges[1]):ustrip(Measurements.value(report.σ / 1000)):last(report.h.edges[1]), t -> report.f_fit(t)
+    end
+    if !isempty(report.gof)
+        link --> :x
+        layout --> @layout([a{0.7h}; b{0.3h}])
+        @series begin
+            seriestype := :hline
+            ribbon := 3
+            subplot --> 2
+            fillalpha := 0.5
+            label := ""
+            fillcolor := :lightgrey
+            linecolor := :darkgrey
+            [0.0]
+        end
+        @series begin
+            seriestype := :hline
+            ribbon := 1
+            subplot --> 2
+            fillalpha := 0.5
+            label := ""
+            fillcolor := :grey
+            linecolor := :darkgrey
+            [0.0]
+        end
+        @series begin
+            seriestype := :scatter
+            subplot --> 2
+            label := ""
+            title := ""
+            markercolor --> :black
+            ylabel := "Residuals (σ)"
+            link --> :x
+            top_margin --> (-4, :mm)
+            ylims := (-5, 5)
+            xlims := (ustrip(Measurements.value(report.μ - 5*report.σ)), ustrip(Measurements.value(report.μ + 5*report.σ)))
+            yscale --> :identity
+            yticks := ([-3, 0, 3])
+            report.gof.bin_centers, [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.gof.residuals_norm]
+        end
     end
 end
 
