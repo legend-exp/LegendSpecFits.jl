@@ -22,7 +22,7 @@ function lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal, detec
     lq_start = lq_prestats.peak_pos - 3*lq_prestats.peak_sigma
     lq_stop = lq_prestats.peak_pos + 3*lq_prestats.peak_sigma
 
-    lq_edges = range(lq_start, stop=lq_stop, length=51) 
+    lq_edges = range(lq_start, stop=lq_stop, length=51)
     lq_hist_DEP = fit(Histogram, lq_DEP_dt, lq_edges)
 
     lq_DEP_stats = estimate_single_peak_stats(lq_hist_DEP)
