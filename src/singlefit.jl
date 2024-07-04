@@ -301,8 +301,8 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
         @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) * x_unit for k in keys(v_ml)]...),
-                  (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                  residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"
@@ -353,17 +353,19 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
 
     # create cutted histogram
     h = h_nocut
-    cut_idxs = sort(findall(x -> x in Interval(cut_low, cut_high), h.edges[1]))
+    cut_idxs = collect(sort(findall(x -> x in Interval(cut_low, cut_high), h.edges[1])))
     if length(cut_idxs) != length(h.edges[1])
-        @info cut_idxs
-        @info length(push!(cut_idxs, first(cut_idxs)-1))
-        @info length(cut_idxs)
-        h = Histogram(h.edges[1][push!(cut_idxs, first(cut_idxs)-1)], h.weights[cut_idxs])
+        weights = h.weights[cut_idxs]
+        edges = if first(cut_idxs)-1 == 0
+            h.edges[1][sort(push!(cut_idxs, last(cut_idxs)-1))]
+        else
+            h.edges[1][sort(push!(cut_idxs, first(cut_idxs)-1))]
+        end
+        h = Histogram(edges, weights)
     end
 
     # create fit function
     f_fit(x, v) = v.n * gauss_pdf(x, v.μ, v.σ) * heaviside(x - cut_low) * heaviside(cut_high - x)
-    f_fit_arr(x, v) = f_fit(x, (μ = v[1], σ = v[2], n = v[3]))
     
     # create pseudo priors
     pseudo_prior = NamedTupleDist(
@@ -388,18 +390,15 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
-    @info v_ml
 
     if uncertainty
-        f_loglike_array = let f_fit_arr=f_fit_arr, h=h
-            v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit_arr(x, v) : 0, h)
-        end
+        f_loglike_array(v) = - f_loglike(array_to_tuple(v, v_ml))
 
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 
         param_covariance = nothing
-        if !all(isfinite.(H))
+        if !all(isfinite.(H)) || all(iszero.(H))
             @warn "Hessian matrix is not finite"
             param_covariance = zeros(length(v_ml), length(v_ml))
         else
@@ -414,6 +413,7 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
 
         # get p-value
         pval, chi2, dof = p_value(f_fit, h, v_ml)
+        
         # calculate normalized residuals
         residuals, residuals_norm, _, bin_centers = get_residuals(f_fit, h, v_ml)
 
@@ -423,8 +423,8 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
         @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                  (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                  residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"
@@ -435,7 +435,7 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
     end
 
     report = (
-            f_fit = x -> Base.Fix2(f_fit, v_ml)(x),
+            f_fit = x -> Base.Fix2(f_fit, v_ml)(x) * bin_width,
             h = h_nocut,
             μ = result.μ,
             σ = result.σ,
@@ -445,7 +445,6 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
 end
 export fit_binned_trunc_gauss
 
-f_double_gauss(x,v) = double_gaussian(x, v.μ1, v.σ1, v.n1, v.μ2, v.σ2, v.n2)
 
 """
     fit_binned_double_gauss(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
@@ -458,6 +457,10 @@ The priors for the first gaussian peak are given by the `ps` tuple. For the prio
     * `report`: NamedTuple of the fit report which can be plotted
 """
 function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
+
+    # define double gaussina fit function
+    f_double_gauss(x,v) = double_gaussian(x, v.μ1, v.σ1, v.n1, v.μ2, v.σ2, v.n2)
+
     # create pseudo priors
     pseudo_prior = NamedTupleDist(
                 #μ1 = Normal(ps.peak_pos, 5*ps.peak_sigma),
@@ -526,8 +529,8 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
         @debug "n2: $(v_ml.n2) ± $(v_ml_err.n2)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                  (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                  residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
     else
         @debug "Best Fit values"
         @debug "μ1: $(v_ml.μ1)"
