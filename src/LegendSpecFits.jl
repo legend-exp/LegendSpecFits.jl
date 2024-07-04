@@ -59,6 +59,8 @@ include("ctc.jl")
 include("qc.jl")
 include("gof.jl")
 include("precompile.jl")
+include("lqfit.jl")
+include("lqcut.jl")
 
 abstract type UncertTag end
 ForwardDiff.:(≺)(::Type{<:ForwardDiff.Tag}, ::Type{UncertTag}) = true
