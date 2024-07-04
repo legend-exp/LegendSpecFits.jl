@@ -19,7 +19,7 @@ end
     _get_model_counts(f_fit::Base.Callable,v_ml::NamedTuple,bin_centers::StepRangeLen,bin_widths::StepRangeLen)
 aux. function to get modelled peakshape based on  histogram binning and best-fit parameter
 """
-function _get_model_counts(f_fit::Base.Callable, v_ml::NamedTuple, bin_centers::StepRangeLen, bin_widths::StepRangeLen)
+function _get_model_counts(f_fit::Base.Callable, v_ml::NamedTuple, bin_centers::Union{StepRangeLen, Vector{<:Real}}, bin_widths::Union{StepRangeLen, Vector{<:Real}})
     model_func = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
     model_counts = bin_widths .* map(energy -> model_func(energy), bin_centers) # evaluate model at bin center (= binned measured energies)
     return model_counts
