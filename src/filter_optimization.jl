@@ -61,7 +61,7 @@ end
 export fit_enc_sigmas
 
 """
-fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int64}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int64, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs") where {T <:Real}
+    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int64}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int64, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs") where {T <:Real}
 
 Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshape and return the optimal FT and the corresponding FWHM value. The cut values cut for each flat-top time a window for better histogramming.
 
@@ -78,12 +78,13 @@ Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshap
 - `ft`: optimal FT value
 - `min_fwhm`: corresponding FWHM value
 """
-function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int64}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int64, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs") where {T <:Real}
+function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int64}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int64, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs", peak::Unitful.Energy{<:Real}=2614.5u"keV") where {T <:Real}
     @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"
     
     # create empty array for results
     fts  = Quantity{<:Real}[]
     fwhm = Measurement[]
+    modes = Float64[]
     
     for (r, ft) in enumerate(e_grid_ft)
         # if ft > rt filter doesn't make sense, continue
@@ -120,6 +121,7 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
         # get fwhm
         push!(fwhm, result.fwhm)
         push!(fts, ft)
+        push!(modes, fit_cut.max)
     end
 
     # get minimal fwhm and rt
@@ -129,9 +131,9 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
         @warn "No valid FT found, setting to default"
         ft_min_fwhm = default_ft
     else
-        # calibration constant from last fit to get rough calibration for better plotting
-        c = 2614.5u"keV" ./ result.μ
-        fwhm = fwhm .* c 
+        # calibration constant from mean of modes
+        c = peak ./ mean(modes)
+        fwhm = fwhm .* c
         # get minimal fwhm and ft
         min_fwhm    = minimum(fwhm)
         ft_min_fwhm = e_grid_ft[findmin(fwhm)[2]]
@@ -150,12 +152,101 @@ function fit_fwhm_ft_fep(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, 
     return result, report
 
 end
-export fit_fwhm_ft_fep
+export fit_fwhm_ft
+
+function fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int64, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs", peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV")) where {T <:Real}
+    @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"
+    
+    # create empty array for results
+    fts_success  = Bool.(zeros(length(e_grid_ft)))
+    fwhm = measurement.(zeros(length(e_grid_ft)), zeros(length(e_grid_ft)))
+    modes = zeros(length(e_grid_ft))
+    
+    for r in eachindex(e_grid_ft)
+        # get ft
+        ft = e_grid_ft[r]
+
+        # if ft > rt filter doesn't make sense, continue
+        if ft > rt
+            @debug "FT $ft bigger than RT $rt, skipping"
+            continue
+        end
+        # get e values for this ft
+        e_ft = Array{Float64}(flatview(e_grid)[r, :])
+        e_isfinite_cut = isfinite.(e_ft)
+        qdrift_ft = qdrift[e_isfinite_cut]
+        e_ft = e_ft[e_isfinite_cut]
+
+        # sanity check
+        if count(min_e .< e_ft .< max_e) < 100
+            @debug "Not enough data points for FT $ft, skipping"
+            continue
+        end
+        # cut around peak to increase performance
+		fit_cut = cut_single_peak(e_ft, min_e, max_e,; n_bins=nbins, relative_cut=rel_cut_fit)
+		e_peak_cut = fit_cut.max - 300 .< e_ft .< fit_cut.max + 300
+		e_ft = e_ft[e_peak_cut]
+        qdrift_ft = qdrift_ft[e_peak_cut]
+
+        # create histogram from it
+        bin_width = 2 * (quantile(e_ft, 0.75) - quantile(e_ft, 0.25)) / ∛(length(e_ft))
+        h = fit(Histogram, e_ft, minimum(e_ft):bin_width:maximum(e_ft))
+
+        # create peakstats
+        ps = estimate_single_peak_stats_th228(h)
+        # check if ps guess is valid
+        if any(tuple_to_array(ps) .<= 0)
+            @debug "Invalid guess for peakstats, skipping"
+            continue
+        end
+        # fit peak
+        m_cal_simple = peak / fit_cut.max
+        result, _ = ctc_energy(e_ft .* m_cal_simple, qdrift_ft, peak, window)
+        # get fwhm
+        fwhm[r] = result.fwhm_after / m_cal_simple
+        fts_success[r] = true
+        modes[r] = fit_cut.max
+    end
+
+    # get all successful fits
+    fts = collect(e_grid_ft)[fts_success]
+    fwhm = fwhm[fts_success]
+    modes = modes[fts_success]
+    
+    # get minimal fwhm and rt
+    if isempty(fwhm)
+        @warn "No valid FWHM found, setting to NaN"
+        min_fwhm = NaN * u"keV"
+        @warn "No valid FT found, setting to default"
+        ft_min_fwhm = default_ft
+    else
+        # calibration constant from mean of modes
+        c = peak ./ mean(modes)
+        fwhm = fwhm .* c
+        # get minimal fwhm and ft
+        min_fwhm    = minimum(fwhm)
+        ft_min_fwhm = e_grid_ft[findmin(fwhm)[2]]
+    end
+    # generate result and report
+    result = (
+        ft = measurement(ft_min_fwhm, step(e_grid_ft)),
+        min_fwhm = min_fwhm
+    )
+    report = (
+        ft = result.ft, 
+        min_fwhm = result.min_fwhm,
+        e_grid_ft = fts,
+        fwhm = fwhm,
+    )
+    return result, report
+
+end
+export fit_fwhm_ft_ctc
 
 """
-    fit_sg_wl(dep_sep_data, a_grid_wl_sg, optimization_config)
+    fit_sf_wl(dep_sep_data, a_grid_wl_sg, optimization_config)
 
-Fit the SG window length for the SEP data and return the optimal window length and the corresponding survival fraction.
+Fit a A/E filter window length for the SEP data and return the optimal window length and the corresponding survival fraction.
 
 # Arguments
 - `dep_sep_data`: NamedTuple with the DEP and SEP data
@@ -166,7 +257,7 @@ Fit the SG window length for the SEP data and return the optimal window length a
 - `result`: optimal window length and corresponding survival fraction
 - `report`: report with all window lengths and survival fractions
 """
-function fit_sg_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRangeLen, optimization_config::PropDict; uncertainty::Bool = false)
+function fit_sf_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRangeLen, optimization_config::PropDict; uncertainty::Bool = false, default_wl::Unitful.Time{<:Real}=100.0u"ns")
     # unpack config
     dep, dep_window = optimization_config.dep, optimization_config.dep_window
     sep, sep_window = optimization_config.sep, optimization_config.sep_window
@@ -223,7 +314,7 @@ function fit_sg_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRan
         @warn "No valid SEP SF found, setting to NaN"
         min_sf = measurement(NaN, NaN)*u"percent"
         @warn "No valid window length found, setting to default"
-        wl_sg_min_sf = last(a_grid_wl_sg[a_grid_wl_sg .< 110u"ns"])
+        wl_sg_min_sf = default_wl
     else
         min_sf       = minimum(sep_sfs[sep_sfs_cut])
         wl_sg_min_sf = wls[sep_sfs_cut][findmin(sep_sfs[sep_sfs_cut])[2]]
@@ -244,4 +335,4 @@ function fit_sg_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRan
     )
     return result, report
 end
-export fit_sg_wl
+export fit_sf_wl
