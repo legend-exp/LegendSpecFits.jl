@@ -153,7 +153,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :gof, :f_bck)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
     f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     legend := :topright
     ylim_max = max(3*value(report.f_sig(report.v.μ)), 3*maximum(report.h.weights))
@@ -266,7 +266,16 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof)}, mode::Symbol)
+# @recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof, :f_bckslope)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
+#     report_trunc = :v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof), (report.v, report.h, report.f_fit, report.f_sig, report.f_lowEtail, report.f_bck, report.gof)
+#     )
+#     f(report_trunc; show_label=show_label, show_fit=show_fit, f_fit_x_step_scaling=f_fit_x_step_scaling, _subplot=_subplot)
+# end
+# """
+# first( collect(pairs(report))[1] )
+
+# """
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :gof, :f_bck)}, mode::Symbol)
     if mode == :cormat 
         cm = cor(report.gof.covmat)
     elseif  mode == :covmat

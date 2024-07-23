@@ -95,6 +95,24 @@ end
 export gamma_peakshape
 
 """
+    gamma_peakshape_BkgSlope(
+    x::Real, μ::Real, σ::Real, n::Real,
+    step_amplitude::Real, skew_fraction::Real, skew_width::Real,
+    background::Real, background_slope::Real,
+)
+    
+Describes the shape of a typical gamma peak in a detector with a 2-component background: flat + linear slope 
+"""
+function gamma_peakshape_BkgSlope(
+    x::Real, μ::Real, σ::Real, n::Real,
+    step_amplitude::Real, skew_fraction::Real, skew_width::Real,
+    background::Real, background_slope::Real,
+)
+ return gamma_peakshape(x, μ, σ, n, step_amplitude, skew_fraction, skew_width, background) + background_slope * (x - μ)
+end
+
+
+"""
     signal_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
         skew_fraction::Real, skew_width::Real,
@@ -125,6 +143,13 @@ function background_peakshape(
     return gamma_peakshape(x, μ, σ, 0.0, step_amplitude, 0.0, 0.0, background)
 end
 export background_peakshape
+
+function background_peakshape(
+    x::Real, μ::Real, σ::Real, 
+    step_amplitude::Real, background::Real, background_slope::Real
+)
+    return gamma_peakshape(x, μ, σ, 0.0, step_amplitude, 0.0, 0.0, background) + background_slope * (x - μ)
+end
 
 """
     lowEtail_peakshape(
