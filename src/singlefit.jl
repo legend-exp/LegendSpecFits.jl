@@ -18,6 +18,7 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
 
     bin_width = get_friedman_diaconis_bin_width(x[(x .> cut_low) .&& (x .< cut_high)])
     x_min, x_max = minimum(x), maximum(x)
+    x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
     ps = estimate_single_peak_stats_th228(h_nocut)
     @debug "Peak stats: $ps"
@@ -95,6 +96,8 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
         result = merge(v_ml, )
     end
 
+    # create histogram of nocut data for normalization 20 sigma around peak
+    h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
     # normalize nocut histogram to PDF of cut histogram
     h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(h.weights) ./ step(h.edges[1]))
 
@@ -125,6 +128,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     # get peak stats
     bin_width = get_friedman_diaconis_bin_width(x[(x .> cut_low) .&& (x .< cut_high)])
     x_min, x_max = minimum(x), maximum(x)
+    x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
     ps = estimate_single_peak_stats_th228(h_nocut)
     @debug "Peak stats: $ps"
@@ -202,6 +206,8 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
         result = merge(v_ml, )
     end
 
+    # create histogram of nocut data for normalization 20 sigma around peak
+    h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
     # normalize nocut histogram to PDF of cut histogram
     h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(h.weights) ./ step(h.edges[1]))
 
@@ -234,6 +240,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     # get peak stats
     bin_width = get_friedman_diaconis_bin_width(x[(x .> cut_low) .&& (x .< cut_high)])
     x_min, x_max = minimum(x), maximum(x)
+    x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
     ps = estimate_single_peak_stats_th228(h_nocut)
     @debug "Peak stats: $ps"
@@ -310,7 +317,9 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
 
         result = merge(v_ml, )
     end
-
+    
+    # create histogram of nocut data for normalization 20 sigma around peak
+    h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
     # normalize nocut histogram to PDF of cut histogram
     h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(h.weights) ./ step(h.edges[1]))
 
