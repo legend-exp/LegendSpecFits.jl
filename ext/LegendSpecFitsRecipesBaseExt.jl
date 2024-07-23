@@ -32,7 +32,7 @@ end
         label := "Normal Fit (μ = $(round_wo_units(report.μ, digits=2)), σ = $(round_wo_units(report.σ, digits=2)))"
         lw := 3
         bottom_margin --> (-4, :mm)
-        first(report.h.edges[1]):ustrip(Measurements.value(report.σ / 1000)):last(report.h.edges[1]), t -> report.f_fit(t)
+        ustrip(Measurements.value(report.μ - 10*report.σ)):ustrip(Measurements.value(report.σ / 1000)):ustrip(Measurements.value(report.μ + 10*report.σ)), t -> report.f_fit(t)
     end
     if !isempty(report.gof)
         link --> :x
