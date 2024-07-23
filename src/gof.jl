@@ -40,12 +40,12 @@ baseline method to get goodness-of-fit (gof)
  * `chi2` chi2 value
  * `dof` degrees of freedom
 """
-function p_value(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::NamedTuple)
+function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::NamedTuple)
     # prepare data
     counts, bin_widths, bin_centers = _prepare_data(h)
 
     # get peakshape of best-fit 
-    model_counts = _get_model_counts(f_fit, v_ml, bin_centers, bin_widths)
+    model_counts = _get_model_counts(fit_func, v_ml, bin_centers, bin_widths)
 
     # calculate chi2
     chi2 = sum((model_counts[model_counts .> 0] - counts[model_counts .> 0]) .^ 2 ./ model_counts[model_counts .> 0])

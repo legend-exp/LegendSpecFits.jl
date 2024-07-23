@@ -71,8 +71,8 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
     mean_background_left, mean_background_right = mean(view(W, 1:idx_bkg_left)), mean(view(W, idx_bkg_right:length(W)))
     
     mean_background_step = (mean_background_left - mean_background_right) / bin_width
-    mean_background = (mean_background_left + mean_background_right) / 2 / bin_width
-    mean_background_std = std(view(W, 1:idx_bkg_left)) / bin_width
+    mean_background = mean_background_right / bin_width #(mean_background_left + mean_background_right) / 2 / bin_width
+    mean_background_std = 0.5*(std(view(W, 1:idx_bkg_left)) + std(view(W, idx_bkg_right:length(W)))) / bin_width
 
     # sanity checks
     mean_background = ifelse(mean_background == 0, 0.01, mean_background)
@@ -199,7 +199,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
         # calculate p-value
-        pval, chi2, dof = p_value(th228_fit_functions.f_fit, h, v_ml)
+        pval, chi2, dof = p_value(th228_fit_functions[fit_func], h, v_ml)
         
         # calculate normalized residuals
         residuals, residuals_norm, p_value_binwise, bin_centers = get_residuals(th228_fit_functions[fit_func], h, v_ml)
