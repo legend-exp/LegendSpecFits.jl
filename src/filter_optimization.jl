@@ -173,7 +173,7 @@ function fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector
         end
         # get e values for this ft
         e_ft = Array{Float64}(flatview(e_grid)[r, :])
-        e_isfinite_cut = isfinite.(e_ft)
+        e_isfinite_cut = isfinite.(e_ft) .&& isfinite.(qdrift) .&& e_ft .> 0 .&& qdrift .> 0
         qdrift_ft = qdrift[e_isfinite_cut]
         e_ft = e_ft[e_isfinite_cut]
 
