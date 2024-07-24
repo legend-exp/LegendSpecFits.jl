@@ -21,7 +21,7 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
              skew_width = ifelse(low_e_tail, weibull_from_mx(0.001, 1e-2), ConstValueDist(1.0)),
              background = weibull_from_mx(ps.mean_background, ps.mean_background + 5*ps.mean_background_std),
              background_slope = ifelse(ps.mean_background < 5, # mean_background just an estimate; cannot risk negative counts
-                        truncated(Normal(0, ps.mean_background_std / (window_left + window_right)), - 0.5*ps.mean_background / window_right, 0.5*(ps.mean_background + ps.mean_background_step) / window_left),
+                        ConstValueDist(0),#truncated(Normal(0, ps.mean_background_std / (window_left + window_right)), - 0.5*ps.mean_background / window_right, 0.5*(ps.mean_background + ps.mean_background_step) / window_left),
                         truncated(Normal(0, ps.mean_background_std / (window_left + window_right)), - ps.mean_background / window_right, (ps.mean_background + ps.mean_background_step) / window_left)),
          )
      end
