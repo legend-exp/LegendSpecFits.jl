@@ -95,7 +95,7 @@ end
 export gamma_peakshape
 
 """
-    gamma_peakshape_BkgSlope(
+    gamma_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
     step_amplitude::Real, skew_fraction::Real, skew_width::Real,
     background::Real, background_slope::Real,
@@ -103,7 +103,7 @@ export gamma_peakshape
     
 Describes the shape of a typical gamma peak in a detector with a 2-component background: flat + linear slope 
 """
-function gamma_peakshape_BkgSlope(
+function gamma_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
     step_amplitude::Real, skew_fraction::Real, skew_width::Real,
     background::Real, background_slope::Real,
@@ -111,6 +111,31 @@ function gamma_peakshape_BkgSlope(
  return gamma_peakshape(x, μ, σ, n, step_amplitude, skew_fraction, skew_width, background) + background_slope * (x - μ)
 end
 
+
+
+"""
+    gamma_peakshape_tails(
+        x::Real, μ::Real, σ::Real, n::Real,
+        step_amplitude::Real, skew_fraction_lowE::Real, skew_width_lowE::Real,
+        skew_fraction_highE::Real, skew_width_highE::Real,
+        background::Real
+    )
+    
+Describes the shape of a typical gamma peak in a detector with a flat background PLUS high-energy tail.
+"""
+function gamma_peakshape_tails(
+    x::Real, μ::Real, σ::Real, n::Real,
+    step_amplitude::Real, skew_fraction_lowE::Real, skew_width_lowE::Real, 
+    skew_fraction_highE::Real, skew_width_highE::Real,
+    background::Real, 
+)
+    return n * (
+            (1 - skew_fraction_lowE - skew_fraction_highE) * gauss_pdf(x, μ, σ) +
+            skew_fraction_lowE * ex_gauss_pdf(-x, -μ, σ, skew_width_lowE * μ) + 
+            skew_fraction_highE * ex_gauss_pdf(x, μ, σ, skew_width_highE * μ)
+            ) + step_amplitude * step_gauss(-x, -μ, σ) + background;
+end
+export gamma_peakshape_tails
 
 """
     signal_peakshape(
@@ -167,7 +192,22 @@ function lowEtail_peakshape(
     return n * skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
 end
 export lowEtail_peakshape
-
+"""
+    highEtail_peakshape(
+        x::Real, μ::Real, σ::Real, n::Real,
+        skew_fraction::Real, skew_width::Real,
+    )
+    
+Describes the high-E signal tail part of the shape 
+"""
+function highEtail_peakshape(
+    x::Real, μ::Real, σ::Real, n::Real,
+    skew_fraction_h::Real, skew_width_h::Real
+)
+    skew = skew_width_h * μ
+    return n * skew_fraction_h * ex_gauss_pdf(x, μ, σ, skew)
+end
+export highEtail_peakshape
 
 """
     ex_step_gauss(x::Real, l::Real, k::Real, t::Real, d::Real)
@@ -245,3 +285,30 @@ function double_gaussian(
     return n1 * gauss_pdf(x, μ1, σ1) + n2 * gauss_pdf(x, μ2, σ2)  
 end
 export double_gaussian
+
+function peakshape_components(fit_func::Symbol)
+    if fit_func == :f_fit
+       funcs = (f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction),
+            f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
+            f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background))
+    elseif fit_func == :f_fit_WithBkgSlope
+        funcs = (f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction),
+            f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
+            f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background, v.background_slope))
+    elseif fit_func == :f_fit_tails
+        funcs = (f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, (v.skew_fraction + v.skew_fraction_highE)),
+            f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
+            f_highEtail = (x, v) -> highEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction_highE, v.skew_width_highE), 
+            f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background))
+    end 
+    labels = (f_sig = "Signal", f_lowEtail = "Low-energy tail", f_bck = "Background", f_highEtail = "High-energy tail")
+    colors = (f_sig = :orangered1, f_lowEtail = :orange, f_bck = :dodgerblue2, f_highEtail = :forestgreen)
+    linestyles = (f_sig = :solid, f_lowEtail = :dashdot, f_bck = :dash, f_highEtail = :dot)
+    return (funcs = funcs, labels = labels, colors = colors, linestyles = linestyles) 
+end
+
+function peakshape_components(fit_func::Symbol, v::NamedTuple)
+     components  = peakshape_components(fit_func)
+     out = (; components..., funcs = merge([NamedTuple{Tuple([name])}(Tuple([x -> Base.Fix2(components.funcs[name], v)(x)]))  for name in  keys(components.funcs)]...))
+    return out #(; components..., funcs = merge([NamedTuple{Tuple([name])}(Tuple([x -> Base.Fix2(components.funcs[name], v)(x)]))  for name in  keys(components.funcs)]...))
+end

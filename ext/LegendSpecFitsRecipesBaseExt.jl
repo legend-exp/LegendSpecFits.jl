@@ -153,24 +153,26 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :gof, :f_bck)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
     f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     legend := :topright
-    ylim_max = max(3*value(report.f_sig(report.v.μ)), 3*maximum(report.h.weights))
+    ylim_max = max(3*value(report.f_fit(report.v.μ)), 3*maximum(report.h.weights))
     ylim_max = ifelse(ylim_max == 0.0, 1e5, ylim_max)
     ylim_min = 0.1*minimum(filter(x -> x > 0, report.h.weights))
     framestyle --> :box
     @series begin
-        seriestype := :stepbins
+        seriestype := :bar
+        fillalpha := 1
+        fillcolor := :lightgrey
+        linecolor := :lightgrey
+        fillrange := 1e-7
+        bar_width := diff(report.h.edges[1])[1]
         label := ifelse(show_label, "Data", "")
-        bins --> :sqrt
         yscale := :log10
-        ylims --> (ylim_min, ylim_max)
+        bins --> :sqrt
         xlabel := "Energy (keV)"
-        xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
-        ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
         subplot --> _subplot
-        LinearAlgebra.normalize(report.h, mode = :density)
+        collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2, LinearAlgebra.normalize(report.h, mode = :density).weights#LinearAlgebra.normalize(report.h, mode = :density)
     end
     if show_fit
         @series begin
@@ -180,41 +182,34 @@ end
             else
                 label := ifelse(show_label, "Best Fit", "")
             end
-            color := :red
+            linewidth := 2.3
+            color := :black
             subplot --> _subplot
-            # ribbon := uncertainty.(report.f_fit.(minimum(report.h.edges[1]):0.1:maximum(report.h.edges[1])))
             minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1])))
         end
-        @series begin
-            seriestype := :line
-            label := ifelse(show_label, "Signal", "")
-            subplot --> _subplot
-            color := :green
-            minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_sig
-        end
-        @series begin
-            seriestype := :line
-            label := ifelse(show_label, "Low Energy Tail", "")
-            subplot --> _subplot
-            color := :blue
-            minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_lowEtail
-        end
-        @series begin
-            seriestype := :line
-            label := ifelse(show_label, "Background", "")
-            subplot --> _subplot
-            margins --> (0, :mm)
-            bottom_margin --> (-4, :mm)
-            if !isempty(report.gof)
-                xlabel := ""
-                xticks --> ([])
+        for (idx, component) in  enumerate(keys(report.f_components.funcs))
+            @series begin
+                seriestype := :line
+                color := report.f_components.colors[component]
+                label := ifelse(show_label, report.f_components.labels[component], "")
+                linewidth := 2
+                linestyle := report.f_components.linestyles[component]
+                if idx == length(report.f_components.funcs)
+                    margins --> (0, :mm)
+                    bottom_margin --> (-4, :mm)
+                    if !isempty(report.gof)
+                        xlabel := ""
+                        xticks --> ([])
+                    end
+                    ylims --> (ylim_min, ylim_max)
+                    xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
+                    ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+                end
+                subplot --> _subplot
+                minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_components.funcs[component]
             end
-            ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
-            ylims --> (ylim_min, ylim_max)
-            xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
-            color := :black
-            minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_bck
         end
+
         if !isempty(report.gof)
             ylims_res_max, ylims_res_min = 5, -5
             if any(report.gof.residuals_norm .> 5) || any(report.gof.residuals_norm .< -5)

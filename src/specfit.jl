@@ -8,7 +8,8 @@ th228_fit_functions = (
     f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background),
     f_bck_slope = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background, v.background_slope),
     f_sigWithTail = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction) + lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
-    f_fit_WithBkgSlope = (x, v) -> gamma_peakshape_BkgSlope(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.background, v.background_slope)
+    f_fit_WithBkgSlope = (x, v) -> gamma_peakshape(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.background, v.background_slope),
+    f_fit_tails = (x, v) -> gamma_peakshape_tails(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.skew_fraction_highE, v.skew_width_highE, v.background)
 )
 """
     estimate_single_peak_stats(h::Histogram, calib_type::Symbol=:th228)
@@ -227,15 +228,9 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
             v = v_ml,
             h = h,
             f_fit = x -> Base.Fix2(th228_fit_functions[fit_func], result)(x),
-            f_sig = x -> Base.Fix2(th228_fit_functions.f_sig, v_ml)(x),
-            f_lowEtail = x -> Base.Fix2(th228_fit_functions.f_lowEtail, v_ml)(x),
+            f_components = peakshape_components(fit_func, v_ml),
             gof = result.gof
         )
-        if fit_func == :f_fit_WithBkgSlope
-            report = merge(report, (f_bck = x -> Base.Fix2(th228_fit_functions.f_bck_slope, v_ml)(x),))
-        else
-            report = merge(report, (f_bck = x -> Base.Fix2(th228_fit_functions.f_bck, v_ml)(x),))
-        end
     else
         # get fwhm of peak
         fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, v_ml, false)
@@ -253,9 +248,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
             v = v_ml,
             h = h,
             f_fit = x -> Base.Fix2(th228_fit_functions.f_fit, v_ml)(x),
-            f_sig = x -> Base.Fix2(th228_fit_functions.f_sig, v_ml)(x),
-            f_lowEtail = x -> Base.Fix2(th228_fit_functions.f_lowEtail, v_ml)(x),
-            f_bck = x -> Base.Fix2(th228_fit_functions.f_bck, v_ml)(x),
+            f_components = peakshape_components(fit_func, v_ml),
             gof = NamedTuple()
         )
     end
