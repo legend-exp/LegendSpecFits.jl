@@ -119,7 +119,7 @@ end
 export fit_peaks
 
 function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Vector{T},; e_unit::Union{Nothing, Unitful.EnergyUnits}=nothing, uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false,
-     fit_func::Symbol=:f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true)) where T<:Any
+     fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true)) where T<:Any
     # create return and result dicts
     result = Dict{T, NamedTuple}()
     report = Dict{T, NamedTuple}()
@@ -201,9 +201,9 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
 
         # calculate p-value
         pval, chi2, dof = p_value(th228_fit_functions[fit_func], h, v_ml)
-        
+        pval_ll, chi2_ll, dof_ll = p_value_poissonll(th228_fit_functions[fit_func], h, v_ml)
         # calculate normalized residuals
-        residuals, residuals_norm, p_value_binwise, bin_centers = get_residuals(th228_fit_functions[fit_func], h, v_ml)
+        residuals, residuals_norm, _, bin_centers = get_residuals(th228_fit_functions[fit_func], h, v_ml)
 
         # get fwhm of peak
         fwhm, fwhm_err = 
@@ -221,8 +221,8 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
     
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, covmat_raw = param_covariance_raw, 
-                residuals = residuals, residuals_norm = residuals_norm, pvalue_binwise = p_value_binwise, bin_centers = bin_centers))
+                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance,  
+                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers, pvalue_ll = pval_ll, chi2_ll = chi2_ll))
                 )
         report = (
             v = v_ml,
