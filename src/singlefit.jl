@@ -99,7 +99,7 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     # create histogram of nocut data for normalization 20 sigma around peak
     h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
     # normalize nocut histogram to PDF of cut histogram
-    h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(h.weights) ./ step(h.edges[1]))
+    h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(abs.(h.weights)) ./ step(h.edges[1]))
 
     report = (
         f_fit = t -> Base.Fix2(f_fit, v_ml)(t),
@@ -209,7 +209,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     # create histogram of nocut data for normalization 20 sigma around peak
     h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
     # normalize nocut histogram to PDF of cut histogram
-    h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(h.weights) ./ step(h.edges[1]))
+    h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(abs.(h.weights)) ./ step(h.edges[1]))
 
     report = (
         f_fit = t -> Base.Fix2(f_fit, v_ml)(t),
@@ -321,7 +321,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     # create histogram of nocut data for normalization 20 sigma around peak
     h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
     # normalize nocut histogram to PDF of cut histogram
-    h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(h.weights) ./ step(h.edges[1]))
+    h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(abs.(h.weights)) ./ step(h.edges[1]))
 
     report = (
         f_fit = t -> Base.Fix2(f_fit, v_ml)(t),
