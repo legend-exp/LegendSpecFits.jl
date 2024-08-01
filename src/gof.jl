@@ -48,16 +48,16 @@ function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::NamedTup
     model_counts = _get_model_counts(fit_func, v_ml, bin_centers, bin_widths)
 
     # calculate chi2
-    chi2 = sum((model_counts[model_counts .> 0] - counts[model_counts .> 0]) .^ 2 ./ model_counts[model_counts .> 0])
+    chi2 = sum((model_counts[counts .> 0] - counts[counts .> 0]) .^ 2 ./ model_counts[counts .> 0])
     npar = length(v_ml)
-    dof = length(counts[model_counts .> 0]) - npar
+    dof = length(counts[counts .> 0]) - npar
     if dof<0
         pval = NaN # tbd 
     else
         pval = ccdf(Chisq(dof),chi2)
     end
-    if any(model_counts .<= 5)
-        @debug "Bin width <= $(round(minimum(model_counts), digits=0)) counts - Chi2 test might be not valid"
+    if any(counts .<= 5)
+        @debug "Bin width <= $(round(minimum(counts), digits=0)) counts - Chi2 test might be not valid"
     else
         @debug "p-value = $(round(pval, digits=2))"
     end
@@ -118,7 +118,7 @@ alternative p-value calculation via Monte Carlo sampling. **Warning**: computati
 # Returns
 * % p value --> comparison of sample max. loglikelihood and max. loglikelihood of best-fit
 """
-function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background)}, v_ml::NamedTuple, ; n_samples::Int64=1000)
+function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}, v_ml::NamedTuple, ; n_samples::Int64=1000) where T<:Real
     counts, bin_widths, bin_centers = _prepare_data(h) # get data 
     # get peakshape of best-fit and maximum likelihood value
     model_func = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
@@ -138,8 +138,8 @@ function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple
     h_mc = h # make copy of data histogram
     for i = 1:n_samples
         h_mc.weights = counts_mc[i] # overwrite counts with MC values
-        result_fit_mc, report = fit_single_peak_th228(h_mc, ps; uncertainty=false) # fit MC histogram
-        fit_par_mc = result_fit_mc[(:μ, :σ, :n, :step_amplitude, :skew_fraction, :skew_width, :background)]
+        result_fit_mc, _ = fit_single_peak_th228(h_mc, ps; uncertainty=false) # fit MC histogram
+        fit_par_mc = mvalue(result_fit_mc[(:μ, :σ, :n, :step_amplitude, :skew_fraction, :skew_width, :background)])
         model_func_sample = Base.Fix2(f_fit, fit_par_mc) # fix the fit parameters to ML best-estimate
         loglike_bf_mc[i] = -hist_loglike(model_func_sample, h_mc) # loglikelihood for best-fit
     end

@@ -75,67 +75,56 @@ export exponential_decay
 """
     gamma_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
-        step_amplitude::Real, skew_fraction::Real, skew_width::Real,
-        background::Real
+        step_amplitude::Real, skew_fraction::Real, skew_width::Real, background::Real
     )
-    
-Describes the shape of a typical gamma peak in a detector with a flat background.
+Standard gamma peakshape: Describes the shape of a typical gamma peak in a detector.
+Components: 
+- Gaussian signal peak with `μ`, `σ`, `n - skew_fraction`
+- low-energy tail: `skew_fraction`, `skew_width`
+- background:  energy-independent `background` and step-function scaled with `step_amplitude` from Compton scattered gammas
 """
 function gamma_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
-    step_amplitude::Real, skew_fraction::Real, skew_width::Real,
-    background::Real
+    step_amplitude::Real, skew_fraction::Real, skew_width::Real, background::Real
 )
     skew = skew_width * μ
     return n * (
             (1 - skew_fraction) * gauss_pdf(x, μ, σ) +
             skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
-        ) + step_amplitude * step_gauss(-x, -μ, σ) + background;
+        ) +  background_peakshape(x, µ, σ, step_amplitude, background;) 
 end
 export gamma_peakshape
 
 """
-    gamma_peakshape(
-    x::Real, μ::Real, σ::Real, n::Real,
-    step_amplitude::Real, skew_fraction::Real, skew_width::Real,
-    background::Real, background_slope::Real,
-)
-    
-Describes the shape of a typical gamma peak in a detector with a 2-component background: flat + linear slope 
-"""
-function gamma_peakshape(
-    x::Real, μ::Real, σ::Real, n::Real,
-    step_amplitude::Real, skew_fraction::Real, skew_width::Real,
-    background::Real, background_slope::Real,
-)
- return gamma_peakshape(x, μ, σ, n, step_amplitude, skew_fraction, skew_width, background) + background_slope * (x - μ)
-end
-
-
-
-"""
-    gamma_peakshape_tails(
+    gamma_peakshape_ext(
         x::Real, μ::Real, σ::Real, n::Real,
-        step_amplitude::Real, skew_fraction_lowE::Real, skew_width_lowE::Real,
-        skew_fraction_highE::Real, skew_width_highE::Real,
-        background::Real
+        step_amplitude::Real, skew_fraction::Real, skew_width::Real,
+        background::Real;  
+        skew_fraction_highE::Real = 0.0, skew_width_highE::Real= 0.0, 
+        background_kwargs... 
     )
     
-Describes the shape of a typical gamma peak in a detector with a flat background PLUS high-energy tail.
+Extended gamma peakshape: 
+Additional parameters compared to `gamma_peakshape()`:
+- high-energy tail: `skew_fraction_highE`, `skew_width_highE`
+- background: linear slope: `background_slope` (optional)
+- background: exponential decay:  `background_exp` (optional)
 """
-function gamma_peakshape_tails(
+# """
+function gamma_peakshape_ext(
     x::Real, μ::Real, σ::Real, n::Real,
-    step_amplitude::Real, skew_fraction_lowE::Real, skew_width_lowE::Real, 
-    skew_fraction_highE::Real, skew_width_highE::Real,
-    background::Real, 
+    step_amplitude::Real, skew_fraction::Real, skew_width::Real,
+    background::Real;  
+    skew_fraction_highE::Real = 0.0, skew_width_highE::Real= 0.0, 
+    background_kwargs... 
 )
     return n * (
-            (1 - skew_fraction_lowE - skew_fraction_highE) * gauss_pdf(x, μ, σ) +
-            skew_fraction_lowE * ex_gauss_pdf(-x, -μ, σ, skew_width_lowE * μ) + 
-            skew_fraction_highE * ex_gauss_pdf(x, μ, σ, skew_width_highE * μ)
-            ) + step_amplitude * step_gauss(-x, -μ, σ) + background;
+            (1 - skew_fraction - skew_fraction_highE) * gauss_pdf(x, μ, σ) +
+            skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew_width * μ) + 
+            skew_fraction_highE * ex_gauss_pdf(x, μ, σ, skew_width_highE * μ)) + 
+            background_peakshape(x, µ, σ, step_amplitude, background; background_kwargs...)
 end
-export gamma_peakshape_tails
+export gamma_peakshape_ext
 
 """
     signal_peakshape(
@@ -155,26 +144,25 @@ export signal_peakshape
 
 """
     background_peakshape(
-        x::Real, μ::Real, σ::Real, n::Real,
-        skew_fraction::Real, skew_width::Real,
-    )
-    
-Describes the background part of the shape of a typical gamma peak in a detector.
+    x::Real, μ::Real, σ::Real, 
+    step_amplitude::Real, background::Real; 
+    background_slope::Real = 0.0, background_exp = 0.0, background_center::Real = µ
+)
+
+Describes the background part of the shape of a typical gamma peak in a detector:  components: 
+- step-function scaled with `step_amplitude``
+- energy-independent background: `background``
+- linear slope: `background_slope` (optional)
+- exponential decay:  `background_exp` (optional)
 """
 function background_peakshape(
     x::Real, μ::Real, σ::Real, 
-    step_amplitude::Real, background::Real
+    step_amplitude::Real, background::Real; 
+    background_slope::Real = 0.0, background_exp = 0.0, background_center::Real = μ
 )
-    return gamma_peakshape(x, μ, σ, 0.0, step_amplitude, 0.0, 0.0, background)
+    step_amplitude * step_gauss(-x, -μ, σ) + background * exp(-background_exp * (x - background_center)) + background_slope * (x - background_center)
 end
 export background_peakshape
-
-function background_peakshape(
-    x::Real, μ::Real, σ::Real, 
-    step_amplitude::Real, background::Real, background_slope::Real
-)
-    return gamma_peakshape(x, μ, σ, 0.0, step_amplitude, 0.0, 0.0, background) + background_slope * (x - μ)
-end
 
 """
     lowEtail_peakshape(
@@ -294,7 +282,11 @@ function peakshape_components(fit_func::Symbol)
     elseif fit_func == :f_fit_WithBkgSlope
         funcs = (f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction),
             f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
-            f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background, v.background_slope))
+            f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background; background_slope =  v.background_slope))
+    elseif fit_func == :f_fit_WithBkgExp
+        funcs = (f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction),
+            f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
+            f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background; background_exp =  v.background_exp))
     elseif fit_func == :f_fit_tails
         funcs = (f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, (v.skew_fraction + v.skew_fraction_highE)),
             f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
@@ -310,5 +302,5 @@ end
 function peakshape_components(fit_func::Symbol, v::NamedTuple)
      components  = peakshape_components(fit_func)
      out = (; components..., funcs = merge([NamedTuple{Tuple([name])}(Tuple([x -> Base.Fix2(components.funcs[name], v)(x)]))  for name in  keys(components.funcs)]...))
-    return out #(; components..., funcs = merge([NamedTuple{Tuple([name])}(Tuple([x -> Base.Fix2(components.funcs[name], v)(x)]))  for name in  keys(components.funcs)]...))
+    return out
 end

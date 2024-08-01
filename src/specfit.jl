@@ -6,10 +6,10 @@ th228_fit_functions = (
     f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction),
     f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
     f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background),
-    f_bck_slope = (x, v) -> background_peakshape(x, v.μ, v.σ, v.step_amplitude, v.background, v.background_slope),
     f_sigWithTail = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction) + lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
-    f_fit_WithBkgSlope = (x, v) -> gamma_peakshape(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.background, v.background_slope),
-    f_fit_tails = (x, v) -> gamma_peakshape_tails(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.skew_fraction_highE, v.skew_width_highE, v.background)
+    f_fit_WithBkgSlope = (x, v) -> gamma_peakshape_ext(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.background; background_slope =  v.background_slope),
+    f_fit_WithBkgExp = (x, v) -> gamma_peakshape_ext(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.background; background_exp =  v.background_exp),
+    f_fit_tails = (x, v) -> gamma_peakshape_ext(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width , v.background; skew_fraction_highE = v.skew_fraction_highE, skew_width_highE = v.skew_width_highE),
 )
 """
     estimate_single_peak_stats(h::Histogram, calib_type::Symbol=:th228)
@@ -74,7 +74,8 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
     mean_background_step = (mean_background_left - mean_background_right) / bin_width
     mean_background = mean_background_right / bin_width #(mean_background_left + mean_background_right) / 2 / bin_width
     mean_background_std = 0.5*(std(view(W, 1:idx_bkg_left)) + std(view(W, idx_bkg_right:length(W)))) / bin_width
-
+    #mean_background_err = 0.5*(std(view(W, 1:idx_bkg_left))/sqrt(length(1:idx_bkg_left)) + std(view(W, idx_bkg_right:length(W)))/sqrt(length(idx_bkg_right:length(W))) ) / bin_width # error of the mean 
+    
     # sanity checks
     mean_background = ifelse(mean_background == 0, 0.01, mean_background)
     mean_background_step = ifelse(mean_background_step < 1e-2, 1e-2, mean_background_step)
@@ -93,7 +94,7 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
         peak_counts = peak_counts, 
         mean_background = mean_background,
         mean_background_step = mean_background_step,
-        mean_background_std = mean_background_std
+        mean_background_std = mean_background_std,
     )
 end
 
@@ -200,8 +201,9 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
         # calculate p-value
-        pval, chi2, dof = p_value(th228_fit_functions[fit_func], h, v_ml)
-        pval_ll, chi2_ll, dof_ll = p_value_poissonll(th228_fit_functions[fit_func], h, v_ml)
+        pval_ls, chi2_ls, _ = p_value(th228_fit_functions[fit_func], h, v_ml) # based on least-squared
+        pval, chi2, dof = p_value_poissonll(th228_fit_functions[fit_func], h, v_ml) # based on likelihood ratio 
+
         # calculate normalized residuals
         residuals, residuals_norm, _, bin_centers = get_residuals(th228_fit_functions[fit_func], h, v_ml)
 
@@ -222,7 +224,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
                 (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance,  
-                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers, pvalue_ll = pval_ll, chi2_ll = chi2_ll))
+                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers, pvalue_ls = pval_ls, chi2_ls = chi2_ls))
                 )
         report = (
             v = v_ml,
