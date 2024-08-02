@@ -250,6 +250,18 @@ end
 export fit_single_peak_th228
 
 """
+    peak_centroid(v::NamedTuple)
+calculate centroid of gamma peak from fit parameters
+"""
+function peak_centroid(v::NamedTuple)
+    centroid = v.μ - v.skew_fraction * (v.µ * v.skew_width)
+    if haskey(v, :skew_fraction_highE)
+        centroid += v.skew_fraction_highE * (v.µ * v.skew_width_highE)
+    end
+    return centroid
+end
+export peak_centroid
+"""
     estimate_fwhm(v::NamedTuple, v_err::NamedTuple)
 Get the FWHM of a peak from the fit parameters.
 
