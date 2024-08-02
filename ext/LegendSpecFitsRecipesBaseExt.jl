@@ -156,6 +156,8 @@ end
 @recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
     f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     legend := :topright
+    foreground_color_legend := :silver
+    background_color_legend := :white
     ylim_max = max(3*value(report.f_fit(report.v.μ)), 3*maximum(report.h.weights))
     ylim_max = ifelse(ylim_max == 0.0, 1e5, ylim_max)
     ylim_min = 0.1*minimum(filter(x -> x > 0, report.h.weights))
