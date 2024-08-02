@@ -62,6 +62,7 @@ include("precompile.jl")
 include("lqfit.jl")
 include("lqcut.jl")
 include("pseudo_prior.jl")
+include("specfit_functions.jl")
 abstract type UncertTag end
 ForwardDiff.:(≺)(::Type{<:ForwardDiff.Tag}, ::Type{UncertTag}) = true
 ForwardDiff.:(≺)(::Type{UncertTag}, ::Type{<:ForwardDiff.Tag}) = false
