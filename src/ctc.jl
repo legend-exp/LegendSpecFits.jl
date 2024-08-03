@@ -62,7 +62,7 @@ function ctc_energy(e::Array{<:Unitful.Energy{<:Real}}, qdrift::Array{<:Real}, p
 
     # minimize function
     fct_range, fct_start = [0.0, 1e-3]*e_unit, [1e-7]*e_unit
-    opt_r = optimize(f_minimize, ustrip.(e_unit, fct_range)..., ustrip.(e_unit, fct_start), Fminbox(GradientDescent()), Optim.Options(iterations=1000, show_trace=false, time_limit=600))
+    opt_r = optimize(f_minimize, ustrip.(e_unit, fct_range)..., ustrip.(e_unit, fct_start), Fminbox(GradientDescent()), Optim.Options(f_tol = 0.001, g_tol=1e-6, show_trace=false, time_limit=120))
     # get optimal correction factor
     fct = Optim.minimizer(opt_r)[1]*e_unit
 
