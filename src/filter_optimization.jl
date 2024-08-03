@@ -147,8 +147,9 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
         end
         # cut around peak to increase performance
 		fit_cut = cut_single_peak(e_ft, min_e, max_e,; n_bins=n_bins, relative_cut=rel_cut_fit)
-		e_ft = e_ft[fit_cut.max - 300 .< e_ft .< fit_cut.max + 300]
-
+		e_peak_cut = fit_cut.max - 15*(fit_cut.max - fit_cut.low) .< e_ft .< fit_cut.max + 15*(fit_cut.max - fit_cut.low)
+		e_ft = e_ft[e_peak_cut]
+        
         # create histogram from it
         bin_width = 2 * (quantile(e_ft, 0.75) - quantile(e_ft, 0.25)) / ∛(length(e_ft))
         h = fit(Histogram, e_ft, minimum(e_ft):bin_width:maximum(e_ft))
@@ -255,12 +256,12 @@ function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vecto
         end
         # cut around peak to increase performance
 		fit_cut = cut_single_peak(e_ft, min_e, max_e,; n_bins=n_bins, relative_cut=rel_cut_fit)
-		e_peak_cut = fit_cut.max - 300 .< e_ft .< fit_cut.max + 300
+		e_peak_cut = fit_cut.max - 15*(fit_cut.max - fit_cut.low) .< e_ft .< fit_cut.max + 15*(fit_cut.max - fit_cut.low)
 		e_ft = e_ft[e_peak_cut]
         qdrift_ft = qdrift_ft[e_peak_cut]
 
         # create histogram from it
-        bin_width = 2 * (quantile(e_ft, 0.75) - quantile(e_ft, 0.25)) / ∛(length(e_ft))
+        bin_width = get_friedman_diaconis_bin_width(e_ft)
         h = fit(Histogram, e_ft, minimum(e_ft):bin_width:maximum(e_ft))
 
         # create peakstats
