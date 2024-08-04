@@ -349,7 +349,7 @@ function fit_sf_wl(dep_sep_data::NamedTuple{(:dep, :sep)}, a_grid_wl_sg::StepRan
 
     # create empty arrays for sf and sf_err
     fts_success = Bool.(zeros(length(a_grid_wl_sg)))
-    sep_sfs = Vector{Measurement}(undef, length(a_grid_wl_sg))
+    sep_sfs = Vector{Quantity}(undef, length(a_grid_wl_sg))
     wls = Vector{eltype(a_grid_wl_sg)}(undef, length(a_grid_wl_sg))
 
 
