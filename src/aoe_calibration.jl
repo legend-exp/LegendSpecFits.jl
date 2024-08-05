@@ -15,7 +15,7 @@ Fit the corrections for the AoE value of the detector.
 - `σ_scs`: Fit result for the sigma values
 - `f_σ_scs`: Fit function for the sigma values
 """
-function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real}; e_expression::Union{String,Symbol}="e")
+function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real}; aoe_expression::Union{String,Symbol}="a / e", e_expression::Union{String,Symbol}="e")
     # fit compton band mus with linear function
     μ_cut = (mean(μ) - 2*std(μ) .< μ .< mean(μ) + 2*std(μ)) .&& muncert.(μ) .> 0.0
     e, μ, σ = e[μ_cut], μ[μ_cut], σ[μ_cut]
@@ -39,9 +39,7 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     func_σ = nothing
     func_generic_σ = nothing
     if string(f_fit_σ) == "f_aoe_sigma"
-        # func_σ = "sqrt( abs($(mvalue(result_σ.par[1]))) + abs($(mvalue(result_σ.par[2]))$(e_unit)^2) / ($e_expression)^2)"
         func_σ = "sqrt( ($(mvalue(result_σ.par[1])))^2 + ($(mvalue(result_σ.par[2]))$(e_unit))^2 / ($e_expression)^2 )" 
-        # func_generic_σ = "sqrt(abs(p[1]) + abs(p[2]) / ($e_expression)^2)"
         func_generic_σ = "sqrt( (p[1])^2 + (p[2])^2 / ($e_expression)^2 )"
     end
     result_σ = merge(result_σ, (par = par_σ, func = func_σ, func_generic = func_generic_σ, σ = σ))
@@ -49,12 +47,11 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     @debug "Compton band σ normalization: $(result_σ.func)"
 
     # put everything together into A/E correction/normalization function 
-    aoe_str = "(a / ( ($e_expression)$e_unit^-1) )" # get aoe, but without unit. 
+    aoe_str = "($aoe_expression)" # get aoe
     func_aoe_corr = "($aoe_str - ($(result_µ.func)) ) / ($(result_σ.func))"
     func_generic_aoe_corr = "(aoe - $(result_µ.func_generic)) / $(result_σ.func_generic)"
-    func_aoe_corr_ecal = replace(func_aoe_corr, string(e_expression) => "e_cal") # function that can be used for already calibrated energies 
 
-    result = (µ_compton = result_µ, σ_compton = result_σ, compton_bands = (e = e,), func = func_aoe_corr, func_generic = func_generic_aoe_corr, func_ecal = func_aoe_corr_ecal)
+    result = (µ_compton = result_µ, σ_compton = result_σ, compton_bands = (e = e,), func = func_aoe_corr, func_generic = func_generic_aoe_corr)
     report = (report_µ = report_µ, report_σ = report_σ)
 
     return result, report
@@ -171,7 +168,7 @@ export get_aoe_cut
 """
     get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, aoe_cut::T,; uncertainty::Bool=true, low_e_tail::Bool=true) where T<:Real
 
-Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size whiile performing a peak fit with fixed position.
+Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size while performing a peak fit with fixed position.
     
 # Returns
 - `peak`: Peak position
@@ -180,7 +177,7 @@ Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given 
 - `sf`: Surrival fraction
 - `err`: Uncertainties
 """
-function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, low_e_tail::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
+function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, lq_mode::Bool=false ,low_e_tail::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     # get energy before cut and create histogram
@@ -196,8 +193,16 @@ function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e
         e = e[aoe .< sigma_high_sided]
         aoe = aoe[aoe .< sigma_high_sided]
     end
-    e_survived = e[aoe_cut .<= aoe]
-    e_cut = e[aoe_cut .> aoe]
+
+    if lq_mode == false
+        #normal aoe version
+        e_survived = e[aoe_cut .<= aoe]
+        e_cut = e[aoe_cut .> aoe]
+    else
+        #lq version
+        e_survived = e[aoe_cut .>= aoe]
+        e_cut = e[aoe_cut .< aoe]
+    end
     
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
@@ -264,7 +269,7 @@ Get the surrival fraction of a continuum after a AoE cut value `aoe_cut` for a g
 - `n_after`: Number of counts after the cut
 - `sf`: Surrival fraction
 """
-function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
+function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; lq_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
     # get number of events in window before cut
     n_before = length(e[center - window .< e .< center + window])
     # get number of events after cut
@@ -272,7 +277,10 @@ function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantit
     if !isnan(sigma_high_sided)
         n_after = length(e[aoe_cut .< aoe .< sigma_high_sided .&& center - window .< e .< center + window])
     end
-    n_after = length(e[aoe .> aoe_cut .&& center - window .< e .< center + window])
+    if lq_mode == true
+        n_after = length(e[aoe .< aoe_cut .&& center - window .< e .< center + window])
+    end
+
     # calculate surrival fraction
     sf = n_after / n_before
     result = (
