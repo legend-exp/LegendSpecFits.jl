@@ -196,7 +196,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         pval, chi2, dof = p_value_poissonll(fit_function, h, v_ml) # based on likelihood ratio 
 
         # calculate normalized residuals
-        residuals, residuals_norm, _, bin_centers = get_residuals(fit_function, h, v_ml)
+        residuals, residuals_norm, _, _ = get_residuals(fit_function, h, v_ml)
 
         # get fwhm of peak
         fwhm, fwhm_err = 
@@ -214,15 +214,14 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
     
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance,  
-                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers, pvalue_ls = pval_ls, chi2_ls = chi2_ls))
+                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance))
                 )
         report = (
             v = v_ml,
             h = h,
             f_fit = x -> Base.Fix2(fit_function, result)(x),
             f_components = peakshape_components(fit_func, v_ml; background_center = background_center),
-            gof = result.gof
+            gof = merge(result.gof, (residuals = residuals, residuals_norm = residuals_norm,))
         )
     else
         # get fwhm of peak

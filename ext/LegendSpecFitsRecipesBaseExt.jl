@@ -70,7 +70,7 @@ end
             xlims := (ustrip(Measurements.value(report.μ - 5*report.σ)), ustrip(Measurements.value(report.μ + 5*report.σ)))
             yscale --> :identity
             yticks := ([-3, 0, 3])
-            report.gof.bin_centers, [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.gof.residuals_norm]
+            collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2 , [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.gof.residuals_norm]
         end
     end
 end
@@ -155,6 +155,7 @@ end
 
 @recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
     f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
+    bin_centers = collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2 
     legend := :topright
     foreground_color_legend := :silver
     background_color_legend := :white
@@ -174,7 +175,7 @@ end
         bins --> :sqrt
         xlabel := "Energy (keV)"
         subplot --> _subplot
-        collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2, LinearAlgebra.normalize(report.h, mode = :density).weights#LinearAlgebra.normalize(report.h, mode = :density)
+        bin_centers, LinearAlgebra.normalize(report.h, mode = :density).weights#LinearAlgebra.normalize(report.h, mode = :density)
     end
     if show_fit
         @series begin
@@ -257,22 +258,13 @@ end
                 if ylims_res_max == 5
                     yticks := ([-3, 0, 3])
                 end
-                report.gof.bin_centers, report.gof.residuals_norm
+                bin_centers, report.gof.residuals_norm
             end
         end
     end
 end
 
-# @recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof, :f_bckslope)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
-#     report_trunc = :v, :h, :f_fit, :f_sig, :f_lowEtail, :f_bck, :gof), (report.v, report.h, report.f_fit, report.f_sig, report.f_lowEtail, report.f_bck, report.gof)
-#     )
-#     f(report_trunc; show_label=show_label, show_fit=show_fit, f_fit_x_step_scaling=f_fit_x_step_scaling, _subplot=_subplot)
-# end
-# """
-# first( collect(pairs(report))[1] )
-
-# """
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_sig, :f_lowEtail, :gof, :f_bck)}, mode::Symbol)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}, mode::Symbol)
     if mode == :cormat 
         cm = cor(report.gof.covmat)
     elseif  mode == :covmat
