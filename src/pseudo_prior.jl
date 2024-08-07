@@ -4,7 +4,7 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
         σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
         n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
         step_amplitude = weibull_from_mx(ps.mean_background_step, ps.mean_background_step + 5*ps.mean_background_std),
-        skew_fraction = ifelse(low_e_tail, weibull_from_mx(0.001, 0.005), ConstValueDist(0.0)), # truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1)
+        skew_fraction = ifelse(low_e_tail, weibull_from_mx(0.002, 0.01), ConstValueDist(0.0)), # truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1)
         skew_width = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
         background = weibull_from_mx(ps.mean_background, ps.mean_background + 5*ps.mean_background_std),
         )
