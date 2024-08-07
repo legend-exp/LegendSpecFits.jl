@@ -22,9 +22,7 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
              truncated(Normal(0, 0.1*ps.mean_background_std / (window_left + window_right)), - ps.mean_background / window_right, 0)),
             )
         elseif fit_func ==:f_fit_bckExp
-            NamedTupleDist(
-             background_exp = truncated(weibull_from_mx(0.01, 0.1), 0.0, background_exp_max),
-            )
+            NamedTupleDist(background_exp = weibull_from_mx(1e-2, 2e-2))
         elseif fit_func == :f_fit_tails
             NamedTupleDist(
             skew_fraction_highE = ifelse(low_e_tail, truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1), ConstValueDist(0.0)),
