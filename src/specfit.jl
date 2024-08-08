@@ -171,7 +171,8 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 500))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 5000))
+    converged = Optim.converged(opt_r)
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
@@ -192,7 +193,6 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
         # calculate p-value
-        pval_ls, chi2_ls, _ = p_value(fit_function, h, v_ml) # based on least-squared
         pval, chi2, dof = p_value_poissonll(fit_function, h, v_ml) # based on likelihood ratio 
 
         # calculate normalized residuals
@@ -214,7 +214,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
     
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance))
+                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, converged = converged))
                 )
         report = (
             v = v_ml,
@@ -234,8 +234,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
-        (fwhm = measurement(fwhm, NaN), ))
-        # result = merge(v_ml, (fwhm = fwhm, ))
+            (fwhm = measurement(fwhm, NaN), ), (gof = (converged = converged,),))
         report = (
             v = v_ml,
             h = h,
