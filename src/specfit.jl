@@ -108,7 +108,7 @@ end
 export fit_peaks
 
 function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Vector{T},; e_unit::Union{Nothing, Unitful.EnergyUnits}=nothing, uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false,
-     fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true)) where T<:Any
+     fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::Union{<:Unitful.AbstractQuantity{<:Real}, <:Real} = 1.0) where T<:Any
     # create return and result dicts
     result = Dict{T, NamedTuple}()
     report = Dict{T, NamedTuple}()
@@ -118,21 +118,21 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
         h  = peakhists[i]
         ps = peakstats[i]
         # fit peak
-        result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=uncertainty, low_e_tail=low_e_tail, fit_func = fit_func, pseudo_prior = pseudo_prior)
+        result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=uncertainty, low_e_tail=low_e_tail, fit_func = fit_func, pseudo_prior = pseudo_prior, m_cal_simple = m_cal_simple)
 
         # check covariance matrix for being semi positive definite (no negative uncertainties)
         if uncertainty
             if iterative_fit && !isposdef(result_peak.covmat)
                 @warn "Covariance matrix not positive definite for peak $peak - repeat fit without low energy tail"
                 pval_save = result_peak.pval
-                result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false, fit_func = fit_func, pseudo_prior = pseudo_prior)
+                result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false, fit_func = fit_func, pseudo_prior = pseudo_prior,  m_cal_simple = m_cal_simple)
                 @info "New covariance matrix is positive definite: $(isposdef(result_peak.covmat))"
                 @info "p-val with low-energy tail  p=$(round(pval_save,digits=5)) , without low-energy tail: p=$(round((result_peak.pval),digits=5))"
                 end
         end
-        # save results
-        if !isnothing(e_unit)
-            keys_with_unit = [:μ, :σ, :fwhm]
+        # save results 
+        if !isnothing(e_unit) 
+            keys_with_unit = [:μ, :σ, :fwhm, :μ_cen]
             result_peak = merge(result_peak, NamedTuple{Tuple(keys_with_unit)}([result_peak[k] .* e_unit for k in keys_with_unit]...))
         end
         result[peak] = result_peak
@@ -152,7 +152,7 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
 """
 function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}; 
     uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
-    fit_func::Symbol=:f_fit, background_center::Real = ps.peak_pos) where T<:Real
+    fit_func::Symbol=:f_fit, background_center::Real = ps.peak_pos, m_cal_simple::Union{<:Unitful.AbstractQuantity{<:Real}, <:Real} = 1.0) where T<:Real
     # create standard pseudo priors
     pseudo_prior = get_pseudo_prior(h, ps, fit_func; pseudo_prior = pseudo_prior, fixed_position = fixed_position, low_e_tail = low_e_tail)
     
@@ -171,14 +171,14 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 5000))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 3000))
     converged = Optim.converged(opt_r)
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
     f_loglike_array = let f_fit=fit_function, h=h, v_keys = keys(pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
-        v ->  - hist_loglike(x -> f_fit(x,NamedTuple{v_keys}(v)), h) 
+        v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h) 
     end
 
     if uncertainty
@@ -243,6 +243,10 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
             gof = NamedTuple()
         )
     end
+
+    # convert µ, centroid and sigma, fwhm back to [ADC]
+    µ_cen = peak_centroid(result)/m_cal_simple
+    result = merge(result, (µ = result.µ/m_cal_simple, fwhm = result.fwhm/m_cal_simple, σ = result.σ/m_cal_simple, µ_cen = µ_cen))
     return result, report
 end
 export fit_single_peak_th228
@@ -382,10 +386,11 @@ function fit_subpeaks_th228(
 
     # MLE
     opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 3000))
+    converged = Optim.converged(opt_r) 
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
-
+    
     v_ml_survived = (
         μ = v_ml.μ, 
         σ = v_ml.σ_survived, 
@@ -442,7 +447,8 @@ function fit_subpeaks_th228(
                 pvalue = pval, chi2 = chi2, dof = dof,
                 covmat = param_covariance,
                 residuals = residuals, residuals_norm = residuals_norm,
-                bin_centers = bin_centers
+                bin_centers = bin_centers,
+                converged = converged
             )
                     
             end for part in ("survived", "cut")
