@@ -371,3 +371,4 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     
     return v_ml
 end
+export fit_aoe_compton_combined
