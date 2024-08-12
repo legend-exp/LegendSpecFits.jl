@@ -319,14 +319,14 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     
     # create pseudo priors
      pseudo_prior = NamedTupleDist(
-        μA = Normal(mvalue(μA), merr(μA)),
-        μB = Normal(mvalue(μB), merr(μB)),
-        σA = Normal(mvalue(σA), merr(σA)),
-        σB = Normal(mvalue(σB), merr(σB)),
-        #μA = Uniform(mvalue(μA) - 10*merr(μA), mvalue(μA) + 10*merr(μA)),
-        #μB = Uniform(mvalue(μB) - 10*merr(μB), mvalue(μB) + 10*merr(μB)),
-        #σA = Uniform(mvalue(σA) - 10*merr(σA), mvalue(σA) + 10*merr(σA)),
-        #σB = Uniform(mvalue(σB) - 10*merr(σB), mvalue(σB) + 10*merr(σB)),
+        μA = Normal(mvalue(μA), muncert(μA)),
+        μB = Normal(mvalue(μB), muncert(μB)),
+        σA = Normal(mvalue(σA), muncert(σA)),
+        σB = Normal(mvalue(σB), muncert(σB)),
+        #μA = Uniform(mvalue(μA) - 10*muncert(μA), mvalue(μA) + 10*muncert(μA)),
+        #μB = Uniform(mvalue(μB) - 10*muncert(μB), mvalue(μB) + 10*muncert(μB)),
+        #σA = Uniform(mvalue(σA) - 10*muncert(σA), mvalue(σA) + 10*muncert(σA)),
+        #σB = Uniform(mvalue(σB) - 10*muncert(σB), mvalue(σB) + 10*muncert(σB)),
     )
     
     # transform back to frequency space
