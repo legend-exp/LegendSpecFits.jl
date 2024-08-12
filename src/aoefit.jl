@@ -247,3 +247,127 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     
     return result, report
 end
+
+
+
+
+
+
+"""
+    fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; uncertainty::Bool=true)
+
+Fit a single A/E Compton band using the `f_aoe_compton` function consisting of a gaussian SSE peak and a step like background for MSE events using fixed values for μ and σ.
+
+# Returns
+    * `neg_log_likelihood`: The negative log-likelihood of the likelihood fit
+    * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
+"""
+function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; uncertainty::Bool=true)
+    # create pseudo priors
+    pseudo_prior = NamedTupleDist(
+        μ = ConstValueShape(μ),
+        σ = ConstValueShape(σ),
+        n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
+        B = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
+        δ = weibull_from_mx(0.1, 0.8)
+    )
+        
+    # transform back to frequency space
+    f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
+
+    # start values for MLE
+    v_init = mean(pseudo_prior)
+
+    # create loglikehood function
+    f_loglike = let f_fit=f_aoe_compton, h=h
+        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    end
+
+    # MLE
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+
+    # best fit results
+    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    
+    report = (
+        v = v_ml,
+        h = h,
+        f_fit = x -> Base.Fix2(f_aoe_compton, v_ml)(x),
+        f_sig = x -> Base.Fix2(f_aoe_sig, v_ml)(x),
+        f_bck = x -> Base.Fix2(f_aoe_bkg, v_ml)(x)
+    )
+    
+    return Optim.minimum(opt_r), report
+end
+
+"""
+    fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T}, result_corrections::NamedTuple; pars_aoe::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
+
+Performed a combined fit over all A/E Compton band using the `f_aoe_compton` function consisting of a gaussian SSE peak and a step like background for MSE events,
+assuming `f_aoe_mu` for μ and `f_aoe_sigma` for σ.
+
+# Returns
+    * `v_ml`: The fit result from the maximum-likelihood fit.
+    * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
+"""
+function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T}, result_corrections::NamedTuple; pars_aoe::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
+    
+    μA = ustrip(result_corrections.μ_compton.par[1])
+    μB = ustrip(result_corrections.μ_compton.par[2])
+    σA = ustrip(result_corrections.σ_compton.par[1])
+    σB = ustrip(result_corrections.σ_compton.par[2])
+    
+    # create pseudo priors
+     pseudo_prior = NamedTupleDist(
+        μA = Normal(mvalue(μA), merr(μA)),
+        μB = Normal(mvalue(μB), merr(μB)),
+        σA = Normal(mvalue(σA), merr(σA)),
+        σB = Normal(mvalue(σB), merr(σB)),
+        #μA = Uniform(mvalue(μA) - 10*merr(μA), mvalue(μA) + 10*merr(μA)),
+        #μB = Uniform(mvalue(μB) - 10*merr(μB), mvalue(μB) + 10*merr(μB)),
+        #σA = Uniform(mvalue(σA) - 10*merr(σA), mvalue(σA) + 10*merr(σA)),
+        #σB = Uniform(mvalue(σB) - 10*merr(σB), mvalue(σB) + 10*merr(σB)),
+    )
+    
+    # transform back to frequency space
+    f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
+    
+    # start values for MLE
+    v_init = mean(pseudo_prior)
+
+    # create loglikehood function
+    f_loglike = pars -> begin
+        
+        neg_log_likelihood = 0.0
+
+        # iterate throuh all peaks
+        for (i, band) in enumerate(compton_bands)
+            # get histogram and peakstats
+            h  = peakhists[i]
+            ps = peakstats[i]
+            e = ustrip(band)
+            μ = f_aoe_mu(e, (pars.μA, pars.μB))
+            σ = f_aoe_sigma(e, (pars.σA, pars.σB))
+
+            # fit peak
+            try
+                A, B = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; uncertainty=uncertainty)
+                neg_log_likelihood += A
+            catch e
+                @warn "Error fitting band $band: $e"
+                continue
+            end
+            # save results
+            # result[band] = result_band
+            # report[band] = report_band
+        end
+        return neg_log_likelihood
+    end
+    
+    # MLE
+    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+
+    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    
+    return v_ml
+end
