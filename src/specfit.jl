@@ -108,33 +108,37 @@ end
 export fit_peaks
 
 function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Vector{T},; e_unit::Union{Nothing, Unitful.EnergyUnits}=nothing, uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false,
-     fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::Union{<:Unitful.AbstractQuantity{<:Real}, <:Real} = 1.0) where T<:Any
+    fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::MaybeWithEnergyUnits = 1.0) where T<:Any
+    
+    e_unit = ifelse(isnothing(e_unit), NoUnits, e_unit)
+    @assert Unitful.dimension(e_unit) == Unitful.dimension(m_cal_simple) "Unit of m_cal_simple and e_unit must be the dimension"
+
     # create return and result dicts
     result = Dict{T, NamedTuple}()
     report = Dict{T, NamedTuple}()
+
     # iterate throuh all peaks
     for (i, peak) in enumerate(th228_lines)
         # get histogram and peakstats
         h  = peakhists[i]
         ps = peakstats[i]
         # fit peak
-        result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=uncertainty, low_e_tail=low_e_tail, fit_func = fit_func, pseudo_prior = pseudo_prior, m_cal_simple = m_cal_simple)
+        result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=uncertainty, low_e_tail=low_e_tail, fit_func = fit_func, pseudo_prior = pseudo_prior)
 
         # check covariance matrix for being semi positive definite (no negative uncertainties)
         if uncertainty
             if iterative_fit && !isposdef(result_peak.covmat)
                 @warn "Covariance matrix not positive definite for peak $peak - repeat fit without low energy tail"
                 pval_save = result_peak.pval
-                result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false, fit_func = fit_func, pseudo_prior = pseudo_prior,  m_cal_simple = m_cal_simple)
+                result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false, fit_func = fit_func, pseudo_prior = pseudo_prior)
                 @info "New covariance matrix is positive definite: $(isposdef(result_peak.covmat))"
                 @info "p-val with low-energy tail  p=$(round(pval_save,digits=5)) , without low-energy tail: p=$(round((result_peak.pval),digits=5))"
                 end
         end
         # save results 
-        if !isnothing(e_unit) 
-            keys_with_unit = [:μ, :σ, :fwhm, :μ_cen]
-            result_peak = merge(result_peak, NamedTuple{Tuple(keys_with_unit)}([result_peak[k] .* e_unit for k in keys_with_unit]...))
-        end
+        keys_with_unit = [:μ, :σ, :fwhm, :centroid]
+        result_peak = merge(result_peak, NamedTuple{Tuple(keys_with_unit)}([result_peak[k] .* e_unit ./ m_cal_simple for k in keys_with_unit]...))
+
         result[peak] = result_peak
         report[peak] = report_peak
     end
@@ -152,7 +156,7 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
 """
 function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}; 
     uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
-    fit_func::Symbol=:f_fit, background_center::Real = ps.peak_pos, m_cal_simple::Union{<:Unitful.AbstractQuantity{<:Real}, <:Real} = 1.0) where T<:Real
+    fit_func::Symbol=:f_fit, background_center::Real = ps.peak_pos, m_cal_simple::Real = 1.0) where T<:Real
     # create standard pseudo priors
     pseudo_prior = get_pseudo_prior(h, ps, fit_func; pseudo_prior = pseudo_prior, fixed_position = fixed_position, low_e_tail = low_e_tail)
     
@@ -245,8 +249,8 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # convert µ, centroid and sigma, fwhm back to [ADC]
-    µ_cen = peak_centroid(result)/m_cal_simple
-    result = merge(result, (µ = result.µ/m_cal_simple, fwhm = result.fwhm/m_cal_simple, σ = result.σ/m_cal_simple, µ_cen = µ_cen))
+    centroid = peak_centroid(result)/m_cal_simple
+    result = merge(result, (µ = result.µ/m_cal_simple, fwhm = result.fwhm/m_cal_simple, σ = result.σ/m_cal_simple, centroid = centroid))
     return result, report
 end
 export fit_single_peak_th228
