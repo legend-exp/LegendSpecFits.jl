@@ -17,7 +17,7 @@ function hist_loglike(f_fit::Base.Callable, h::Histogram{<:Real,1})
     bin_centers = (bin_edges[begin:end-1] .+ bin_edges[begin+1:end]) ./ 2
     bin_widths = bin_edges[begin+1:end] .- bin_edges[begin:end-1]
     # TODO: Prevent fit functions from returning negative PDF values 
-    bin_ll(x, bw, k) = logpdf(Poisson(f_fit(x) < 0 ? 0 :  bw * f_fit(x)), k)
+    bin_ll(x, bw, k) = logpdf(Poisson(bw * f_fit(x)), k)
     sum(Base.Broadcast.broadcasted(bin_ll, bin_centers, bin_widths, counts))
 end
 export hist_loglike
