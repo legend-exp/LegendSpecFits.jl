@@ -156,7 +156,7 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
 """
 function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}; 
     uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
-    fit_func::Symbol=:f_fit, background_center::Real = ps.peak_pos, m_cal_simple::Real = 1.0) where T<:Real
+    fit_func::Symbol=:f_fit, background_center::Union{Real,Nothing} = nothing, m_cal_simple::Real = 1.0) where T<:Real
     # create standard pseudo priors
     pseudo_prior = get_pseudo_prior(h, ps, fit_func; pseudo_prior = pseudo_prior, fixed_position = fixed_position, low_e_tail = low_e_tail)
     
@@ -349,8 +349,8 @@ function fit_subpeaks_th228(
         )
     end
 
-     # get fit function with background center
-     fit_function = get_th228_fit_functions(; background_center = background_center)[fit_func]
+    # get fit function with background center
+    fit_function = get_th228_fit_functions(; background_center = background_center)[fit_func]
 
     # use standard priors in case of no overwrites given
     if !(:empty in keys(pseudo_prior))
