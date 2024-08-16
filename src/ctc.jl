@@ -39,7 +39,7 @@ of `window`. The drift time dependence is given by `qdrift`.
     * `func`: function to correct energy
     * `func_generic`: generic function to correct energy
 """
-function ctc_energy(e::Array{<:Unitful.Energy{<:Real}}, qdrift::Array{<:Real}, peak::Unitful.Energy{<:Real}, window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}, m_cal_simple::Unitful.Energy{<:Real}=1.0u"keV"; e_expression::Union{Symbol, String}="e")
+function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real}, peak::Unitful.Energy{<:Real}, window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}, m_cal_simple::Unitful.Energy{<:Real}=1.0u"keV"; e_expression::Union{Symbol, String}="e")
     # create cut window around peak
     cut = peak - first(window) .< e .< peak + last(window)
     e_cut, qdrift_cut = e[cut], qdrift[cut]
@@ -61,10 +61,13 @@ function ctc_energy(e::Array{<:Unitful.Energy{<:Real}}, qdrift::Array{<:Real}, p
     end
 
     # minimize function
-    fct_range, fct_start = [0.0, 1e-3]*e_unit, [1e-7]*e_unit
-    opt_r = optimize(f_minimize, ustrip.(e_unit, fct_range)..., ustrip.(e_unit, fct_start), Fminbox(GradientDescent()), Optim.Options(f_tol = 0.001, g_tol=1e-6, show_trace=false, time_limit=120))
+    qdrift_median = median(qdrift_cut)
+    fct_range = [ustrip(e_unit, 1e-4u"keV") / qdrift_median, ustrip(e_unit, 10u"keV") / qdrift_median]*e_unit
+    fct_start = [ustrip(e_unit, 0.1u"keV") / qdrift_median]*e_unit
+    opt_r = optimize(f_minimize, ustrip.(e_unit, fct_range)..., ustrip.(e_unit, fct_start), Fminbox(GradientDescent()), Optim.Options(iterations=100, show_trace=false, time_limit=300))
     # get optimal correction factor
     fct = Optim.minimizer(opt_r)[1]*e_unit
+    converged = Optim.converged(opt_r)
 
     # calculate drift time corrected energy
     e_ctc = e_cut .+ fct .* qdrift_cut
@@ -89,6 +92,7 @@ function ctc_energy(e::Array{<:Unitful.Energy{<:Real}}, qdrift::Array{<:Real}, p
         fct = fct,
         fwhm_before = result_before.fwhm*e_unit,
         fwhm_after = result_after.fwhm*e_unit,
+        converged = converged
     )
     report = (
         peak = result.peak,

@@ -7,7 +7,6 @@ Equivalent to `pdf(Normal(μ, σ), x)`
 """
 gauss_pdf(x::Real, μ::Real, σ::Real) = inv(σ * sqrt2π) * exp(-((x - μ) / σ)^2  / 2)
 
-
 """
     ex_gauss_pdf(x::Real, μ::Real, σ::Real, θ::Real)
 
@@ -36,7 +35,6 @@ function ex_gauss_pdf(x::Real, μ::Real, σ::Real, θ::Real)
     @assert !isnan(y) && !isinf(y)
     return y
 end
-
 
 """
     step_gauss(x::Real, μ::Real, σ::Real)
@@ -76,53 +74,71 @@ export exponential_decay
     gamma_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
         step_amplitude::Real, skew_fraction::Real, skew_width::Real,
-        background::Real
+        background::Real;  
+        skew_fraction_highE::Real = 0.0, skew_width_highE::Real= 0.0, 
+        background_kwargs... 
     )
     
-Describes the shape of a typical gamma peak in a detector with a flat background.
+Standard gamma peakshape: Describes the shape of a typical gamma peak in a detector.
+Components: 
+- Gaussian signal peak with `μ`, `σ`, `n - skew_fraction - skew_fraction_highE`
+- low-energy tail: `skew_fraction`, `skew_width`
+- high-energy tail: `skew_fraction_highE`, `skew_width_highE` (optional, default off)
+- background:
+    - energy-independent `background`
+    - step-function scaled with `step_amplitude` from Compton scattered gammas
+    - linear slope: `background_slope` (optional, default off)
+    - exponential decay: `background_exp` (optional, default off)
 """
 function gamma_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
     step_amplitude::Real, skew_fraction::Real, skew_width::Real,
-    background::Real
+    background::Real;  
+    skew_fraction_highE::Real = 0.0, skew_width_highE::Real= 0.0, 
+    background_kwargs... 
 )
-    skew = skew_width * μ
-    return n * (
-            (1 - skew_fraction) * gauss_pdf(x, μ, σ) +
-            skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
-        ) + step_amplitude * step_gauss(-x, -μ, σ) + background;
+    return  signal_peakshape(x, μ, σ, n, skew_fraction; skew_fraction_highE = skew_fraction_highE) +
+            lowEtail_peakshape(x, μ, σ, n, skew_fraction, skew_width) +
+            highEtail_peakshape(x, μ, σ, n, skew_fraction_highE, skew_width_highE) +
+            background_peakshape(x, µ, σ, step_amplitude, background; background_kwargs...)
 end
 export gamma_peakshape
 
 """
     signal_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
-        skew_fraction::Real, skew_width::Real,
+        skew_fraction::Real;  skew_fraction_highE::Real = 0.0
     )
     
 Describes the signal part of the shape of a typical gamma peak in a detector.
 """
 function signal_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
-    skew_fraction::Real
+    skew_fraction::Real;  skew_fraction_highE::Real = 0.0
 )
-    return n * (1 - skew_fraction) * gauss_pdf(x, μ, σ)
+    return n * (1 - skew_fraction - skew_fraction_highE) * gauss_pdf(x, μ, σ)
 end
 export signal_peakshape
 
 """
     background_peakshape(
-        x::Real, μ::Real, σ::Real, n::Real,
-        skew_fraction::Real, skew_width::Real,
-    )
-    
-Describes the background part of the shape of a typical gamma peak in a detector.
+    x::Real, μ::Real, σ::Real, 
+    step_amplitude::Real, background::Real; 
+    background_slope::Real = 0.0, background_exp = 0.0, background_center::Real = µ
+)
+
+Describes the background part of the shape of a typical gamma peak in a detector:  components: 
+- step-function scaled with `step_amplitude``
+- energy-independent background: `background``
+- linear slope: `background_slope` (optional)
+- exponential decay:  `background_exp` (optional)
 """
 function background_peakshape(
     x::Real, μ::Real, σ::Real, 
-    step_amplitude::Real, background::Real
+    step_amplitude::Real, background::Real; 
+    background_slope::Real = 0.0, background_exp = 0.0, background_center::Real = μ
 )
-    return gamma_peakshape(x, μ, σ, 0.0, step_amplitude, 0.0, 0.0, background)
+    step_amplitude * step_gauss(-x, -μ, σ) + background * exp(-background_exp * (x - background_center)) + background_slope * (x - background_center)
 end
 export background_peakshape
 
@@ -143,12 +159,27 @@ function lowEtail_peakshape(
 end
 export lowEtail_peakshape
 
+"""
+    highEtail_peakshape(
+        x::Real, μ::Real, σ::Real, n::Real,
+        skew_fraction::Real, skew_width::Real,
+    )
+    
+Describes the high-E signal tail part of the shape 
+"""
+function highEtail_peakshape(
+    x::Real, μ::Real, σ::Real, n::Real,
+    skew_fraction_h::Real, skew_width_h::Real
+)
+    skew = skew_width_h * μ
+    return n * skew_fraction_h * ex_gauss_pdf(x, μ, σ, skew)
+end
+export highEtail_peakshape
 
 """
     ex_step_gauss(x::Real, l::Real, k::Real, t::Real, d::Real)
 
 Evaluates an extended step gauss model at `x` with parameters `l`, `k`, `t` and `d`.
-
 """
 function ex_step_gauss(
     x::Real, l::Real, k::Real, 
@@ -220,3 +251,4 @@ function double_gaussian(
     return n1 * gauss_pdf(x, μ1, σ1) + n2 * gauss_pdf(x, μ2, σ2)  
 end
 export double_gaussian
+

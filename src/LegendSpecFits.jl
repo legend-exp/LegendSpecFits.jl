@@ -21,7 +21,6 @@ using ForwardDiff
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
-using LegendDataManagement
 using LinearRegression
 using LsqFit
 using Measurements
@@ -61,7 +60,9 @@ include("gof.jl")
 include("precompile.jl")
 include("lqfit.jl")
 include("lqcut.jl")
-
+include("pseudo_prior.jl")
+include("specfit_functions.jl")
+include("calfunc.jl")
 abstract type UncertTag end
 ForwardDiff.:(≺)(::Type{<:ForwardDiff.Tag}, ::Type{UncertTag}) = true
 ForwardDiff.:(≺)(::Type{UncertTag}, ::Type{<:ForwardDiff.Tag}) = false
