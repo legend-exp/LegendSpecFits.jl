@@ -164,7 +164,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist))  
 
     # get fit function with background center
     fit_function = get_th228_fit_functions(; background_center = background_center)[fit_func]
@@ -175,7 +175,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init), Optim.Options(time_limit = 60, iterations = 3000))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 3000))
     converged = Optim.converged(opt_r)
 
     # best fit results
@@ -367,7 +367,7 @@ function fit_subpeaks_th228(
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
     f_loglike = let f_fit=fit_function, h_cut=h_cut, h_survived=h_survived
@@ -389,7 +389,7 @@ function fit_subpeaks_th228(
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init), Optim.Options(time_limit = 60, iterations = 3000))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 3000))
     converged = Optim.converged(opt_r) 
 
     # best fit results
