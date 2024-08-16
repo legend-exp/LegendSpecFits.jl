@@ -278,12 +278,21 @@ function estimate_fwhm(v::NamedTuple)
     # get FWHM
     f_sigWithTail = Base.Fix2(get_th228_fit_functions().f_sigWithTail,v)
     try
-        half_max_sig = maximum(f_sigWithTail.(v.μ - v.σ:0.001:v.μ + v.σ))/2
-        roots_low = find_zero(x -> f_sigWithTail(x) - half_max_sig, v.μ - v.σ, maxiter=100)
-        roots_high = find_zero(x -> f_sigWithTail(x) - half_max_sig, v.μ + v.σ, maxiter=100)
-        return roots_high - roots_low
+        if v.skew_fraction <= 0.5
+            half_max_sig = maximum(f_sigWithTail.(v.μ - v.σ:0.001:v.μ + v.σ))/2
+            roots_low = find_zero(x -> f_sigWithTail(x) - half_max_sig, v.μ - v.σ, maxiter=100)
+            roots_high = find_zero(x -> f_sigWithTail(x) - half_max_sig, v.μ + v.σ, maxiter=100)
+            return roots_high - roots_low
+        else
+            e_low = v.μ * (1 - v.skew_width) 
+            e_high = v.μ * (1 + v.skew_width)
+            half_max_sig = maximum(f_sigWithTail.(e_low:0.001:e_high))/2
+            roots_low = find_zero(x -> f_sigWithTail(x) - half_max_sig, e_low, maxiter=100)
+            roots_high = find_zero(x -> f_sigWithTail(x) - half_max_sig, e_high, maxiter=100)
+            return roots_high - roots_low
+        end 
     catch e
-        return NaN
+         return NaN 
     end
 end
 """
