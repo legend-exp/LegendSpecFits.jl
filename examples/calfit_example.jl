@@ -126,4 +126,4 @@ plot([begin
     v = expand_vars(v_ml)[i]
     plot(normalize(h, mode = :density), st = :stepbins, yscale = :log10)
     plot!(minimum(h.edges[1]):0.1:maximum(h.edges[1]), Base.Fix2(f_fit, v))
-end; for i in eachindex(peakhists)]...)
+end for i in eachindex(peakhists)]...)
