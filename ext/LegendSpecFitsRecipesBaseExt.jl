@@ -561,15 +561,17 @@ end
     framestyle := :box
     xformatter := :plain
     yformatter := :plain
-    layout --> @layout([a{0.8h}; b{0.2h}])
-    margins --> (-11.5, :mm)
-    link --> :x
+    if !isempty(report.gof)
+        layout --> @layout([a{0.8h}; b{0.2h}])
+        margins --> (-11.5, :mm)
+        link --> :x
+    end
     @series begin
         seriestype := :line
         subplot := 1
         xticks --> :none
         if !isempty(report.gof)
-            label := "Best Fit (p = $(round(report.gof.pvalue, digits=2)))"
+            label := "Best Fit (p = $(round(report.gof.pvalue, digits=2))| χ²/ndf = $(round(report.gof.chi2min, digits=2)) / $(report.gof.dof))"
         else
             label := "Best Fit"
         end
@@ -610,48 +612,50 @@ end
             value.(additional_pts.x), additional_pts.y
         end
     end
-    @series begin
-        seriestype := :hline
-        ribbon --> 3
-        subplot --> 2
-        fillalpha --> 0.5
-        label --> ""
-        fillcolor --> :lightgrey
-        linecolor --> :darkgrey
-        [0.0]
-    end
-    @series begin
-        seriestype --> :hline
-        ribbon --> 1
-        subplot --> 2
-        fillalpha --> 0.5
-        label --> ""
-        fillcolor --> :grey
-        linecolor --> :darkgrey
-        [0.0]
-    end
-    if !isempty(additional_pts)
+    if !isempty(report.gof)
         @series begin
-            seriestype := :scatter
-            label --> :none
-            ms --> 3
-            markershape --> :circle
-            markerstrokecolor --> :black
-            linewidth --> 0.5
-            markercolor --> :silver
+            seriestype := :hline
+            ribbon --> 3
             subplot --> 2
-            value.(additional_pts.x), additional_pts.residuals_norm
+            fillalpha --> 0.5
+            label --> ""
+            fillcolor --> :lightgrey
+            linecolor --> :darkgrey
+            [0.0]
         end
-    end
-    @series begin
-        seriestype --> :scatter
-        subplot --> 2
-        label --> ""
-        markercolor --> :black
-        ylabel --> "Residuals (σ)"
-        ylims --> (-5, 5)
-        yticks --> ([-3, 0, 3])
-        value.(report.x), report.gof.residuals_norm
+        @series begin
+            seriestype --> :hline
+            ribbon --> 1
+            subplot --> 2
+            fillalpha --> 0.5
+            label --> ""
+            fillcolor --> :grey
+            linecolor --> :darkgrey
+            [0.0]
+        end
+        if !isempty(additional_pts)
+            @series begin
+                seriestype := :scatter
+                label --> :none
+                ms --> 3
+                markershape --> :circle
+                markerstrokecolor --> :black
+                linewidth --> 0.5
+                markercolor --> :silver
+                subplot --> 2
+                value.(additional_pts.x), additional_pts.residuals_norm
+            end
+        end
+        @series begin
+            seriestype --> :scatter
+            subplot --> 2
+            label --> ""
+            markercolor --> :black
+            ylabel --> "Residuals (σ)"
+            ylims --> (-5, 5)
+            yticks --> ([-3, 0, 3])
+            value.(report.x), report.gof.residuals_norm
+        end
     end
 end
 
@@ -676,7 +680,7 @@ end
             grid --> :all
             xerrscaling --> 1
             additional_pts --> additional_pts
-            (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = report.gof)
+            (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = get(report, :gof, NamedTuple()))
         end
         @series begin
             seriestype := :hline
