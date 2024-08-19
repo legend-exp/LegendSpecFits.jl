@@ -9,7 +9,7 @@ Fit the calibration lines with polynomial function of n_poly order
         * `gof`: godness of fit
     * `report`: 
 """
-function fit_calibration(n_poly::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e")
+function fit_calibration(n_poly::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e", uncertainty::Bool=true)
     @assert length(peaks) == length(μ)
     e_unit = u"keV"
     if unit(first(μ)) != NoUnits
@@ -17,7 +17,7 @@ function fit_calibration(n_poly::Int, µ::AbstractVector{<:Union{Unitful.RealOrR
         µ = ustrip.(e_unit, µ)
     end
     @debug "Fit calibration curve with $(n_poly)-order polynominal function"
-    result_fit, report  = chi2fit(n_poly, µ, ustrip.(e_unit, peaks))
+    result_fit, report  = chi2fit(n_poly, µ, ustrip.(e_unit, peaks); uncertainty=uncertainty)
     
     par =  result_fit.par
     par_unit = par .* e_unit
