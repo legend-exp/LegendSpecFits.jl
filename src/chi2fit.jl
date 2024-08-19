@@ -50,20 +50,20 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     npar = length(pull_t) # number of fit parameter (including nuisance parameters)
     if isempty(v_init) 
         v_init = ones(npar)
-        # v_init[end] = one(X_val[1]) # constant term
-        if npar > 1
-            v_init[end-1] = Y_val[1]/X_val[1] # linear fit : guess slope
-        end
     end
-    
+
     # minimization and error estimation
-    opt_r   = optimize(f_opt, v_init, LBFGS(), Optim.Options(time_limit = 60, show_trace=false, iterations = 1000); autodiff=:forward)
+    opt_r   = optimize(f_opt, v_init, LBFGS(), Optim.Options(time_limit = 60, show_trace=false, iterations = 1000); autodiff = :forward)
+    if !Optim.converged(opt_r)
+        opt_r = optimize(f_opt, v_init, NelderMead(), Optim.Options(time_limit = 60, show_trace=false, iterations = 1000))
+    end
     v_chi2  = Optim.minimizer(opt_r)
     converged = Optim.converged(opt_r)
     if !converged @warn "Fit did not converge" end
     par = measurement.(v_chi2,Ref(NaN)) # if ucnertainty is not calculated, return NaN
     result = (par = par, converged = converged) # fit function with optimized parameters
     report = (par = result.par, f_fit = x -> f_fit(x, v_chi2...), x = x, y = y, gof = NamedTuple())
+    @debug "Best Fit parameters: $par"
     
     if uncertainty && converged
         covmat = inv(ForwardDiff.hessian(f_opt, v_chi2))
@@ -84,15 +84,13 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
         Y_err_tot = sqrt.(Y_err.^2 .+ Y_pred_err.^2)
         Y_err_tot = ifelse(all(Y_err_tot .== 0), ones(length(Y_val)), Y_err_tot)
         residuals_norm = (Y_val - f_fit(X_val, v_chi2...)) ./ Y_err_tot
+
+        @debug "Covariance matrix: $covmat"
+        @debug "P-value: $(pvalue)"
+        @debug "Chi2/Ndof: $(chi2min)/$(dof)"
+
         result = (par = par, gof = (converged = converged, pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat, residuals_norm = residuals_norm))
         report = merge(report, (par = par, gof = result.gof, f_fit = x -> f_fit(x, par...)))
-    end
-
-    @debug "Best Fit parameters: $par"
-    if uncertainty
-        @debug "Covariance matrix: $covmat"
-        @debug "P-value: $(result.gof.pvalue)"
-        @debug "Chi2/Ndof: $(result.gof.chi2min)/$(result.gof.dof)"
     end
 
     return result, report 
