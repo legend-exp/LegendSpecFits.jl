@@ -111,15 +111,16 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
     fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::MaybeWithEnergyUnits = 1.0) where T<:Any
     
     e_unit = ifelse(isnothing(e_unit), NoUnits, e_unit)
-    @assert Unitful.dimension(e_unit) == Unitful.dimension(m_cal_simple) "Unit of m_cal_simple and e_unit must be the dimension"
 
     # create return and result dicts
-    result = Dict{T, NamedTuple}()
-    report = Dict{T, NamedTuple}()
+    v_result = Vector{NamedTuple}(undef, length(th228_lines))
+    v_report = Vector{NamedTuple}(undef, length(th228_lines))
+
 
     # iterate throuh all peaks
-    for (i, peak) in enumerate(th228_lines)
+    Threads.@threads for i in eachindex(th228_lines)
         # get histogram and peakstats
+        peak = th228_lines[i]
         h  = peakhists[i]
         ps = peakstats[i]
         # fit peak
@@ -139,9 +140,14 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
         keys_with_unit = [:μ, :σ, :fwhm, :centroid]
         result_peak = merge(result_peak, NamedTuple{Tuple(keys_with_unit)}([result_peak[k] .* e_unit ./ m_cal_simple for k in keys_with_unit]...))
 
-        result[peak] = result_peak
-        report[peak] = report_peak
+        v_result[i] = result_peak
+        v_report[i] = report_peak
     end
+
+    # create return and result dicts
+    result = Dict{T, NamedTuple}(th228_lines .=> v_result)
+    report = Dict{T, NamedTuple}(th228_lines .=> v_report)
+
     return result, report
 end
 
