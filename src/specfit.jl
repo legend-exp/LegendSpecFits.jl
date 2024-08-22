@@ -298,7 +298,7 @@ function estimate_fwhm(v::NamedTuple)
             return roots_high - roots_low
         end 
     catch e
-         return NaN 
+        return NaN 
     end
 end
 """
@@ -404,8 +404,8 @@ function fit_subpeaks_th228(
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 3000))
-    converged = Optim.converged(opt_r) 
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 5000))
+    converged = Optim.converged(opt_r)
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
@@ -433,7 +433,7 @@ function fit_subpeaks_th228(
     gof_survived = NamedTuple()
     gof_cut = NamedTuple()
 
-    if uncertainty
+    if uncertainty && converged
 
         f_loglike_array = let v_keys = keys(pseudo_prior)
             v ->  -f_loglike(NamedTuple{v_keys}(v))
@@ -480,28 +480,32 @@ function fit_subpeaks_th228(
                 get_peak_fwhm_th228(v_ml, v_ml_err)
             end
 
-        # @debug "Best Fit values for $(part)"
-        # @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
-        # @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
-        # @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
-        # @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
-        # @debug "FWHM: $(fwhm) ± $(fwhm_err)"
+        @debug "Best Fit values"
+        @debug "SF: $(v_ml.sf) ± $(v_ml_err.sf)"
+        @debug "BSF: $(v_ml.bsf) ± $(v_ml_err.bsf)"
+        @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
+        @debug "σ survived: $(v_ml.σ_survived) ± $(v_ml_err.σ_survived)"
+        @debug "σ cut     : $(v_ml.σ_cut) ± $(v_ml_err.σ_cut)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err),), NamedTuple{(:gof_survived, :gof_cut)}(gofs))
-                    
+                (fwhm = measurement(fwhm, fwhm_err),), #NamedTuple{(:gof_survived, :gof_cut)}(gofs))
+                (gof = (converged = converged,
+                    survived = (pvalue = gofs[1].pvalue, chi2 = gofs[1].chi2, dof = gofs[1].dof, covmat = gofs[1].covmat),
+                    cut = (pvalue = gofs[2].pvalue, chi2 = gofs[2].chi2, dof = gofs[2].dof, covmat = gofs[2].covmat)
+                ), ))
     else
         # get fwhm of peak
         fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, v_ml, false)
 
-        # @debug "Best Fit values"
-        # @debug "μ: $(v_ml.μ)"
-        # @debug "σ: $(v_ml.σ)"
-        # @debug "n: $(v_ml.n)"
-        # @debug "FWHM: $(fwhm)"
+        @debug "Best Fit values"
+        @debug "SF: $(v_ml.sf)"
+        @debug "BSF: $(v_ml.bsf)"
+        @debug "μ: $(v_ml.μ)"
+        @debug "σ survived: $(v_ml.σ_survived)"
+        @debug "σ cut     : $(v_ml.σ_cut)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
-        (fwhm = measurement(fwhm, NaN), gof_survived = NamedTuple(), gof_cut = NamedTuple()))
+        (fwhm = measurement(fwhm, NaN), gof = (converged = converged, survived = NamedTuple(), cut = NamedTuple())))
     end
 
     report = (
@@ -509,18 +513,18 @@ function fit_subpeaks_th228(
             v = v_ml_survived,
             h = h_survived,
             f_fit = x -> Base.Fix2(fit_function, v_ml_survived)(x),
-            f_components = peakshape_components(fit_func, v_ml; background_center = background_center),
-            gof = result.gof_survived
+            f_components = peakshape_components(fit_func, v_ml_survived; background_center = background_center),
+            gof = gofs[1]
         ),
         cut = (
             v = v_ml_cut,
             h = h_cut,
             f_fit = x -> Base.Fix2(fit_function, v_ml_cut)(x),
-            f_components = peakshape_components(fit_func, v_ml; background_center = background_center),
-            gof = result.gof_cut
+            f_components = peakshape_components(fit_func, v_ml_cut; background_center = background_center),
+            gof = gofs[2]
         ),
-        sf = v_ml.sf,
-        bsf = v_ml.bsf
+        sf = result.sf,
+        bsf = result.bsf
     )
 
     return result, report
