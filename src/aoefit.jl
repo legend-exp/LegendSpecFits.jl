@@ -337,30 +337,28 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     # create loglikehood function
     f_loglike = pars -> begin
         
-        neg_log_likelihood = 0.0
+        neg_log_likelihoods = zeros(length(compton_bands))
 
-        # iterate throuh all peaks
-        for (i, band) in enumerate(compton_bands)
+        # iterate throuh all peaks (multithreaded)
+        Threads.@threads for i in eachindex(compton_bands)
+
             # get histogram and peakstats
             h  = peakhists[i]
             ps = peakstats[i]
-            e = ustrip(band)
+            e = ustrip(compton_bands[i])
             μ = f_aoe_mu(e, (pars.μA, pars.μB))
             σ = f_aoe_sigma(e, (pars.σA, pars.σB))
 
             # fit peak
             try
                 A, B = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; uncertainty=uncertainty)
-                neg_log_likelihood += A
+                neg_log_likelihoods[i] = A
             catch e
                 @warn "Error fitting band $band: $e"
                 continue
             end
-            # save results
-            # result[band] = result_band
-            # report[band] = report_band
         end
-        return neg_log_likelihood
+        return sum(neg_log_likelihoods)
     end
     
     # MLE
