@@ -286,6 +286,9 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
     # MLE
     opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
 
+    converged = Optim.converged(opt_r)
+    !converged && @warn "Fit did not converge"
+
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
     
@@ -323,10 +326,6 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         μB = Normal(mvalue(μB), muncert(μB)),
         σA = Normal(mvalue(σA), muncert(σA)),
         σB = Normal(mvalue(σB), muncert(σB)),
-        #μA = Uniform(mvalue(μA) - 10*muncert(μA), mvalue(μA) + 10*muncert(μA)),
-        #μB = Uniform(mvalue(μB) - 10*muncert(μB), mvalue(μB) + 10*muncert(μB)),
-        #σA = Uniform(mvalue(σA) - 10*muncert(σA), mvalue(σA) + 10*muncert(σA)),
-        #σB = Uniform(mvalue(σB) - 10*muncert(σB), mvalue(σB) + 10*muncert(σB)),
     )
     
     # transform back to frequency space
@@ -366,6 +365,9 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     
     # MLE
     opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+
+    converged = Optim.converged(opt_r)
+    !converged && @warn "Fit did not converge"
 
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
     
