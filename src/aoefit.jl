@@ -337,7 +337,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     # create loglikehood function
     f_loglike = pars -> begin
         
-        neg_log_likelihoods = zeros(length(compton_bands))
+        neg_log_likelihoods = zeros(typeof(pars.μA), length(compton_bands))
 
         # iterate throuh all peaks (multithreaded)
         Threads.@threads for i in eachindex(compton_bands)
@@ -354,7 +354,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
                 A, B = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; uncertainty=uncertainty)
                 neg_log_likelihoods[i] = A
             catch e
-                @warn "Error fitting band $band: $e"
+                @warn "Error fitting band $(compton_bands[i]): $e"
                 continue
             end
         end
@@ -368,7 +368,62 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     !converged && @warn "Fit did not converge"
 
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
-    
-    return v_ml
+
+    if uncertainty && converged
+
+        f_loglike_array = p -> f_loglike((μA = p[1], μB = p[2], σA = p[3], σB = p[4]))
+
+        # Calculate the Hessian matrix using ForwardDiff
+        H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
+
+        param_covariance = nothing
+        if !all(isfinite.(H))
+            @warn "Hessian matrix is not finite"
+            param_covariance = zeros(length(v_ml), length(v_ml))
+        else
+            # Calculate the parameter covariance matrix
+            param_covariance = inv(H)
+        end
+        if ~isposdef(param_covariance)
+            param_covariance = nearestSPD(param_covariance)
+        end
+        # Extract the parameter uncertainties
+        v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
+
+        # TODO: correctly combine p-values and residuals of the individual fits to the combined fit result
+        # get p-value 
+        # pval, chi2, dof = p_value(f_aoe_compton, h, v_ml)
+        # calculate normalized residuals
+        # residuals, residuals_norm, _, bin_centers = get_residuals(f_aoe_compton, h, v_ml)
+
+        @debug "Best Fit values"
+        @debug "μA: $(v_ml.μA) ± $(v_ml_err.μA)"
+        @debug "μB: $(v_ml.μB) ± $(v_ml_err.μB)"
+        @debug "σA: $(v_ml.σA) ± $(v_ml_err.σA)"
+        @debug "σB: $(v_ml.σB) ± $(v_ml_err.σB)"
+
+        result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
+                #(gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                #residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),)
+                )
+    else
+        @debug "Best Fit values"
+        @debug "μA: $(v_ml.μA)"
+        @debug "μB: $(v_ml.μB)"
+        @debug "σA: $(v_ml.σA)"
+        @debug "σB: $(v_ml.σB)"
+
+        result = merge(v_ml, )
+    end
+
+    # report = (
+    #         v = v_ml,
+    #         h = h,
+    #         f_fit = x -> Base.Fix2(f_aoe_compton, v_ml)(x),
+    #         f_sig = x -> Base.Fix2(f_aoe_sig, v_ml)(x),
+    #         f_bck = x -> Base.Fix2(f_aoe_bkg, v_ml)(x)
+    #     )
+
+    return result #, report
 end
 export fit_aoe_compton_combined
