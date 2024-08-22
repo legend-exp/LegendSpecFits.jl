@@ -153,7 +153,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, show_components=true, show_residuals=true, f_fit_x_step_scaling=1/100, _subplot=1)
     f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     bin_centers = collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2 
     legend := :topright
@@ -165,15 +165,15 @@ end
     framestyle --> :box
     @series begin
         seriestype := :bar
-        fillalpha := 1
-        fillcolor := :lightgrey
-        linecolor := :lightgrey
+        alpha --> 1.0
+        fillcolor --> :lightgrey
+        linecolor --> :lightgrey
         fillrange := 1e-7
         bar_width := diff(report.h.edges[1])[1]
-        label := ifelse(show_label, "Data", "")
+        label --> ifelse(show_label, "Data", "")
         yscale := :log10
         bins --> :sqrt
-        xlabel := "Energy (keV)"
+        xlabel --> "Energy (keV)"
         subplot --> _subplot
         bin_centers, LinearAlgebra.normalize(report.h, mode = :density).weights#LinearAlgebra.normalize(report.h, mode = :density)
     end
@@ -187,33 +187,47 @@ end
             end
             linewidth := 2.3
             color := :black
+            linecolor := :black
+            margins --> (0, :mm)
+            if !isempty(report.gof) && show_residuals
+                bottom_margin --> (-4, :mm)
+                xlabel := ""
+                xticks --> ([])
+            end
+            ylims --> (ylim_min, ylim_max)
+            xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
+            ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+            xlabel --> "Energy (keV)"
             subplot --> _subplot
             minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1])))
         end
-        for (idx, component) in  enumerate(keys(report.f_components.funcs))
-            @series begin
-                seriestype := :line
-                color := report.f_components.colors[component]
-                label := ifelse(show_label, report.f_components.labels[component], "")
-                linewidth := 2
-                linestyle := report.f_components.linestyles[component]
-                if idx == length(report.f_components.funcs)
-                    margins --> (0, :mm)
-                    bottom_margin --> (-4, :mm)
-                    if !isempty(report.gof)
-                        xlabel := ""
-                        xticks --> ([])
+        if show_components
+            for (idx, component) in  enumerate(keys(report.f_components.funcs))
+                @series begin
+                    seriestype := :line
+                    color := report.f_components.colors[component]
+                    label := ifelse(show_label, report.f_components.labels[component], "")
+                    linewidth := 2
+                    linestyle := report.f_components.linestyles[component]
+                    if idx == length(report.f_components.funcs)
+                        margins --> (0, :mm)
+                        if !isempty(report.gof) && show_residuals
+                            bottom_margin --> (-4, :mm)
+                            xlabel := ""
+                            xticks --> ([])
+                        end
+                        ylims --> (ylim_min, ylim_max)
+                        xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
+                        ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+                        xlabel --> "Energy (keV)"
                     end
-                    ylims --> (ylim_min, ylim_max)
-                    xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
-                    ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+                    subplot --> _subplot
+                    minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_components.funcs[component]
                 end
-                subplot --> _subplot
-                minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_components.funcs[component]
             end
         end
 
-        if !isempty(report.gof)
+        if !isempty(report.gof) && show_residuals
             ylims_res_max, ylims_res_min = 5, -5
             if any(report.gof.residuals_norm .> 5) || any(report.gof.residuals_norm .< -5)
                 abs_max = 1.2*maximum(abs.(report.gof.residuals_norm))
@@ -273,7 +287,7 @@ end
         @debug "mode $mode not supported - has to be :cormat or :covmat"
         return
     end
-   
+
     cm_plt  = NaN .* cm
     for i in range(1, stop = size(cm)[1])
         cm_plt[i:end,i] = cm[i:end,i]
@@ -289,8 +303,8 @@ end
 
     @series begin
         seriestype := :heatmap
-       # c := cgrad(:grays, rev = true)
-       c := :RdBu_3#:bam
+        # c := cgrad(:grays, rev = true)
+        c := :RdBu_3#:bam
         cm_plt
     end
 
@@ -359,27 +373,40 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:survived, :cut, :sf, :bsf)}; cut_value = missing)
-    size --> (1200,400)
+@recipe function f(report::NamedTuple{(:survived, :cut, :sf, :bsf)}; peak_name="")
+    size --> (1400,800)
     left_margin --> (10, :mm)
-    layout := @layout ([A{0.01h}; [B{0.75h}; C{0.175h}] [D{0.75h}; E{0.175h}]])
-    @series begin
-        title := (ismissing(cut_value) ? "" : "Cut value: $(cut_value)   ") * "Survival fraction: $(round(report.sf * 100, digits = 2))%"
-        grid := false
-        showaxis := false
-        label := nothing
-        bottom_margin := (-20, :px)
-        []
-    end
-    @series begin
-        title := "Survived\n\n"
-        _subplot := 2
-        report.survived
-    end
-    @series begin
-        title := "Cut\n\n"
-        _subplot := 4
-        report.cut
+    title --> "$peak_name Survival fraction: $(round(report.sf * 100, digits = 2))%"
+    if report.sf < 0.5
+        @series begin
+            label := "Data Survived"
+            _subplot := 1
+            fillcolor := :darkgrey
+            linecolor := :darkgrey
+            alpha := 1.0
+            report.survived
+        end
+        @series begin
+            label := "Data Cut"
+            _subplot := 1
+            alpha := 0.2
+            report.cut
+        end
+    else
+        @series begin
+            label := "Data Cut"
+            _subplot := 1
+            fillcolor := :darkgrey
+            linecolor := :darkgrey
+            alpha := 1.0
+            report.cut
+        end
+        @series begin
+            label := "Data Survived"
+            _subplot := 1
+            alpha := 0.2
+            report.survived
+        end
     end
 end
 
