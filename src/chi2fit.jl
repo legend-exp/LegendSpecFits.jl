@@ -70,7 +70,6 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
         par = measurement.(v_chi2, v_chi2_err)
     
         @debug "Best Fit parameters: $par"
-        @debug "Covariance matrix: $covmat"
         # gof 
         chi2min = minimum(opt_r)
         dof = length(x) - length(v_chi2)
