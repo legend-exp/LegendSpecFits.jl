@@ -3,16 +3,7 @@ f_aoe_compton(x, v) = aoe_compton_peakshape(x, v.μ, v.σ, v.n, v.B, v.δ)
 f_aoe_sig(x, v)     = aoe_compton_signal_peakshape(x, v.μ, v.σ, v.n)
 f_aoe_bkg(x, v)     = aoe_compton_background_peakshape(x, v.μ, v.σ, v.B, v.δ)
 
-# aoe compton centroids energy depencence
 MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
-f_aoe_μ(x::T, v::Array{<:T}) where T<:Unitful.RealOrRealQuantity = -v[1] * x + v[2]
-f_aoe_μ(x::Array{<:T}, v::Array{<:T}) where T<:Unitful.RealOrRealQuantity = f_aoe_μ.(x, v)
-f_aoe_μ(x, v::NamedTuple) = f_aoe_μ(x, [v.μ_scs_slope, v.μ_scs_intercept])
-
-# aoe compton sigma energy depencence
-f_aoe_σ(x::T, v::Array{<:T}) where T<:Unitful.RealOrRealQuantity = exponential_decay(x, v[1], v[2], v[3])
-f_aoe_σ(x::Array{<:T}, v::Array{<:T}) where T<:Unitful.RealOrRealQuantity = exponential_decay.(x, v[1], v[2], v[3])
-f_aoe_σ(x, v::NamedTuple) = f_aoe_σ(x, [v.σ_scs_amplitude, v.σ_scs_decay, v.σ_scs_offset])
 
 """
     estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
@@ -228,21 +219,10 @@ Perform a fit of the peakshape to the data in `h` using the initial values in `p
 function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
     # create pseudo priors
     pseudo_prior = NamedTupleDist(
-                μ = Uniform(ps.peak_pos-0.5*ps.peak_sigma, ps.peak_pos+0.5*ps.peak_sigma),
-                # σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
-                σ = Uniform(0.95*ps.peak_sigma, 1.05*ps.peak_sigma),
-                # σ = Normal(ps.peak_sigma, 0.01*ps.peak_sigma),
-                # n = weibull_from_mx(ps.peak_counts, 1.1*ps.peak_counts),
-                # n = Normal(ps.peak_counts, 0.5*ps.peak_counts),
-                # n = Normal(0.9*ps.peak_counts, 0.5*ps.peak_counts),
+                μ = Normal(ps.peak_pos, 0.5*ps.peak_sigma),
+                σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
                 n = LogUniform(0.01*ps.peak_counts, 5*ps.peak_counts),
-                # n = Uniform(0.8*ps.peak_counts, 1.2*ps.peak_counts),
-                # B = weibull_from_mx(ps.mean_background, 1.2*ps.mean_background),
-                # B = Normal(ps.mean_background, 0.8*ps.mean_background),
                 B = LogUniform(0.1*ps.mean_background, 10*ps.mean_background),
-                # B = Uniform(0.8*ps.mean_background, 1.2*ps.mean_background),
-                # B = Uniform(0.8*ps.mean_background, 1.2*ps.mean_background),
-                # δ = weibull_from_mx(0.1, 0.8)
                 δ = LogUniform(0.01, 1.0)
             )
     if haskey(ps, :μ)
@@ -260,7 +240,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function
     f_loglike = let f_fit=f_aoe_compton, h=h
@@ -268,7 +248,8 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 3000))
+    converged = Optim.converged(opt_r)
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
@@ -307,8 +288,13 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         @debug "B: $(v_ml.B) ± $(v_ml_err.B)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, converged = converged),))
+        report = (
+            v = v_ml,
+            h = h,
+            f_fit = x -> Base.Fix2(f_aoe_compton, v_ml)(x),
+            f_sig = x -> Base.Fix2(f_aoe_sig, v_ml)(x),
+            gof = merge(result.gof, (residuals = residuals, residuals_norm = residuals_norm,))        )
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"
@@ -317,13 +303,14 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         @debug "B: $(v_ml.B)"
 
         result = merge(v_ml, )
-    end
-    report = (
+        report = (
             v = v_ml,
             h = h,
             f_fit = x -> Base.Fix2(f_aoe_compton, v_ml)(x),
             f_sig = x -> Base.Fix2(f_aoe_sig, v_ml)(x),
             f_bck = x -> Base.Fix2(f_aoe_bkg, v_ml)(x)
         )
+    end
+    
     return result, report
 end
