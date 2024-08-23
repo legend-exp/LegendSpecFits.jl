@@ -351,7 +351,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
             # fit peak
             try
-                A, B = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; uncertainty=uncertainty)
+                A, _ = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; uncertainty=uncertainty)
                 neg_log_likelihoods[i] = A
             catch e
                 @warn "Error fitting band $(compton_bands[i]): $e"
@@ -362,12 +362,38 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     end
     
     # MLE
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init), NelderMead(), Optim.Options(time_limit = 60, show_trace=false, iterations = 1000))
+    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init), NelderMead(), Optim.Options(time_limit = 120, show_trace=false, iterations = 1000))
 
     converged = Optim.converged(opt_r)
     !converged && @warn "Fit did not converge"
 
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+
+
+    reports = Vector{NamedTuple{(:v, :h, :f_fit, :f_sig, :f_bck)}}(undef, length(compton_bands))
+    
+    let pars = v_ml
+        
+        # iterate throuh all peaks (multithreaded)
+        Threads.@threads for i in eachindex(compton_bands)
+
+            # get histogram and peakstats
+            h  = peakhists[i]
+            ps = peakstats[i]
+            e = ustrip(compton_bands[i])
+            μ = f_aoe_mu(e, (pars.μA, pars.μB))
+            σ = f_aoe_sigma(e, (pars.σA, pars.σB))
+
+            # fit peak
+            try
+                _, B = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; uncertainty=uncertainty)
+                reports[i] = B
+            catch e
+                @warn "Error fitting band $(compton_bands[i]): $e"
+                continue
+            end
+        end
+    end
 
     if uncertainty && converged
 
@@ -416,14 +442,12 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         result = merge(v_ml, )
     end
 
-    # report = (
-    #         v = v_ml,
-    #         h = h,
-    #         f_fit = x -> Base.Fix2(f_aoe_compton, v_ml)(x),
-    #         f_sig = x -> Base.Fix2(f_aoe_sig, v_ml)(x),
-    #         f_bck = x -> Base.Fix2(f_aoe_bkg, v_ml)(x)
-    #     )
+    report = (
+        v = v_ml,
+        compton_bands = compton_bands,
+        band_reports = reports
+    )
 
-    return result #, report
+    return result, report
 end
 export fit_aoe_compton_combined
