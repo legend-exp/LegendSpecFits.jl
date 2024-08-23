@@ -1,10 +1,3 @@
-# aoe compton region peakshapes
-f_aoe_compton(x, v) = aoe_compton_peakshape(x, v.μ, v.σ, v.n, v.B, v.δ)
-f_aoe_sig(x, v)     = aoe_compton_signal_peakshape(x, v.μ, v.σ, v.n)
-f_aoe_bkg(x, v)     = aoe_compton_background_peakshape(x, v.μ, v.σ, v.B, v.δ)
-
-MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
-
 """
     estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
 
@@ -86,13 +79,8 @@ function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton
     half_quantile_aoe    = [quantile(aoe_c, 0.5)         for aoe_c in aoe_compton_bands]
 
     # Freedman-Diaconis Rule for binning only in the area aroung the peak
-    # bin_width   = [2 * (quantile(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]], 0.75) - quantile(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]], 0.25)) / ∛(length(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])) for (i, aoe_c) in enumerate(aoe_compton_bands)]
     bin_width   = [get_friedman_diaconis_bin_width(aoe_c[half_quantile_aoe[i] .< aoe_c .< max_aoe[i]])/2 for (i, aoe_c) in enumerate(aoe_compton_bands)]
-    # n_bins   = [round(Int, (max_aoe[i] - half_quantile_aoe[i]) / get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])) for (i, aoe_c) in enumerate(aoe_compton_bands)]
 
-    # cuts = [cut_single_peak(aoe_c, min_aoe[i], max_aoe[i]; n_bins=n_bins[i], relative_cut=0.5) for (i, aoe_c) in enumerate(aoe_compton_bands)]
-    # cuts = [cut_single_peak(aoe_c, min_aoe[i], max_aoe[i]; n_bins=-1, relative_cut=0.5) for (i, aoe_c) in enumerate(aoe_compton_bands)]
-    # bin_width = [get_friedman_diaconis_bin_width(aoe_c[cuts[i].low .< aoe_c .< cuts[i].high]) for (i, aoe_c) in enumerate(aoe_compton_bands)]
     # generate histograms
     peakhists = [fit(Histogram, aoe_compton_bands[i], min_aoe[i]:bin_width[i]/2:max_aoe[i]) for i in eachindex(aoe_compton_bands)]
 
@@ -134,12 +122,11 @@ function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton
 
 
     # Recalculate max_aoe to get rid out high-A/E outliers
-    max_aoe  = peakstats.peak_pos .+ 4 .* abs.(peakstats.peak_sigma)
+    max_aoe  = peakstats.peak_pos .+ 3 .* abs.(peakstats.peak_sigma)
     # Recalculate min_aoe to focus on main peak
-    min_aoe = peakstats.peak_pos .- 20 .* abs.(peakstats.peak_sigma)
+    min_aoe = peakstats.peak_pos .- 15 .* abs.(peakstats.peak_sigma)
     min_3sigma_aoe = peakstats.peak_pos .- 3 .* abs.(peakstats.peak_sigma)
     # Freedman-Diaconis Rule for binning only in the area aroung the peak
-    # bin_width   = [get_friedman_diaconis_bin_width(aoe_c[aoe_c .> half_quantile_aoe[i] .&& aoe_c .< max_aoe[i]])/4 for (i, aoe_c) in enumerate(aoe_compton_bands)]
     bin_width   = [get_friedman_diaconis_bin_width(aoe_c[aoe_c .> min_3sigma_aoe[i] .&& aoe_c .< max_aoe[i]])/4 for (i, aoe_c) in enumerate(aoe_compton_bands)]
 
     # regenerate histograms
@@ -178,18 +165,18 @@ Fit the A/E Compton bands using the `f_aoe_compton` function consisting of a gau
     * `result`: Dict of NamedTuples of the fit results containing values and errors for each compton band
     * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
-function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; pars_aoe::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
+function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
+
     # create return and result dicts
-    result = Dict{T, NamedTuple}()
-    report = Dict{T, NamedTuple}()
+    v_result = Vector{NamedTuple}(undef, length(compton_bands))
+    v_report = Vector{NamedTuple}(undef, length(compton_bands))
+
     # iterate throuh all peaks
-    for (i, band) in enumerate(compton_bands)
+    Threads.@threads for i in eachindex(compton_bands)
+        band = compton_bands[i]
         # get histogram and peakstats
         h  = peakhists[i]
         ps = peakstats[i]
-        if !isnothing(pars_aoe.μ)
-            ps = merge(peakstats[i], (μ = f_aoe_μ(band, pars_aoe.μ), σ = f_aoe_σ(band, pars_aoe.σ)))
-        end
         # fit peak
         result_band, report_band = nothing, nothing
         try
@@ -199,9 +186,14 @@ function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray,
             continue
         end
         # save results
-        result[band] = result_band
-        report[band] = report_band
+        v_result[i] = result_band
+        v_report[i] = report_band
     end
+
+    # create return and result dicts
+    result = Dict{T, NamedTuple}(compton_bands .=> v_result)
+    report = Dict{T, NamedTuple}(compton_bands .=> v_report)
+
     return result, report
 end
 export fit_aoe_compton
@@ -216,25 +208,9 @@ Perform a fit of the peakshape to the data in `h` using the initial values in `p
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
 """
-function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
+function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:f_fit, background_center::Union{Real,Nothing} = ps.peak_pos, fixed_position::Bool=false)
     # create pseudo priors
-    pseudo_prior = NamedTupleDist(
-                μ = Normal(ps.peak_pos, 0.5*ps.peak_sigma),
-                σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
-                n = LogUniform(0.01*ps.peak_counts, 5*ps.peak_counts),
-                B = LogUniform(0.1*ps.mean_background, 10*ps.mean_background),
-                δ = LogUniform(0.01, 1.0)
-            )
-    if haskey(ps, :μ)
-        # create pseudo priors
-        pseudo_prior = NamedTupleDist(
-                    μ = weibull_from_mx(ps.μ, 2*ps.μ),
-                    σ = weibull_from_mx(ps.σ, 2*ps.σ),
-                    n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
-                    B = weibull_from_mx(ps.mean_background, 2*ps.mean_background),
-                    δ = weibull_from_mx(0.1, 0.8)
-                )
-    end
+    pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func; pseudo_prior = pseudo_prior, fixed_position = fixed_position)
         
     # transform back to frequency space
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
@@ -242,8 +218,11 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     # start values for MLE
     v_init = Vector(mean(f_trafo.target_dist))
 
+    # get fit function with background center
+    fit_function = get_aoe_fit_functions(; )[fit_func]
+
     # create loglikehood function
-    f_loglike = let f_fit=f_aoe_compton, h=h
+    f_loglike = let f_fit=fit_function, h=h
         v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
     end
 
@@ -254,8 +233,8 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    f_loglike_array = let f_fit=aoe_compton_peakshape, h=h
-        v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v...) : 0, h)
+    f_loglike_array = let f_fit=fit_function, h=h, v_keys = keys(pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
+        v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h) 
     end
 
     if uncertainty
@@ -277,23 +256,24 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
         # get p-value 
-        pval, chi2, dof = p_value(f_aoe_compton, h, v_ml)
+        pval, chi2, dof = p_value(fit_function, h, v_ml)
         # calculate normalized residuals
-        residuals, residuals_norm, _, bin_centers = get_residuals(f_aoe_compton, h, v_ml)
+        residuals, residuals_norm, _, bin_centers = get_residuals(fit_function, h, v_ml)
 
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
         @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
         @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
         @debug "B: $(v_ml.B) ± $(v_ml_err.B)"
+        @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
                 (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, converged = converged),))
         report = (
             v = v_ml,
             h = h,
-            f_fit = x -> Base.Fix2(f_aoe_compton, v_ml)(x),
-            f_sig = x -> Base.Fix2(f_aoe_sig, v_ml)(x),
+            f_fit = x -> Base.Fix2(fit_function, v_ml)(x),
+            f_components = aoe_compton_peakshape_components(fit_func, v_ml),
             gof = merge(result.gof, (residuals = residuals, residuals_norm = residuals_norm,))        )
     else
         @debug "Best Fit values"
@@ -302,13 +282,14 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         @debug "n: $(v_ml.n)"
         @debug "B: $(v_ml.B)"
 
-        result = merge(v_ml, )
+        result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
+                    (gof = (converged = converged,) ,))
         report = (
             v = v_ml,
             h = h,
-            f_fit = x -> Base.Fix2(f_aoe_compton, v_ml)(x),
-            f_sig = x -> Base.Fix2(f_aoe_sig, v_ml)(x),
-            f_bck = x -> Base.Fix2(f_aoe_bkg, v_ml)(x)
+            f_fit = x -> Base.Fix2(fit_function, v_ml)(x),
+            f_components = aoe_compton_peakshape_components(fit_func, v_ml; background_center = background_center),
+            gof = NamedTuple()
         )
     end
     
