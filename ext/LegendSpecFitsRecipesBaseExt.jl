@@ -193,11 +193,12 @@ end
                 bottom_margin --> (-4, :mm)
                 xlabel := ""
                 xticks --> ([])
+            else
+                xlabel --> "Energy (keV)"
             end
             ylims --> (ylim_min, ylim_max)
             xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
             ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
-            xlabel --> "Energy (keV)"
             subplot --> _subplot
             minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1])))
         end
@@ -215,11 +216,12 @@ end
                             bottom_margin --> (-4, :mm)
                             xlabel := ""
                             xticks --> ([])
+                        else
+                            xlabel --> "Energy (keV)"
                         end
                         ylims --> (ylim_min, ylim_max)
                         xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
                         ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
-                        xlabel --> "Energy (keV)"
                     end
                     subplot --> _subplot
                     minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_components.funcs[component]
@@ -262,8 +264,8 @@ end
                 label := ""
                 title := ""
                 markercolor --> :black
-                ylabel := "Residuals (σ)"
-                xlabel := "Energy (keV)"
+                ylabel --> "Residuals (σ)"
+                xlabel --> "Energy (keV)"
                 link --> :x
                 top_margin --> (0, :mm)
                 ylims := (ylims_res_min, ylims_res_max)
