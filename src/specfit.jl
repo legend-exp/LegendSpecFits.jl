@@ -472,7 +472,9 @@ function fit_subpeaks_th228(
                     
             end for part in ("survived", "cut")
         ]
-            
+        # get gofs
+        gof_survived, gof_cut = gofs
+
         # get fwhm of peak
         fwhm, fwhm_err = try
                 get_peak_fwhm_th228(v_ml, param_covariance)
@@ -514,14 +516,14 @@ function fit_subpeaks_th228(
             h = h_survived,
             f_fit = x -> Base.Fix2(fit_function, v_ml_survived)(x),
             f_components = peakshape_components(fit_func, v_ml_survived; background_center = background_center),
-            gof = gofs[1]
+            gof = gof_survived
         ),
         cut = (
             v = v_ml_cut,
             h = h_cut,
             f_fit = x -> Base.Fix2(fit_function, v_ml_cut)(x),
             f_components = peakshape_components(fit_func, v_ml_cut; background_center = background_center),
-            gof = gofs[2]
+            gof = gof_cut
         ),
         sf = result.sf,
         bsf = result.bsf
