@@ -377,36 +377,22 @@ end
     size --> (1400,800)
     left_margin --> (10, :mm)
     title --> "$peak_name Survival fraction: $(round(report.sf * 100, digits = 2))%"
-    if report.sf < 0.5
-        @series begin
-            label := "Data Survived"
-            _subplot := 1
-            fillcolor := :darkgrey
-            linecolor := :darkgrey
-            alpha := 1.0
-            report.survived
-        end
-        @series begin
-            label := "Data Cut"
-            _subplot := 1
-            alpha := 0.2
-            report.cut
-        end
-    else
-        @series begin
-            label := "Data Cut"
-            _subplot := 1
-            fillcolor := :darkgrey
-            linecolor := :darkgrey
-            alpha := 1.0
-            report.cut
-        end
-        @series begin
-            label := "Data Survived"
-            _subplot := 1
-            alpha := 0.2
-            report.survived
-        end
+    ylim_max = max(3*value(report.survived.f_fit(report.survived.v.μ)), 3*maximum(report.survived.h.weights), 3*value(report.cut.f_fit(report.cut.v.μ)), 3*maximum(report.cut.h.weights))
+    ylim_max = ifelse(ylim_max == 0.0, 1e5, ylim_max)
+    ylim_min = min(minimum(filter(x -> x > 0, report.survived.h.weights)), minimum(filter(x -> x > 0, report.cut.h.weights)))
+    @series begin
+        label := "Data Survived"
+        _subplot := 1
+        fillcolor := :darkgrey
+        alpha := 1.0
+        report.survived
+    end
+    @series begin
+        label := "Data Cut"
+        _subplot := 1
+        alpha := 0.2
+        ylims --> (ylim_min, ylim_max)
+        report.cut
     end
 end
 
