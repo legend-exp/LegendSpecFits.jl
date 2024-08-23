@@ -138,11 +138,6 @@ The algorhithm utilizes a root search algorithm to find the cut value with a rel
 - `nsf`: Number of counts after the cut
 """
 function get_aoe_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; dep::T=1592.53u"keV", window::Vector{<:T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, cut_search_interval::Tuple{<:Unitful.RealOrRealQuantity, <:Unitful.RealOrRealQuantity}=(-25.0*unit(first(aoe)), 1.0*unit(first(aoe))), rtol::Float64=0.001, bin_width_window::T=3.0u"keV", fixed_position::Bool=true, sigma_high_sided::Float64=NaN, uncertainty::Bool=true, maxiters::Int=200) where T<:Unitful.Energy{<:Real}
-    # check if a high sided AoE cut should be applied before the AoE cut is generated
-    if !isnan(sigma_high_sided)
-        e   =   e[aoe .< sigma_high_sided]
-        aoe = aoe[aoe .< sigma_high_sided]
-    end
     # cut window around peak
     aoe = aoe[dep-first(window) .< e .< dep+last(window)]
     e   =   e[dep-first(window) .< e .< dep+last(window)]
@@ -173,17 +168,26 @@ Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given 
 - `report`: Dict of reports for each peak
 """
 function get_peaks_surrival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, bin_width_window::T=2.0u"keV", low_e_tail::Bool=true, sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
-    # create return and result dicts
-    result = Dict{Symbol, NamedTuple}()
-    report = Dict{Symbol, NamedTuple}()
+    @assert length(peaks) == length(peak_names) == length(windows) "Length of peaks, peak_names and windows must be equal"
+    # create return and result vectors
+    v_result = Vector{NamedTuple}(undef, length(peak_names))
+    v_report = Vector{NamedTuple}(undef, length(peak_names))
+    
     # iterate throuh all peaks
-    for (peak, name, window) in zip(peaks, peak_names, windows)
+    # for (peak, name, window) in zip(peaks, peak_names, windows)
+    Threads.@threads for i in eachindex(peak_names)
+        peak, name, window = peaks[i], peak_names[i], windows[i]
         # fit peak
         result_peak, report_peak = get_peak_surrival_fraction(aoe, e, peak, collect(window), aoe_cut; uncertainty=uncertainty, bin_width_window=bin_width_window, low_e_tail=low_e_tail, sigma_high_sided=sigma_high_sided)
         # save results
-        result[name] = result_peak
-        report[name] = report_peak
+        v_result[i] = result_peak
+        v_report[i] = report_peak
     end
+
+    # create result and report dict
+    result = Dict{Symbol, NamedTuple}(peak_names .=> v_result)
+    report = Dict{Symbol, NamedTuple}(peak_names .=> v_report)
+    
     return result, report
 end
 export get_peaks_surrival_fractions
