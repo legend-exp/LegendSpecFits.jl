@@ -38,6 +38,8 @@ using TypedTables
 using Unitful
 using ValueShapes
 
+MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
+
 include("utils.jl")
 include("peakshapes.jl")
 include("likelihoods.jl")
