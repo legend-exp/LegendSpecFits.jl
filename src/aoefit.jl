@@ -185,11 +185,12 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    f_loglike_array = let f_fit=fit_function, h=h, v_keys = keys(pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
-        v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h) 
-    end
-
     if uncertainty
+
+        f_loglike_array = let v_keys = keys(pseudo_prior) # same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
+            v -> f_loglike(NamedTuple{v_keys}(v)) 
+        end
+
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 
@@ -321,7 +322,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     σB = ustrip(result_corrections.σ_compton.par[2])
     
     # create pseudo priors
-     pseudo_prior = NamedTupleDist(
+    pseudo_prior = NamedTupleDist(
         μA = Normal(mvalue(μA), muncert(μA)),
         μB = Normal(mvalue(μB), muncert(μB)),
         σA = Normal(mvalue(σA), muncert(σA)),
@@ -397,7 +398,9 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
     if uncertainty && converged
 
-        f_loglike_array = p -> f_loglike((μA = p[1], μB = p[2], σA = p[3], σB = p[4]))
+        f_loglike_array = let v_keys = keys(pseudo_prior) # same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
+            v -> f_loglike(NamedTuple{v_keys}(v)) 
+        end
 
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
