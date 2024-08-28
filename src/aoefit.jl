@@ -422,8 +422,8 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    results = Vector{NamedTuple{(:μ, :σ, :n, :B, :δ, :gof)}}(undef, length(compton_bands))
-    reports = Vector{NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}}(undef, length(compton_bands))
+    v_results = Vector{NamedTuple{(:μ, :σ, :n, :B, :δ, :gof)}}(undef, length(compton_bands))
+    v_reports = Vector{NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}}(undef, length(compton_bands))
     
     let pars = v_ml
         
@@ -439,13 +439,16 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
             # fit peak
             try
-                results[i], reports[i] = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; just_likelihood=false, fit_func=fit_func, uncertainty=uncertainty)
+                v_results[i], v_reports[i] = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; just_likelihood=false, fit_func=fit_func, uncertainty=uncertainty)
             catch e
                 @warn "Error fitting band $(compton_bands[i]): $e"
                 continue
             end
         end
     end
+
+    band_results = Dict{T, NamedTuple}(compton_bands .=> v_results)
+    band_reports = Dict{T, NamedTuple}(compton_bands .=> v_reports)
 
     if uncertainty && converged
 
@@ -520,8 +523,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
     report = (
         v = v_ml,
-        compton_bands = compton_bands,
-        band_reports = reports
+        band_reports = band_reports
     )
 
     return result, report
