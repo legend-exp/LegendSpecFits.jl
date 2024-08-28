@@ -495,11 +495,14 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         # Extract the parameter uncertainties
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
-        # TODO: correctly combine p-values and residuals of the individual fits to the combined fit result
-        # get p-value 
-        # pval, chi2, dof = p_value(f_aoe_compton, h, v_ml)
-        # calculate normalized residuals
-        # residuals, residuals_norm, _, bin_centers = get_residuals(f_aoe_compton, h, v_ml)
+        # sum chi2 and dof of individual fits to compute the p-value for the combined fits
+        chi2 = reduce((acc, x) -> acc + x.gof.chi2, values(band_results), init = 0.)
+        dof  = reduce((acc, x) -> acc + x.gof.dof, values(band_results), init = 0.)
+        pval = ccdf(Chisq(dof), chi2)
+
+        # concatenate the normalized residuals of all individual fits
+        residuals      = vcat(getproperty.(values(band_reports), :gof), :residuals)
+        residuals_norm = vcat(getproperty.(values(band_reports), :gof), :residuals_norm)
 
         @debug "Best Fit values"
         @debug "μA: $(v_ml.μA) ± $(v_ml_err.μA)"
@@ -508,8 +511,8 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         @debug "σB: $(v_ml.σB) ± $(v_ml_err.σB)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                #(gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                #residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),)
+                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                residuals = residuals, residuals_norm = residuals_norm),) #, bin_centers = bin_centers),)
                 )
     else
         @debug "Best Fit values"
