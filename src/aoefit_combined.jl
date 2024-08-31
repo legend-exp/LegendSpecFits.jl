@@ -108,11 +108,13 @@ end
     fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T}, result_corrections::NamedTuple; pars_aoe::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
 
 Performed a combined fit over all A/E Compton band using the `f_aoe_compton` function consisting of a gaussian SSE peak and a step like background for MSE events,
-assuming `f_aoe_mu` for μ and `f_aoe_sigma` for σ.
+assuming `f_aoe_mu` for `μ` and `f_aoe_sigma` for `σ`.
 
 # Returns
     * `v_ml`: The fit result from the maximum-likelihood fit.
-    * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
+    * `report_μ`: Report to plot the combined fit result for the enery-dependence of `μ`.
+    * `report_σ`: Report to plot the combined fit result for the enery-dependence of `σ`.
+    * `band_reports`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
 function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T}, result_corrections::NamedTuple; fit_func::Symbol = :f_fit, uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
     
@@ -271,8 +273,22 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         result = merge(v_ml, )
     end
 
+    e_expression = ustrip.(compton_bands)
+    e_unit = unit(first(compton_bands))
+    
+    label_fit_µ = "Combined Fit: $(round(mvalue(v_ml.μA), digits=2)) + E * $(round(mvalue(v_ml.μB)*1e6, digits=2))e-6"
+    label_fit_σ = "Combined Fit: sqrt($(round(mvalue(v_ml.σA)*1e6, digits=1))e-6 + $(round(ustrip(mvalue(v_ml.σB)), digits=2)) / E^2)"
+    
+    μ_values = f_aoe_mu(e_expression, (v_ml.μA, v_ml.μB))
+    σ_values = f_aoe_sigma(e_expression, (v_ml.σA, v_ml.σB))
+
+    report_µ = (; values = µ_values, label_y = "µ", label_fit = label_fit_µ, energy = e_expression)
+    report_σ = (; values = σ_values, label_y = "σ", label_fit = label_fit_σ, energy = e_expression)
+
     report = (
         v = v_ml,
+        report_µ = report_µ,
+        report_σ = report_σ,
         band_reports = band_reports
     )
 
