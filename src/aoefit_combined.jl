@@ -114,7 +114,7 @@ assuming `f_aoe_mu` for `μ` and `f_aoe_sigma` for `σ`.
     * `v_ml`: The fit result from the maximum-likelihood fit.
     * `report_μ`: Report to plot the combined fit result for the enery-dependence of `μ`.
     * `report_σ`: Report to plot the combined fit result for the enery-dependence of `σ`.
-    * `band_reports`: Dict of NamedTuples of the fit report which can be plotted for each compton band
+    * `report_bands`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
 function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T}, result_corrections::NamedTuple; 
     fit_func::Symbol = :f_fit, aoe_expression::Union{String,Symbol}="a / e", e_expression::Union{String,Symbol}="e", uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
@@ -197,8 +197,8 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         end
     end
 
-    band_results = Dict{T, NamedTuple}(compton_bands .=> v_results)
-    band_reports = Dict{T, NamedTuple}(compton_bands .=> v_reports)
+    result_bands = Dict{T, NamedTuple}(compton_bands .=> v_results)
+    report_bands = Dict{T, NamedTuple}(compton_bands .=> v_reports)
 
     if uncertainty && converged
 
@@ -246,13 +246,13 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
         # sum chi2 and dof of individual fits to compute the p-value for the combined fits
-        chi2 = reduce((acc, x) -> acc + x.gof.chi2, values(band_results), init = 0.)
-        dof  = reduce((acc, x) -> acc + x.gof.dof, values(band_results), init = 0.)
+        chi2 = reduce((acc, x) -> acc + x.gof.chi2, values(result_bands), init = 0.)
+        dof  = reduce((acc, x) -> acc + x.gof.dof, values(result_bands), init = 0.)
         pval = ccdf(Chisq(dof), chi2)
 
         # concatenate the normalized residuals of all individual fits
-        residuals      = vcat(getproperty.(values(band_reports), :gof), :residuals)
-        residuals_norm = vcat(getproperty.(values(band_reports), :gof), :residuals_norm)
+        residuals      = vcat(getproperty.(values(report_bands), :gof), :residuals)
+        residuals_norm = vcat(getproperty.(values(report_bands), :gof), :residuals_norm)
 
         @debug "Best Fit values"
         @debug "μA: $(v_ml.μA) ± $(v_ml_err.μA)"
@@ -305,7 +305,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         v = v_ml,
         report_µ = report_µ,
         report_σ = report_σ,
-        band_reports = band_reports
+        report_bands = report_bands
     )
 
     return result, report
