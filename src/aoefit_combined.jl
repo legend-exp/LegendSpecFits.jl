@@ -165,7 +165,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     end
     
     # MLE
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init), NelderMead(), Optim.Options(time_limit = 120, show_trace=false, iterations = 1000))
+    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init), NelderMead(), Optim.Options(time_limit = 300, show_trace=false, iterations = 1000))
 
     converged = Optim.converged(opt_r)
     !converged && @warn "Fit did not converge"
