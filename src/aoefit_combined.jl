@@ -116,7 +116,8 @@ assuming `f_aoe_mu` for `μ` and `f_aoe_sigma` for `σ`.
     * `report_σ`: Report to plot the combined fit result for the enery-dependence of `σ`.
     * `band_reports`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
-function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T}, result_corrections::NamedTuple; fit_func::Symbol = :f_fit, uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
+function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T}, result_corrections::NamedTuple; 
+    fit_func::Symbol = :f_fit, aoe_expression::Union{String,Symbol}="a / e", e_expression::Union{String,Symbol}="e", uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
     
     μA = ustrip(result_corrections.μ_compton.par[1])
     μB = ustrip(result_corrections.μ_compton.par[2])
@@ -273,17 +274,32 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         result = merge(v_ml, )
     end
 
-    e_expression = ustrip.(compton_bands)
+    # Add same fields to result as fit_aoe_corrections
     e_unit = unit(first(compton_bands))
+    es = ustrip.(e_unit, compton_bands)
     
+    par_µ = [v_ml.µA, v_ml.µB / e_unit]
+    func_µ = "$(mvalue(v_ml.µA)) + ($e_expression) * $(mvalue(v_ml.µB))$e_unit^-1"
+    result_µ = (par = par_µ, func = func_µ)
+
+    par_σ = [v_ml.σA, v_ml.σB * e_unit^2]
+    func_σ = "sqrt( ($(mvalue(v_ml.σA)))^2 + ($(mvalue(v_ml.σB))$(e_unit))^2 / ($e_expression)^2 )"
+    result_σ = (par = par_σ, func = func_σ)
+
+    aoe_str = "($aoe_expression)"
+    func_aoe_corr = "($aoe_str - ($(result_µ.func)) ) / ($(result_σ.func))"
+
+    result = merge(result, (µ_compton = result_µ, σ_compton = result_σ, compton_bands = (e = es,), func = func_aoe_corr))
+
+    # Create report for plotting the combined fit results
     label_fit_µ = "Combined Fit: $(round(mvalue(v_ml.μA), digits=2)) + E * $(round(mvalue(v_ml.μB)*1e6, digits=2))e-6"
     label_fit_σ = "Combined Fit: sqrt($(round(mvalue(v_ml.σA)*1e6, digits=1))e-6 + $(round(ustrip(mvalue(v_ml.σB)), digits=2)) / E^2)"
     
-    μ_values = f_aoe_mu(e_expression, (v_ml.μA, v_ml.μB))
-    σ_values = f_aoe_sigma(e_expression, (v_ml.σA, v_ml.σB))
+    μ_values = f_aoe_mu(es, (v_ml.μA, v_ml.μB))
+    σ_values = f_aoe_sigma(es, (v_ml.σA, v_ml.σB))
 
-    report_µ = (; values = µ_values, label_y = "µ", label_fit = label_fit_µ, energy = e_expression)
-    report_σ = (; values = σ_values, label_y = "σ", label_fit = label_fit_σ, energy = e_expression)
+    report_µ = (; values = µ_values, label_y = "µ", label_fit = label_fit_µ, energy = es)
+    report_σ = (; values = σ_values, label_y = "σ", label_fit = label_fit_σ, energy = es)
 
     report = (
         v = v_ml,
