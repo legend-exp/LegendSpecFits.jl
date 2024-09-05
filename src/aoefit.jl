@@ -189,7 +189,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h) 
     end
 
-    if uncertainty
+    if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 
