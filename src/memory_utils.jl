@@ -1,21 +1,23 @@
 
-mem_limit = 10.0 # in GB for the whole current process ignoring if things could run in parallel
-time_limit = 10.0 # in seconds a single Optim.jl optimization step
+optim_max_mem=10.0 # in GB for the whole current process ignoring if things could run in parallel
+optim_time_limit=10.0 # in seconds a single Optim.jl optimization step
 
 """
     set_memlimit(gig::Float64)
     Set memory limit in GB for the whole current process ignoring if things could run in parallel
 """
-function set_memlimit(gig::Float64)
-    global mem_limit=gig
+function set_memlimit(gig::Real)
+    @info "Setting `Optim.jl` memory limit to $gig GB"
+    global optim_max_mem=gig
 end
 
 """
     set_timelimit(sec::Float64)
     Set time limit in seconds a single Optim.jl optimization step
 """
-function set_timelimit(sec::Float64)
-    global time_limit=sec
+function set_timelimit(sec::Real)
+    @info "Setting `Optim.jl` time limit to $sec seconds"
+    global optim_time_limit=sec
 end
 
 """
@@ -32,12 +34,12 @@ end
 # Return
 - `Bool`: true if optimization should stop
 """
-function advanced_time_and_memory_control( ; start_time::Float64=time(), start_mem::Float=Sys.maxrss()/2^30, time_to_setup::Vector{<:Real}=zeros(1), time_limit::Real=-1, mem_limit::Real=-1)
+function advanced_time_and_memory_control( ; start_time::Float64=time(), start_mem::Float64=Sys.maxrss()/2^30, time_to_setup::Vector{<:Real}=zeros(1), time_limit::Real=-1, mem_limit::Real=-1)
     if time_limit < 0
-        time_limit = global time_limit
+        time_limit = optim_time_limit
     end
     if mem_limit < 0
-        mem_limit = global mem_limit
+        mem_limit = optim_max_mem
     end
     function callback(x::Optim.OptimizationState)
         # @debug " * Iteration:       $(x.iteration)"
