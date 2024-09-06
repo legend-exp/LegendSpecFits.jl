@@ -53,9 +53,9 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     end
 
     # minimization and error estimation
-    opt_r   = optimize(f_opt, v_init, LBFGS(), Optim.Options(time_limit = 60, show_trace=false, iterations = 1000); autodiff = :forward)
+    opt_r   = optimize(f_opt, v_init, LBFGS(), Optim.Options(callback=advanced_time_and_memory_control(; time_limit=30), iterations = 1000); autodiff = :forward)
     if !Optim.converged(opt_r)
-        opt_r = optimize(f_opt, v_init, NelderMead(), Optim.Options(time_limit = 60, show_trace=false, iterations = 1000))
+        opt_r = optimize(f_opt, v_init, NelderMead(), Optim.Options(callback=advanced_time_and_memory_control(; time_limit=30), iterations = 1000))
     end
     v_chi2  = Optim.minimizer(opt_r)
     converged = Optim.converged(opt_r)
