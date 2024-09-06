@@ -1,3 +1,23 @@
+
+mem_limit = 10.0 # in GB for the whole current process ignoring if things could run in parallel
+time_limit = 10.0 # in seconds a single Optim.jl optimization step
+
+"""
+    set_memlimit(gig::Float64)
+    Set memory limit in GB for the whole current process ignoring if things could run in parallel
+"""
+function set_memlimit(gig::Float64)
+    global mem_limit=gig
+end
+
+"""
+    set_timelimit(sec::Float64)
+    Set time limit in seconds a single Optim.jl optimization step
+"""
+function set_timelimit(sec::Float64)
+    global time_limit=sec
+end
+
 """
     advanced_time_and_memory_control(x::Optim.OptimizationState, start_time::Float64, time_to_setup::Float64; time_limit::Float64=60.0, mem_limit::Float64=30.0)
 
@@ -12,24 +32,35 @@
 # Return
 - `Bool`: true if optimization should stop
 """
-function advanced_time_and_memory_control( ; start_time::Float64=time(), time_to_setup::Vector{<:Real}=zeros(1), time_limit::Real=60.0, mem_limit::Real=30.0)
+function advanced_time_and_memory_control( ; start_time::Float64=time(), start_mem::Float=Sys.maxrss()/2^30, time_to_setup::Vector{<:Real}=zeros(1), time_limit::Real=-1, mem_limit::Real=-1)
+    if time_limit < 0
+        time_limit = global time_limit
+    end
+    if mem_limit < 0
+        mem_limit = global mem_limit
+    end
     function callback(x::Optim.OptimizationState)
         # @debug " * Iteration:       $(x.iteration)"
         so_far =  time() - start_time
         # @debug " * Time so far:     $so_far"
         if x.iteration == 0
             time_to_setup .= time() - start_time
-        elseif Sys.maxrss()/2^30 > mem_limit
+            return false
+        elseif Sys.maxrss()/2^30 - start_mem > mem_limit
             @warn " * Memory limit reached"
             return true
         else
             expected_next_time = so_far + (time() - start_time - time_to_setup[1])/(x.iteration)
             # @debug " * Next iteration ≈ $expected_next_time"
             # @debug " * Time limit:      $time_limit"
+            # @debug " * Start limit:     $start_time"
             # @debug " * Time to setup:   $time_to_setup"
-            if expected_next_time > time_limit @warn " * Time limit reached" end
-            return expected_next_time < time_limit ? false : true
+            if expected_next_time > time_limit 
+                @warn " * Time limit reached"
+                return true
+            else
+                return false
+            end
         end
-        return false
     end
 end
