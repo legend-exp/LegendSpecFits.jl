@@ -41,6 +41,7 @@ using ValueShapes
 MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
 
 include("utils.jl")
+include("memory_utils.jl")
 include("peakshapes.jl")
 include("likelihoods.jl")
 include("priors.jl")
