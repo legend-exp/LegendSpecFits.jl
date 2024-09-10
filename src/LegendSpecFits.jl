@@ -21,6 +21,7 @@ using ForwardDiff
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
+using LineSearches
 using LinearRegression
 using LsqFit
 using Measurements
