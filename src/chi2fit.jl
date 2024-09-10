@@ -53,9 +53,9 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     end
 
     # minimization and error estimation
-    opt_r   = optimize(f_opt, v_init, LBFGS(), Optim.Options(callback=advanced_time_and_memory_control(; time_limit=30), iterations = 1000); autodiff = :forward)
+    opt_r   = optimize(f_opt, v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(callback=advanced_time_and_memory_control(time_limit=20), iterations = 1000); autodiff = :forward)
     if !Optim.converged(opt_r)
-        opt_r = optimize(f_opt, v_init, NelderMead(), Optim.Options(callback=advanced_time_and_memory_control(; time_limit=30), iterations = 1000))
+        opt_r = optimize(f_opt, v_init, NelderMead(), Optim.Options(callback=advanced_time_and_memory_control(time_limit=20), iterations = 1000))
     end
     v_chi2  = Optim.minimizer(opt_r)
     converged = Optim.converged(opt_r)
@@ -65,32 +65,36 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     report = (par = result.par, f_fit = x -> f_fit(x, v_chi2...), x = x, y = y, gof = NamedTuple())
     
     if uncertainty && converged
-        covmat = inv(ForwardDiff.hessian(f_opt, v_chi2))
-        v_chi2_err = sqrt.(diag(abs.(covmat)))#mvalue.(sqrt.(diag(abs.(covmat))))
-        par = measurement.(v_chi2, v_chi2_err)
-    
-        @debug "Best Fit parameters: $par"
-        # gof 
-        chi2min = minimum(opt_r)
-        dof = length(x) - length(v_chi2)
-        pvalue = ccdf(Chisq(dof), chi2min)
-        function get_y_pred_err(f_fit, x_val, x_err, pars)  # get final uncertainties for normalized residuals
-            dual_x = ForwardDiff.Dual{UncertTag}(x_val, x_err)
-            dual_y = f_fit(dual_x, pars...)
-            y_pred_err = only(ForwardDiff.partials(UncertTag, dual_y))
-            return y_pred_err
+        try
+            covmat = inv(ForwardDiff.hessian(f_opt, v_chi2))
+            v_chi2_err = sqrt.(diag(abs.(covmat)))#mvalue.(sqrt.(diag(abs.(covmat))))
+            par = measurement.(v_chi2, v_chi2_err)
+            
+            @debug "Best Fit parameters: $par"
+            # gof 
+            chi2min = minimum(opt_r)
+            dof = length(x) - length(v_chi2)
+            pvalue = ccdf(Chisq(dof), chi2min)
+            function get_y_pred_err(f_fit, x_val, x_err, pars)  # get final uncertainties for normalized residuals
+                dual_x = ForwardDiff.Dual{UncertTag}(x_val, x_err)
+                dual_y = f_fit(dual_x, pars...)
+                y_pred_err = only(ForwardDiff.partials(UncertTag, dual_y))
+                return y_pred_err
+            end
+            Y_pred_err = get_y_pred_err.(Ref(f_fit), X_val, X_err, Ref(v_chi2))
+            Y_err_tot = sqrt.(Y_err.^2 .+ Y_pred_err.^2)
+            Y_err_tot = ifelse(all(Y_err_tot .== 0), ones(length(Y_val)), Y_err_tot)
+            residuals_norm = (Y_val - f_fit(X_val, v_chi2...)) ./ Y_err_tot
+
+            @debug "Covariance matrix: $covmat"
+            @debug "P-value: $(pvalue)"
+            @debug "Chi2/Ndof: $(chi2min)/$(dof)"
+
+            result = (par = par, gof = (converged = converged, pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat, residuals_norm = residuals_norm))
+            report = merge(report, (par = par, gof = result.gof, f_fit = x -> f_fit(x, par...)))
+        catch e
+            @warn "Error in calculating uncertainties: $e"
         end
-        Y_pred_err = get_y_pred_err.(Ref(f_fit), X_val, X_err, Ref(v_chi2))
-        Y_err_tot = sqrt.(Y_err.^2 .+ Y_pred_err.^2)
-        Y_err_tot = ifelse(all(Y_err_tot .== 0), ones(length(Y_val)), Y_err_tot)
-        residuals_norm = (Y_val - f_fit(X_val, v_chi2...)) ./ Y_err_tot
-
-        @debug "Covariance matrix: $covmat"
-        @debug "P-value: $(pvalue)"
-        @debug "Chi2/Ndof: $(chi2min)/$(dof)"
-
-        result = (par = par, gof = (converged = converged, pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat, residuals_norm = residuals_norm))
-        report = merge(report, (par = par, gof = result.gof, f_fit = x -> f_fit(x, par...)))
     else
         @debug "Best Fit parameters: $par"
     end
