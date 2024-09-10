@@ -91,13 +91,13 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
 
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
     f_loglike = let f_fit = fit_function, h = h
-        v -> hist_loglike(Base.Fix2(f_fit, v), h)
+        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(), Optim.Options(iterations = 3000, callback=advanced_time_and_memory_control()), autodiff=:forward)
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, show_trace=true, callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
-
+    @debug opt_r
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
