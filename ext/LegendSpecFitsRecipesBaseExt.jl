@@ -171,7 +171,7 @@ end
         fillrange := 1e-7
         bar_width := diff(report.h.edges[1])[1]
         label --> ifelse(show_label, "Data", "")
-        yscale := :log10
+        yscale --> :log10
         bins --> :sqrt
         xlabel --> "Energy (keV)"
         subplot --> _subplot
