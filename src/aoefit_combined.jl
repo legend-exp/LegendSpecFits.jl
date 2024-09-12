@@ -9,9 +9,9 @@ Fit a single A/E Compton band using the `f_aoe_compton` function consisting of a
     * `neg_log_likelihood`: The negative log-likelihood of the likelihood fit
     * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
-function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; just_likelihood::Bool = false, fit_func::Symbol = :f_fit, background_center::Union{Real,Nothing} = μ, uncertainty::Bool=false)
+function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; fit_func::Symbol = :f_fit, background_center::Union{Real,Nothing} = μ, uncertainty::Bool=false)
+    
     # create pseudo priors
-
     pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func;
         pseudo_prior = NamedTupleDist(μ = ConstValueShape(μ), σ = ConstValueShape(σ)))
         
@@ -34,8 +34,6 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
 
     converged = Optim.converged(opt_r)
     !converged && @warn "Fit did not converge"
-
-    if just_likelihood return Optim.minimum(opt_r) end
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
@@ -104,6 +102,36 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
     return result, report
 end
 
+# This function calculates the same thing as fit_single_aoe_compton_with_fixed_μ_and_σ, but just returns the value of the negative log-likelihood
+function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; fit_func::Symbol = :f_fit, background_center::Union{Real,Nothing} = μ, uncertainty::Bool=false)
+    
+    # create pseudo priors
+    pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func;
+        pseudo_prior = NamedTupleDist(μ = ConstValueShape(μ), σ = ConstValueShape(σ)))
+        
+    # transform back to frequency space
+    f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
+
+    # start values for MLE
+    v_init = mean(pseudo_prior)
+
+    # get fit function with background center
+    fit_function = get_aoe_fit_functions(; )[fit_func]
+
+    # create loglikehood function
+    f_loglike = let f_fit=fit_function, h=h
+        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    end
+
+    # MLE
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+
+    converged = Optim.converged(opt_r)
+    !converged && @warn "Fit did not converge"
+
+    return Optim.minimum(opt_r)
+end
+
 """
     fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T}, result_corrections::NamedTuple; pars_aoe::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
 
@@ -155,7 +183,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
             # fit peak
             try
-                neg_log_likelihoods[i] = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; just_likelihood = true, fit_func=fit_func)
+                neg_log_likelihoods[i] = neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; fit_func=fit_func)
             catch e
                 @warn "Error fitting band $(compton_bands[i]): $e"
                 continue
@@ -189,7 +217,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
             # fit peak
             try
-                v_results[i], v_reports[i] = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; just_likelihood=false, fit_func=fit_func, uncertainty=uncertainty)
+                v_results[i], v_reports[i] = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; fit_func=fit_func, uncertainty=uncertainty)
             catch e
                 @warn "Error fitting band $(compton_bands[i]): $e"
                 continue
@@ -219,7 +247,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
                 # fit peak
                 try
-                    neg_log_likelihoods[i] = fit_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; just_likelihood=true, fit_func=fit_func)
+                    neg_log_likelihoods[i] = neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; fit_func=fit_func)
                 catch e
                     @warn "Error fitting band $(compton_bands[i]): $e"
                     continue
