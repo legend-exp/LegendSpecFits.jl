@@ -95,7 +95,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 3000))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(), Optim.Options(iterations = 3000, callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
 
     # best fit results
@@ -105,7 +105,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h) 
     end
 
-    if uncertainty
+    if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 

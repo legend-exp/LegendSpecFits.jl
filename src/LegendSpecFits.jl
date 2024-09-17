@@ -41,6 +41,7 @@ using ValueShapes
 MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
 
 include("utils.jl")
+include("memory_utils.jl")
 include("peakshapes.jl")
 include("likelihoods.jl")
 include("priors.jl")
@@ -51,7 +52,7 @@ include("singlefit.jl")
 include("specfit.jl")
 include("chi2fit.jl")
 include("fit_calibration.jl")
-include("fwhm.jl")
+include("fit_fwhm.jl")
 include("simple_calibration.jl")
 include("auto_calibration.jl")
 include("aoefit_functions.jl")

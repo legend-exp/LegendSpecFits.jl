@@ -12,23 +12,25 @@ Fit the FWHM of the peaks to a quadratic function.
     * `v`: the fit result parameters
     * `f_fit`: the fitted function
 """
-function fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; pol_order::Int=1, e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true)
+function fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; pol_order::Int=1, e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true, use_pull_t::Bool=false)
     @assert length(peaks) == length(fwhm) "Peaks and FWHM must have the same length"
+    @assert pol_order >= 1 "The polynomial order must be greater than 0"
     # fit FWHM fit function
     e_unit = u"keV"
     p_start = append!([1, 2.96e-3*0.11], fill(0.0, pol_order-1)) .* [e_unit^i for i in pol_order:-1:0]
-    
+    pull_t = [if !use_pull_t NamedTuple() elseif i > 2 (mean = 0.0, std = 0.1*(2.96e-3*0.11)^i) else NamedTuple() end for i in 1:pol_order+1]
+
     # fit FWHM fit function as a square root of a polynomial
-    result_chi2, report_chi2 = chi2fit(x -> LegendSpecFits.heaviside(x)*sqrt(abs(x)), pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm); v_init=ustrip.(p_start), uncertainty=uncertainty)
+    result_chi2, report_chi2 = chi2fit(x -> LegendSpecFits.heaviside(x)*sqrt(abs(x)), pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm); v_init=ustrip.(p_start), uncertainty=uncertainty, pull_t=pull_t)
     
     # get pars and apply unit
     par =  result_chi2.par
     par_unit = par .* [e_unit^i for i in pol_order:-1:0]
 
     # built function in string
-    func = "sqrt($(join(["$(mvalue(par[i])) * ($(e_expression))^$(i-1)" for i in eachindex(length(par))], " + ")))$e_unit"
-    func_cal = "sqrt($(join(["$(mvalue(par[i])) * $(e_type_cal)^$(i-1) * keV^$(length(par)+1-i)" for i in eachindex(length(par))], " + ")))"
-    func_generic = "sqrt($(join(["par[$(i-1)] * $(e_type_cal)^$(i-1)" for i in eachindex(length(par))], " + ")))"
+    func = "sqrt($(join(["$(mvalue(par[i])) * ($(e_expression))^$(i-1)" for i in eachindex(par)], " + ")))$e_unit"
+    func_cal = "sqrt($(join(["$(mvalue(par[i])) * $(e_type_cal)^$(i-1) * keV^$(length(par)+1-i)" for i in eachindex(par)], " + ")))"
+    func_generic = "sqrt($(join(["par[$(i-1)] * $(e_type_cal)^$(i-1)" for i in eachindex(par)], " + ")))"
 
     # get fwhm at Qbb 
     # Qbb from: https://www.researchgate.net/publication/253446083_Double-beta-decay_Q_values_of_74Se_and_76Ge
