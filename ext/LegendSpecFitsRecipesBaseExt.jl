@@ -832,11 +832,11 @@ end
     xmin = floor(Int, minimum(report.x)/100)*100
     xmax = ceil(Int, maximum(report.x)/100)*100
 
-    yguidefontsize := 18
-    xguidefontsize := 18
+    yguidefontsize := 16
+    xguidefontsize := 16
     ytickfontsize := 12
     xtickfontsize := 12
-    legendfontsize := 14
+    legendfontsize := 12
     foreground_color_legend := :silver
     background_color_legend := :white
     framestyle := :box
@@ -847,7 +847,7 @@ end
         seriestype := :line
         subplot --> 1
         color := :orange
-        ms := 3
+        markersize := 3
         linewidth := 3
         label := report.label_fit
         ribbon := uncertainty.(report.f_fit(report.x))
@@ -856,6 +856,7 @@ end
     @series begin
         ylabel := "$(report.label_y) (a.u.)"
         seriestype := :scatter
+        markersize := 3
         subplot --> 1
         color := :black 
         #ylims := (0.98 * (Measurements.value(minimum(report.y)) - Measurements.uncertainty(median(report.y))), 1.02 * (Measurements.value(maximum(report.y)) + Measurements.uncertainty(median(report.y)) ) )
@@ -895,7 +896,7 @@ end
         seriestype := :scatter
         subplot --> 2
         color := :black 
-        ms := 3
+        markersize := 3
         label := false
         framestyle := :box
         grid := :false
