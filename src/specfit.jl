@@ -22,14 +22,17 @@ end
 export fit_peaks
 
 function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Vector{T},; e_unit::Union{Nothing, Unitful.EnergyUnits}=nothing, uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false,
-    fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::MaybeWithEnergyUnits = 1.0) where T<:Any
+    fit_func::Union{Symbol, Vector{Symbol}}= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::MaybeWithEnergyUnits = 1.0) where T<:Any
     
     e_unit = ifelse(isnothing(e_unit), NoUnits, e_unit)
+
+    if isa(fit_func, Symbol)
+        fit_func = fill(fit_func, length(th228_lines))
+    end
 
     # create return and result dicts
     v_result = Vector{NamedTuple}(undef, length(th228_lines))
     v_report = Vector{NamedTuple}(undef, length(th228_lines))
-
 
     # iterate throuh all peaks
     Threads.@threads for i in eachindex(th228_lines)
@@ -37,15 +40,17 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
         peak = th228_lines[i]
         h  = peakhists[i]
         ps = peakstats[i]
+        f = fit_func[i] 
+
         # fit peak
-        result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=uncertainty, low_e_tail=low_e_tail, fit_func = fit_func, pseudo_prior = pseudo_prior)
+        result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=uncertainty, low_e_tail=low_e_tail, fit_func = f, pseudo_prior = pseudo_prior)
 
         # check covariance matrix for being semi positive definite (no negative uncertainties)
         if uncertainty
             if iterative_fit && !isposdef(result_peak.covmat)
                 @warn "Covariance matrix not positive definite for peak $peak - repeat fit without low energy tail"
                 pval_save = result_peak.pval
-                result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false, fit_func = fit_func, pseudo_prior = pseudo_prior)
+                result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false, fit_func = f, pseudo_prior = pseudo_prior)
                 @info "New covariance matrix is positive definite: $(isposdef(result_peak.covmat))"
                 @info "p-val with low-energy tail  p=$(round(pval_save,digits=5)) , without low-energy tail: p=$(round((result_peak.pval),digits=5))"
                 end
@@ -138,7 +143,8 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
     
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, converged = converged))
+                (fwhm = measurement(fwhm, fwhm_err), fit_func = fit_func, 
+                gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, converged = converged))
                 )
         report = (
             v = v_ml,
@@ -158,7 +164,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
-            (fwhm = measurement(fwhm, NaN), ), (gof = (converged = converged,),))
+            (fwhm = measurement(fwhm, NaN), fit_func = fit_func, ), (gof = (converged = converged,),))
         report = (
             v = v_ml,
             h = h,
