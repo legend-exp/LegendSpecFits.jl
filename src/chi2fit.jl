@@ -53,9 +53,9 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     end
 
     # minimization and error estimation
-    opt_r   = optimize(f_opt, v_init, LBFGS(), Optim.Options(time_limit = 60, show_trace=false, iterations = 1000); autodiff = :forward)
+    opt_r   = optimize(f_opt, v_init, LBFGS(), Optim.Options(callback=advanced_time_and_memory_control(; time_limit=30), iterations = 1000); autodiff = :forward)
     if !Optim.converged(opt_r)
-        opt_r = optimize(f_opt, v_init, NelderMead(), Optim.Options(time_limit = 60, show_trace=false, iterations = 1000))
+        opt_r = optimize(f_opt, v_init, NelderMead(), Optim.Options(callback=advanced_time_and_memory_control(; time_limit=30), iterations = 1000))
     end
     v_chi2  = Optim.minimizer(opt_r)
     converged = Optim.converged(opt_r)
@@ -63,13 +63,13 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     par = measurement.(v_chi2,Ref(NaN)) # if ucnertainty is not calculated, return NaN
     result = (par = par, converged = converged) # fit function with optimized parameters
     report = (par = result.par, f_fit = x -> f_fit(x, v_chi2...), x = x, y = y, gof = NamedTuple())
-    @debug "Best Fit parameters: $par"
     
     if uncertainty && converged
         covmat = inv(ForwardDiff.hessian(f_opt, v_chi2))
         v_chi2_err = sqrt.(diag(abs.(covmat)))#mvalue.(sqrt.(diag(abs.(covmat))))
         par = measurement.(v_chi2, v_chi2_err)
-
+    
+        @debug "Best Fit parameters: $par"
         # gof 
         chi2min = minimum(opt_r)
         dof = length(x) - length(v_chi2)
@@ -91,8 +91,9 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
 
         result = (par = par, gof = (converged = converged, pvalue = pvalue, chi2min = chi2min, dof = dof, covmat = covmat, residuals_norm = residuals_norm))
         report = merge(report, (par = par, gof = result.gof, f_fit = x -> f_fit(x, par...)))
+    else
+        @debug "Best Fit parameters: $par"
     end
-
     return result, report 
 end
 

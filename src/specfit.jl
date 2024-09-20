@@ -1,90 +1,4 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
-"""
-    estimate_single_peak_stats(h::Histogram, calib_type::Symbol=:th228)
-
-Estimate statistics/parameters for a single peak in the given histogram `h`.
-
-`h` must only contain a single peak. The peak should have a Gaussian-like
-shape.
-`calib_type` specifies the calibration type. Currently only `:th228` is implemented.
-If you want get the peak statistics for a PSD calibration, use `:psd`.
-
-# Returns 
-`NamedTuple` with the fields
-    * `peak_pos`: estimated position of the peak (in the middle of the peak)
-    * `peak_fwhm`: full width at half maximum (FWHM) of the peak
-    * `peak_sigma`: estimated standard deviation of the peak
-    * `peak_counts`: estimated number of counts in the peak
-    * `mean_background`: estimated mean background value
-"""
-function estimate_single_peak_stats(h::Histogram,; calib_type::Symbol=:th228)
-    if calib_type == :th228
-        return estimate_single_peak_stats_th228(h)
-    elseif calib_type == :psd
-        return estimate_single_peak_stats_psd(h)
-    else
-        error("Calibration type not supported")
-    end
-end
-export estimate_single_peak_stats
-
-function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
-    W = h.weights
-    E = first(h.edges)
-    bin_width = step(E)
-    peak_amplitude, peak_idx = findmax(W)
-    fwhm_idx_left = findfirst(w -> w >= (first(W) + peak_amplitude) / 2, W)
-    fwhm_idx_right = findlast(w -> w >= (last(W) + peak_amplitude) / 2, W)
-    peak_max_pos = (E[peak_idx] + E[peak_idx+1]) / 2
-    peak_mid_pos = (E[fwhm_idx_right] + E[fwhm_idx_left]) / 2
-    peak_pos = (peak_max_pos + peak_mid_pos) / 2.0
-    peak_fwhm = (E[fwhm_idx_right] - E[fwhm_idx_left]) / 1.0
-    peak_sigma = peak_fwhm * inv(2*√(2log(2)))
-    peak_fwqm = NaN
-    # make sure that peakstats have non-zero sigma and fwhm values to prevent fit priors from being zero
-    if peak_fwhm == 0
-        fwqm_idx_left = findfirst(w -> w >= (first(W) + peak_amplitude) / 4, W)
-        fwqm_idx_right = findlast(w -> w >= (last(W) + peak_amplitude) / 4, W)
-        peak_fwqm = (E[fwqm_idx_right] - E[fwqm_idx_left]) / 1.0
-        peak_sigma = peak_fwqm * inv(2*√(2log(4)))
-        peak_fwhm  = peak_sigma * 2*√(2log(2))
-    end
-    if peak_sigma == 0
-        peak_sigma = 1.0
-        peak_fwhm = 2.0
-    end
-    # peak_area = peak_amplitude * peak_sigma * sqrt(2*π)
-    # calculate mean background and step
-    idx_bkg_left = something(findfirst(x -> x >= peak_pos - 15*peak_sigma, E[2:end]), 7)
-    idx_bkg_right = something(findfirst(x -> x >= peak_pos + 15*peak_sigma, E[2:end]), length(W) - 7)
-    mean_background_left, mean_background_right = mean(view(W, 1:idx_bkg_left)), mean(view(W, idx_bkg_right:length(W)))
-    
-    mean_background_step = (mean_background_left - mean_background_right) / bin_width
-    mean_background = mean_background_right / bin_width #(mean_background_left + mean_background_right) / 2 / bin_width
-    mean_background_std = 0.5*(std(view(W, 1:idx_bkg_left)) + std(view(W, idx_bkg_right:length(W)))) / bin_width
-    #mean_background_err = 0.5*(std(view(W, 1:idx_bkg_left))/sqrt(length(1:idx_bkg_left)) + std(view(W, idx_bkg_right:length(W)))/sqrt(length(idx_bkg_right:length(W))) ) / bin_width # error of the mean 
-    
-    # sanity checks
-    mean_background = ifelse(mean_background == 0, 0.01, mean_background)
-    mean_background_step = ifelse(mean_background_step < 1e-2, 1e-2, mean_background_step)
-    mean_background_std = ifelse(!isfinite(mean_background_std) || mean_background_std == 0, sqrt(mean_background), mean_background_std)
-
-    peak_counts = inv(0.761) * (sum(view(W,fwhm_idx_left:fwhm_idx_right)) - mean_background * peak_fwhm)
-    peak_counts = ifelse(peak_counts < 0.0, inv(0.761) * sum(view(W,fwhm_idx_left:fwhm_idx_right)), peak_counts)
-    if !isnan(peak_fwqm)
-        peak_counts = inv(0.904) * (sum(view(W,fwqm_idx_left:fwqm_idx_right)) - mean_background * peak_fwqm)
-        peak_counts = ifelse(peak_counts < 0.0, inv(0.904) * sum(view(W,fwqm_idx_left:fwqm_idx_right)), peak_counts)
-    end
-    (
-        peak_pos = peak_pos, 
-        peak_fwhm = peak_fwhm,
-        peak_sigma = peak_sigma, 
-        peak_counts = peak_counts, 
-        mean_background = mean_background,
-        mean_background_step = mean_background_step,
-        mean_background_std = mean_background_std,
-    )
-end
 
 """
     fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Array,; calib_type::Symbol=:th228, uncertainty::Bool=true, low_e_tail::Bool=true)
@@ -181,7 +95,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 3000))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(), Optim.Options(iterations = 3000, callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
 
     # best fit results
@@ -191,7 +105,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h) 
     end
 
-    if uncertainty
+    if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 
@@ -298,7 +212,7 @@ function estimate_fwhm(v::NamedTuple)
             return roots_high - roots_low
         end 
     catch e
-         return NaN 
+        return NaN 
     end
 end
 """
@@ -404,8 +318,8 @@ function fit_subpeaks_th228(
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 3000))
-    converged = Optim.converged(opt_r) 
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 5000))
+    converged = Optim.converged(opt_r)
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
@@ -433,7 +347,7 @@ function fit_subpeaks_th228(
     gof_survived = NamedTuple()
     gof_cut = NamedTuple()
 
-    if uncertainty
+    if uncertainty && converged
 
         f_loglike_array = let v_keys = keys(pseudo_prior)
             v ->  -f_loglike(NamedTuple{v_keys}(v))
@@ -472,7 +386,9 @@ function fit_subpeaks_th228(
                     
             end for part in ("survived", "cut")
         ]
-            
+        # get gofs
+        gof_survived, gof_cut = gofs
+
         # get fwhm of peak
         fwhm, fwhm_err = try
                 get_peak_fwhm_th228(v_ml, param_covariance)
@@ -480,28 +396,32 @@ function fit_subpeaks_th228(
                 get_peak_fwhm_th228(v_ml, v_ml_err)
             end
 
-        # @debug "Best Fit values for $(part)"
-        # @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
-        # @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
-        # @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
-        # @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
-        # @debug "FWHM: $(fwhm) ± $(fwhm_err)"
+        @debug "Best Fit values"
+        @debug "SF: $(v_ml.sf) ± $(v_ml_err.sf)"
+        @debug "BSF: $(v_ml.bsf) ± $(v_ml_err.bsf)"
+        @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
+        @debug "σ survived: $(v_ml.σ_survived) ± $(v_ml_err.σ_survived)"
+        @debug "σ cut     : $(v_ml.σ_cut) ± $(v_ml_err.σ_cut)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err),), NamedTuple{(:gof_survived, :gof_cut)}(gofs))
-                    
+                (fwhm = measurement(fwhm, fwhm_err),), #NamedTuple{(:gof_survived, :gof_cut)}(gofs))
+                (gof = (converged = converged,
+                    survived = (pvalue = gofs[1].pvalue, chi2 = gofs[1].chi2, dof = gofs[1].dof, covmat = gofs[1].covmat),
+                    cut = (pvalue = gofs[2].pvalue, chi2 = gofs[2].chi2, dof = gofs[2].dof, covmat = gofs[2].covmat)
+                ), ))
     else
         # get fwhm of peak
         fwhm, fwhm_err = get_peak_fwhm_th228(v_ml, v_ml, false)
 
-        # @debug "Best Fit values"
-        # @debug "μ: $(v_ml.μ)"
-        # @debug "σ: $(v_ml.σ)"
-        # @debug "n: $(v_ml.n)"
-        # @debug "FWHM: $(fwhm)"
+        @debug "Best Fit values"
+        @debug "SF: $(v_ml.sf)"
+        @debug "BSF: $(v_ml.bsf)"
+        @debug "μ: $(v_ml.μ)"
+        @debug "σ survived: $(v_ml.σ_survived)"
+        @debug "σ cut     : $(v_ml.σ_cut)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
-        (fwhm = measurement(fwhm, NaN), gof_survived = NamedTuple(), gof_cut = NamedTuple()))
+        (fwhm = measurement(fwhm, NaN), gof = (converged = converged, survived = NamedTuple(), cut = NamedTuple())))
     end
 
     report = (
@@ -509,18 +429,18 @@ function fit_subpeaks_th228(
             v = v_ml_survived,
             h = h_survived,
             f_fit = x -> Base.Fix2(fit_function, v_ml_survived)(x),
-            f_components = peakshape_components(fit_func, v_ml; background_center = background_center),
-            gof = result.gof_survived
+            f_components = peakshape_components(fit_func, v_ml_survived; background_center = background_center),
+            gof = gof_survived
         ),
         cut = (
             v = v_ml_cut,
             h = h_cut,
             f_fit = x -> Base.Fix2(fit_function, v_ml_cut)(x),
-            f_components = peakshape_components(fit_func, v_ml; background_center = background_center),
-            gof = result.gof_cut
+            f_components = peakshape_components(fit_func, v_ml_cut; background_center = background_center),
+            gof = gof_cut
         ),
-        sf = v_ml.sf,
-        bsf = v_ml.bsf
+        sf = result.sf,
+        bsf = result.bsf
     )
 
     return result, report

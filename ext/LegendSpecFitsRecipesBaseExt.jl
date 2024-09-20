@@ -153,7 +153,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, f_fit_x_step_scaling=1/100, _subplot=1)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, show_components=true, show_residuals=true, f_fit_x_step_scaling=1/100, _subplot=1)
     f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     bin_centers = collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2 
     legend := :topright
@@ -165,15 +165,15 @@ end
     framestyle --> :box
     @series begin
         seriestype := :bar
-        fillalpha := 1
-        fillcolor := :lightgrey
-        linecolor := :lightgrey
+        alpha --> 1.0
+        fillcolor --> :lightgrey
+        linecolor --> :lightgrey
         fillrange := 1e-7
         bar_width := diff(report.h.edges[1])[1]
-        label := ifelse(show_label, "Data", "")
+        label --> ifelse(show_label, "Data", "")
         yscale := :log10
         bins --> :sqrt
-        xlabel := "Energy (keV)"
+        xlabel --> "Energy (keV)"
         subplot --> _subplot
         bin_centers, LinearAlgebra.normalize(report.h, mode = :density).weights#LinearAlgebra.normalize(report.h, mode = :density)
     end
@@ -187,33 +187,49 @@ end
             end
             linewidth := 2.3
             color := :black
+            linecolor := :black
+            margins --> (0, :mm)
+            if !isempty(report.gof) && show_residuals
+                bottom_margin --> (-4, :mm)
+                xlabel := ""
+                xticks --> ([])
+            else
+                xlabel --> "Energy (keV)"
+            end
+            ylims --> (ylim_min, ylim_max)
+            xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
+            ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
             subplot --> _subplot
             minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1])))
         end
-        for (idx, component) in  enumerate(keys(report.f_components.funcs))
-            @series begin
-                seriestype := :line
-                color := report.f_components.colors[component]
-                label := ifelse(show_label, report.f_components.labels[component], "")
-                linewidth := 2
-                linestyle := report.f_components.linestyles[component]
-                if idx == length(report.f_components.funcs)
-                    margins --> (0, :mm)
-                    bottom_margin --> (-4, :mm)
-                    if !isempty(report.gof)
-                        xlabel := ""
-                        xticks --> ([])
+        if show_components
+            for (idx, component) in  enumerate(keys(report.f_components.funcs))
+                @series begin
+                    seriestype := :line
+                    color := report.f_components.colors[component]
+                    label := ifelse(show_label, report.f_components.labels[component], "")
+                    linewidth := 2
+                    linestyle := report.f_components.linestyles[component]
+                    if idx == length(report.f_components.funcs)
+                        margins --> (0, :mm)
+                        if !isempty(report.gof) && show_residuals
+                            bottom_margin --> (-4, :mm)
+                            xlabel := ""
+                            xticks --> ([])
+                        else
+                            xlabel --> "Energy (keV)"
+                        end
+                        ylims --> (ylim_min, ylim_max)
+                        xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
+                        ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
                     end
-                    ylims --> (ylim_min, ylim_max)
-                    xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
-                    ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+                    subplot --> _subplot
+                    minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_components.funcs[component]
                 end
-                subplot --> _subplot
-                minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_components.funcs[component]
             end
         end
 
-        if !isempty(report.gof)
+        if !isempty(report.gof) && show_residuals
             ylims_res_max, ylims_res_min = 5, -5
             if any(report.gof.residuals_norm .> 5) || any(report.gof.residuals_norm .< -5)
                 abs_max = 1.2*maximum(abs.(report.gof.residuals_norm))
@@ -248,8 +264,8 @@ end
                 label := ""
                 title := ""
                 markercolor --> :black
-                ylabel := "Residuals (σ)"
-                xlabel := "Energy (keV)"
+                ylabel --> "Residuals (σ)"
+                xlabel --> "Energy (keV)"
                 link --> :x
                 top_margin --> (0, :mm)
                 ylims := (ylims_res_min, ylims_res_max)
@@ -273,7 +289,7 @@ end
         @debug "mode $mode not supported - has to be :cormat or :covmat"
         return
     end
-   
+
     cm_plt  = NaN .* cm
     for i in range(1, stop = size(cm)[1])
         cm_plt[i:end,i] = cm[i:end,i]
@@ -289,8 +305,8 @@ end
 
     @series begin
         seriestype := :heatmap
-       # c := cgrad(:grays, rev = true)
-       c := :RdBu_3#:bam
+        # c := cgrad(:grays, rev = true)
+        c := :RdBu_3#:bam
         cm_plt
     end
 
@@ -359,26 +375,25 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:survived, :cut, :sf, :bsf)}; cut_value = missing)
-    size --> (1200,400)
+@recipe function f(report::NamedTuple{(:survived, :cut, :sf, :bsf)}; peak_name="")
+    size --> (1400,800)
     left_margin --> (10, :mm)
-    layout := @layout ([A{0.01h}; [B{0.75h}; C{0.175h}] [D{0.75h}; E{0.175h}]])
+    title --> "$peak_name Survival fraction: $(round(report.sf * 100, digits = 2))%"
+    ylim_max = max(3*value(report.survived.f_fit(report.survived.v.μ)), 3*maximum(report.survived.h.weights), 3*value(report.cut.f_fit(report.cut.v.μ)), 3*maximum(report.cut.h.weights))
+    ylim_max = ifelse(ylim_max == 0.0, 1e5, ylim_max)
+    ylim_min = min(minimum(filter(x -> x > 0, report.survived.h.weights)), minimum(filter(x -> x > 0, report.cut.h.weights)))
     @series begin
-        title := (ismissing(cut_value) ? "" : "Cut value: $(cut_value)   ") * "Survival fraction: $(round(report.sf * 100, digits = 2))%"
-        grid := false
-        showaxis := false
-        label := nothing
-        bottom_margin := (-20, :px)
-        []
-    end
-    @series begin
-        title := "Survived\n\n"
-        _subplot := 2
+        label := "Data Survived"
+        _subplot := 1
+        fillcolor := :darkgrey
+        alpha := 1.0
         report.survived
     end
     @series begin
-        title := "Cut\n\n"
-        _subplot := 4
+        label := "Data Cut"
+        _subplot := 1
+        alpha := 0.2
+        ylims --> (ylim_min, ylim_max)
         report.cut
     end
 end
@@ -809,4 +824,87 @@ end
     end
 end
 
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :label_y, :label_fit)}, com_report::NamedTuple{(:values, :label_y, :label_fit, :energy)})
+    margins --> (0, :mm)
+    link --> :x
+    size := (1200, 700)
+    layout --> @layout([a{0.8h}; b{0.2h}]) #or 0.7 and 0.3
+    xmin = floor(Int, minimum(report.x)/100)*100
+    xmax = ceil(Int, maximum(report.x)/100)*100
+
+    yguidefontsize := 18
+    xguidefontsize := 18
+    ytickfontsize := 12
+    xtickfontsize := 12
+    legendfontsize := 14
+    foreground_color_legend := :silver
+    background_color_legend := :white
+    framestyle := :box
+    grid := :false
+
+    ### subplot 1
+    @series begin
+        seriestype := :line
+        subplot --> 1
+        color := :orange
+        ms := 3
+        linewidth := 3
+        label := report.label_fit
+        ribbon := uncertainty.(report.f_fit(report.x))
+        report.x, value.(report.f_fit(report.x))
+    end
+    @series begin
+        ylabel := "$(report.label_y) (a.u.)"
+        seriestype := :scatter
+        subplot --> 1
+        color := :black 
+        #ylims := (0.98 * (Measurements.value(minimum(report.y)) - Measurements.uncertainty(median(report.y))), 1.02 * (Measurements.value(maximum(report.y)) + Measurements.uncertainty(median(report.y)) ) )
+        label := "Compton band fits: Gaussian $(report.label_y)(A/E)"
+        report.x, report.y
+    end
+    @series begin #combined fits
+        ylabel := "$(com_report.label_y) (a.u.)"
+        seriestype := :line
+        subplot --> 1
+        color := :red
+        linewidth := 2
+        linestyle := :dash
+        label := com_report.label_fit
+        xlims := (xmin,xmax)
+        xticks := (xmin:250:xmax, fill(" ", length(xmin:250:xmax) ))
+        ylims := (0.98 * (Measurements.value(minimum(report.y)) - Measurements.uncertainty(median(report.y))), 1.02 * (Measurements.value(maximum(report.y)) + Measurements.uncertainty(median(report.y)) ) )
+        margin := (10, :mm)
+        bottom_margin := (-7, :mm)
+        com_report.energy, com_report.values
+    end
+
+    ### subplot 2
+    @series begin
+        seriestype := :hline
+        ribbon := 3
+        subplot --> 2
+        fillalpha := 0.5
+        label := ""
+        fillcolor := :lightgrey
+        linecolor := :darkgrey
+        [0.0]
+    end
+    @series begin
+        xlabel := "Energy ($(report.e_unit))"
+        ylabel := "Residuals (σ) \n"
+        seriestype := :scatter
+        subplot --> 2
+        color := :black 
+        ms := 3
+        label := false
+        framestyle := :box
+        grid := :false
+        xlims := (xmin,xmax)
+        xticks := (xmin:250:xmax)
+        #ylims := (floor(minimum(report.gof.residuals_norm)-1), ceil(maximum(report.gof.residuals_norm))+1)
+        ylims := (-5, 5)
+        yticks := [-5,0,5]
+        report.x, report.gof.residuals_norm
+    end
+end
 end # module LegendSpecFitsRecipesBaseExt
