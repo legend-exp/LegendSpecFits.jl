@@ -20,19 +20,20 @@ It is the PDF of the distribution that descibes the random process
 function ex_gauss_pdf(x::Real, μ::Real, σ::Real, θ::Real)
     R = float(promote_type(typeof(x), typeof(σ), typeof(θ)))
     x_μ = x - μ
-    gauss_pdf_value = inv(σ * sqrt2π) * exp(-(x_μ/σ)^2 / 2)
 
-    y = if θ < σ * R(10^-6)
+    y = if iszero(θ) && iszero(σ)
+        zero(R)
+    elseif θ < σ * R(10^-6)
         # Use asymptotic form for very small θ - necessary?
-        R(gauss_pdf_value / (1 + x_μ * θ / σ^2))
+        R(inv(sqrt2π) * exp(-(x_μ/σ)^2 / 2) / (σ + x_μ * θ / σ))
     elseif σ/θ - x_μ/σ < 0
         # Original:
         R(inv(2*θ) * exp((σ/θ)^2/2 - x_μ/θ) * erfc(invsqrt2 * (σ/θ - x_μ/σ)))
     else
         # More stable, numerically, for small values of θ:
-        R(gauss_pdf_value * σ/θ * sqrthalfπ * erfcx(invsqrt2 * (σ/θ - x_μ/σ)))
+        R(inv(sqrt2π) * exp(-(x_μ/σ)^2 / 2)/θ * sqrthalfπ * erfcx(invsqrt2 * (σ/θ - x_μ/σ)))
     end
-    @assert !isnan(y) && !isinf(y)
+    @assert isfinite(y)
     return y
 end
 
