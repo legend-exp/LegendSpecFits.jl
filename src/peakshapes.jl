@@ -22,7 +22,7 @@ function ex_gauss_pdf(x::Real, μ::Real, σ::Real, θ::Real)
     x_μ = x - μ
 
     y = if iszero(θ) && iszero(σ)
-        zero(R)
+        iszero(x_μ) ? one(R) : zero(R)
     elseif θ < σ * R(10^-6)
         # Use asymptotic form for very small θ - necessary?
         R(inv(sqrt2π) * exp(-(x_μ/σ)^2 / 2) / (σ + x_μ * θ / σ))
