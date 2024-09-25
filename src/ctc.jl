@@ -64,7 +64,7 @@ function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real},
     qdrift_median = median(qdrift_cut)
     fct_range = [ustrip(e_unit, 1e-4u"keV") / qdrift_median, ustrip(e_unit, 10u"keV") / qdrift_median]*e_unit
     fct_start = [ustrip(e_unit, 0.1u"keV") / qdrift_median]*e_unit
-    opt_r = optimize(f_minimize, ustrip.(e_unit, fct_range)..., ustrip.(e_unit, fct_start), Fminbox(GradientDescent()), Optim.Options(iterations=100, show_trace=false, time_limit=300))
+    opt_r = optimize(f_minimize, ustrip.(e_unit, fct_range)..., ustrip.(e_unit, fct_start), Fminbox(GradientDescent()), Optim.Options(iterations=100, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()))
     # get optimal correction factor
     fct = Optim.minimizer(opt_r)[1]*e_unit
     converged = Optim.converged(opt_r)
