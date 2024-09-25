@@ -53,6 +53,7 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
     @debug opt_r
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
     v_ml = inverse(f_trafo)(opt_r.minimizer)
@@ -167,6 +168,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
     @debug opt_r
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
     v_ml = inverse(f_trafo)(opt_r.minimizer)
@@ -283,6 +285,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
     @debug opt_r
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
     v_ml = inverse(f_trafo)(opt_r.minimizer)
@@ -410,6 +413,7 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
     opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
     @debug opt_r
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
@@ -513,6 +517,7 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
     opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
     @debug opt_r
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))

@@ -86,6 +86,7 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
     opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
     @debug opt_r
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))

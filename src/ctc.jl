@@ -68,6 +68,7 @@ function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real},
     # get optimal correction factor
     fct = Optim.minimizer(opt_r)[1]*e_unit
     converged = Optim.converged(opt_r)
+    if !converged @warn "CTC did not converge" end
 
     # calculate drift time corrected energy
     e_ctc = e_cut .+ fct .* qdrift_cut
