@@ -83,7 +83,9 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
+    converged = Optim.converged(opt_r)
+    @debug opt_r
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
@@ -92,7 +94,7 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
         v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v...) : 0, h)
     end
 
-    if uncertainty
+    if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 
@@ -122,8 +124,8 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
         @debug "B: $(v_ml.B) ± $(v_ml_err.B)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                  (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                  residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+                    (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                    residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"

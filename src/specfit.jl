@@ -84,7 +84,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = Vector(mean(f_trafo.target_dist))  
+    v_init = Vector(mean(f_trafo.target_dist)) 
 
     # get fit function with background center
     fit_function = get_th228_fit_functions(; background_center = background_center)[fit_func]
@@ -95,9 +95,10 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, show_trace=true, callback=advanced_time_and_memory_control()), autodiff=:forward)
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
     @debug opt_r
+    
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
@@ -138,7 +139,15 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
     
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, converged = converged))
+                (fwhm = measurement(fwhm, fwhm_err), 
+                    gof = (pvalue = pval, 
+                    chi2 = chi2, 
+                    dof = dof, 
+                    covmat = param_covariance, 
+                    mean_residuals = mean(residuals_norm),
+                    median_residuals = median(residuals_norm),
+                    std_residuals = std(residuals_norm),
+                    converged = converged))
                 )
         report = (
             v = v_ml,
@@ -318,8 +327,9 @@ function fit_subpeaks_th228(
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 5000))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
+    @debug opt_r
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))

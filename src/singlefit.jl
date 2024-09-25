@@ -41,19 +41,23 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     # create fit model
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
     
-    v_init  = mean(pseudo_prior)
-
+    # start values for MLE
+    v_init = Vector(mean(f_trafo.target_dist))
+    
+    # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
     f_loglike = let cut_low = cut_low, cut_high = cut_high, x = x
         v -> (-1) * loglikelihood(truncated(Normal(v[1], v[2]), cut_low, cut_high), x)
     end
 
     # MLE
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
+    converged = Optim.converged(opt_r)
+    @debug opt_r
 
     # best fit results
     v_ml = inverse(f_trafo)(opt_r.minimizer)
 
-    if uncertainty
+    if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike, tuple_to_array(v_ml))
 
@@ -86,8 +90,8 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
         @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) * x_unit for k in keys(v_ml)]...),
-                  (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                  residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+                    (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                    residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"
@@ -151,19 +155,23 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     # create fit model
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
     
-    v_init  = mean(pseudo_prior)
+    # start values for MLE
+    v_init = Vector(mean(f_trafo.target_dist))
 
+    # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
     f_loglike = let cut_low = ifelse(left, cut_low, μ), cut_high = ifelse(left, μ, cut_high),  x = x
         v -> (-1) * loglikelihood(truncated(Normal(v[1], v[2]), cut_low, cut_high), x)
     end
 
     # MLE
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
+    converged = Optim.converged(opt_r)
+    @debug opt_r
 
     # best fit results
     v_ml = inverse(f_trafo)(opt_r.minimizer)
 
-    if uncertainty
+    if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike, tuple_to_array(v_ml))
 
@@ -196,8 +204,8 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
         @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) * x_unit for k in keys(v_ml)]...),
-                  (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                  residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+                    (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                    residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"
@@ -263,19 +271,23 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     # create fit model
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
     
-    v_init  = mean(pseudo_prior)
+    # start values for MLE
+    v_init = Vector(mean(f_trafo.target_dist))
 
+    # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
     f_loglike = let cut_low = cut_low, cut_high = cut_high, cut_max = cut_max, left = left, x = x
         v -> (-1) * loglikelihood(truncated(Normal(v[1], v[2]), ifelse(left, cut_low, cut_max), ifelse(left, cut_max, cut_high)), x)
     end
 
-    # fit data
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    # MLE
+    opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
+    converged = Optim.converged(opt_r)
+    @debug opt_r
 
     # best fit results
     v_ml = inverse(f_trafo)(opt_r.minimizer)
 
-    if uncertainty
+    if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike, tuple_to_array(v_ml))
 
@@ -387,7 +399,7 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist))
     
     # create loglikehood function
     f_loglike = let f_fit=f_fit, h=h
@@ -395,12 +407,14 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
+    converged = Optim.converged(opt_r)
+    @debug opt_r
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    if uncertainty
+    if uncertainty && converged
         f_loglike_array(v) = - f_loglike(array_to_tuple(v, v_ml))
 
         # Calculate the Hessian matrix using ForwardDiff
@@ -488,7 +502,7 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function
     f_loglike = let f_fit=f_double_gauss, h=h
@@ -496,12 +510,14 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
+    converged = Optim.converged(opt_r)
+    @debug opt_r
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    if uncertainty
+    if uncertainty && converged
         f_loglike_array = let f_fit=double_gaussian, h=h
             v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v...) : 0, h)
         end
