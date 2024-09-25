@@ -53,7 +53,7 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     end
 
     # minimization and error estimation
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
+    opt_r = optimize(f_opt, v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     if !Optim.converged(opt_r)
         opt_r = optimize(f_opt, v_init, NelderMead(), Optim.Options(callback=advanced_time_and_memory_control(time_limit=20), iterations = 3000))
     end
