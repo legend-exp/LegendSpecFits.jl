@@ -824,4 +824,87 @@ end
     end
 end
 
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :label_y, :label_fit)}, com_report::NamedTuple{(:values, :label_y, :label_fit, :energy)})
+    margins --> (0, :mm)
+    link --> :x
+    size := (1200, 700)
+    layout --> @layout([a{0.8h}; b{0.2h}]) #or 0.7 and 0.3
+    xmin = floor(Int, minimum(report.x)/100)*100
+    xmax = ceil(Int, maximum(report.x)/100)*100
+
+    yguidefontsize := 18
+    xguidefontsize := 18
+    ytickfontsize := 12
+    xtickfontsize := 12
+    legendfontsize := 14
+    foreground_color_legend := :silver
+    background_color_legend := :white
+    framestyle := :box
+    grid := :false
+
+    ### subplot 1
+    @series begin
+        seriestype := :line
+        subplot --> 1
+        color := :orange
+        ms := 3
+        linewidth := 3
+        label := report.label_fit
+        ribbon := uncertainty.(report.f_fit(report.x))
+        report.x, value.(report.f_fit(report.x))
+    end
+    @series begin
+        ylabel := "$(report.label_y) (a.u.)"
+        seriestype := :scatter
+        subplot --> 1
+        color := :black 
+        #ylims := (0.98 * (Measurements.value(minimum(report.y)) - Measurements.uncertainty(median(report.y))), 1.02 * (Measurements.value(maximum(report.y)) + Measurements.uncertainty(median(report.y)) ) )
+        label := "Compton band fits: Gaussian $(report.label_y)(A/E)"
+        report.x, report.y
+    end
+    @series begin #combined fits
+        ylabel := "$(com_report.label_y) (a.u.)"
+        seriestype := :line
+        subplot --> 1
+        color := :red
+        linewidth := 2
+        linestyle := :dash
+        label := com_report.label_fit
+        xlims := (xmin,xmax)
+        xticks := (xmin:250:xmax, fill(" ", length(xmin:250:xmax) ))
+        ylims := (0.98 * (Measurements.value(minimum(report.y)) - Measurements.uncertainty(median(report.y))), 1.02 * (Measurements.value(maximum(report.y)) + Measurements.uncertainty(median(report.y)) ) )
+        margin := (10, :mm)
+        bottom_margin := (-7, :mm)
+        com_report.energy, com_report.values
+    end
+
+    ### subplot 2
+    @series begin
+        seriestype := :hline
+        ribbon := 3
+        subplot --> 2
+        fillalpha := 0.5
+        label := ""
+        fillcolor := :lightgrey
+        linecolor := :darkgrey
+        [0.0]
+    end
+    @series begin
+        xlabel := "Energy ($(report.e_unit))"
+        ylabel := "Residuals (σ) \n"
+        seriestype := :scatter
+        subplot --> 2
+        color := :black 
+        ms := 3
+        label := false
+        framestyle := :box
+        grid := :false
+        xlims := (xmin,xmax)
+        xticks := (xmin:250:xmax)
+        #ylims := (floor(minimum(report.gof.residuals_norm)-1), ceil(maximum(report.gof.residuals_norm))+1)
+        ylims := (-5, 5)
+        yticks := [-5,0,5]
+        report.x, report.gof.residuals_norm
+    end
+end
 end # module LegendSpecFitsRecipesBaseExt
