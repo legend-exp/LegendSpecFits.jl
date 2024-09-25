@@ -75,7 +75,7 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function
     f_loglike = let f_fit=f_lq_compton, h=h
