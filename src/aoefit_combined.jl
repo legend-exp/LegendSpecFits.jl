@@ -19,7 +19,7 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist)) 
 
     # get fit function with background center
     fit_function = get_aoe_fit_functions(; )[fit_func]
@@ -30,15 +30,15 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
-
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
-    !converged && @warn "Fit did not converge"
+    @debug opt_r
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
 
-    if uncertainty
+    if uncertainty && converged
             
         # only calculate errors for non-fixed parameters
         f_loglike_array(v) = - f_loglike(array_to_tuple(vcat([μ, σ], v), v_ml)) 
@@ -113,7 +113,7 @@ function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist)) 
 
     # get fit function with background center
     fit_function = get_aoe_fit_functions(; )[fit_func]
@@ -124,10 +124,10 @@ function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=false, callback=advanced_time_and_memory_control()), autodiff=:forward)
 
     converged = Optim.converged(opt_r)
-    !converged && @warn "Fit did not converge"
+    if !converged @warn "Fit did not converge" end
 
     return Optim.minimum(opt_r)
 end
@@ -164,7 +164,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
     
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist)) 
 
     # create loglikehood function
     f_loglike = pars -> begin
@@ -193,9 +193,9 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     end
     
     # MLE
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init), NelderMead(), Optim.Options(time_limit = 300, show_trace=false, iterations = 1000))
-
+    opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
+    @debug opt_r
     !converged && @warn "Fit did not converge"
 
     v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
