@@ -687,7 +687,7 @@ end
             NamedTuple()
         end
         xlabel := "Energy (keV)"
-        legend := :bottomright
+        legend := :topleft
         framestyle := :box
         xlims := (0, 3000)
         xticks := (0:500:3000, ["$i" for i in 0:500:3000])
