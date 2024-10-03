@@ -17,7 +17,9 @@ function fit_calibration(n_poly::Int, µ::AbstractVector{<:Union{Unitful.RealOrR
         µ = ustrip.(e_unit, µ)
     end
     @debug "Fit calibration curve with $(n_poly)-order polynominal function"
-    result_fit, report  = chi2fit(n_poly, µ, ustrip.(e_unit, peaks); uncertainty=uncertainty)
+    p_start = append!([0.0*e_unit, mvalue(maximum(peaks))/mvalue(μ[argmax(peaks)])], fill(0.0, n_poly-1) .* [e_unit for i in n_poly-2:-1:0])
+    @debug "Initial parameters: $p_start"
+    result_fit, report  = chi2fit(n_poly, µ, ustrip.(e_unit, peaks); v_init=ustrip.(e_unit, p_start), uncertainty=uncertainty)
     
     par =  result_fit.par
     par_unit = par .* e_unit
