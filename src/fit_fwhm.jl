@@ -18,10 +18,11 @@ function fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitfu
     # fit FWHM fit function
     e_unit = u"keV"
     p_start = append!([1, 2.96e-3*0.11], fill(0.0, pol_order-1)) .* [e_unit^i for i in pol_order:-1:0]
-    pull_t = [if !use_pull_t NamedTuple() elseif i > 2 (mean = 0.0, std = 0.1*(2.96e-3*0.11)^i) else NamedTuple() end for i in 1:pol_order+1]
+    lower_bound = fill(0.0, length(p_start))
+    pull_t = [if !use_pull_t NamedTuple() elseif i > 2 (mean = 0.0, std = 0.8*(2.96e-3*0.11)^i) else NamedTuple() end for i in 1:pol_order+1]
 
     # fit FWHM fit function as a square root of a polynomial
-    result_chi2, report_chi2 = chi2fit(x -> LegendSpecFits.heaviside(x)*sqrt(abs(x)), pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm); v_init=ustrip.(p_start), uncertainty=uncertainty, pull_t=pull_t)
+    result_chi2, report_chi2 = chi2fit(x -> LegendSpecFits.heaviside(x)*sqrt(abs(x)), pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm); v_init=ustrip.(p_start), uncertainty=uncertainty, pull_t=pull_t, lower_bound=lower_bound)
     
     # get pars and apply unit
     par =  result_chi2.par
