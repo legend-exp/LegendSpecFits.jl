@@ -74,7 +74,7 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
 """
-function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}; 
+function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}; 
     uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
     fit_func::Symbol=:f_fit, background_center::Union{Real,Nothing} = ps.peak_pos, m_cal_simple::Real = 1.0) where T<:Real
     # create standard pseudo priors
@@ -95,16 +95,18 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
-    converged = Optim.converged(opt_r)
-    @debug opt_r
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+
+    converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
 
     # best fit results
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    v_ml = inverse(f_trafo)(res.u)
 
     f_loglike_array = let f_fit=fit_function, h=h, v_keys = keys(pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
-        v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h) 
+        v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h)
     end
 
     if uncertainty && converged
@@ -114,7 +116,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         # Calculate the parameter covariance matrix
         param_covariance_raw = inv(H)
         param_covariance = nearestSPD(param_covariance_raw)
-    
+
         # Extract the parameter uncertainties
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
@@ -328,7 +330,7 @@ function fit_subpeaks_th228(
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
+    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=false, callback=advanced_time_and_memory_control()), autodiff=:forward)
     converged = Optim.converged(opt_r)
     @debug opt_r
 
