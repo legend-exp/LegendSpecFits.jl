@@ -5,8 +5,7 @@ Estimate statistics/parameters for a single peak in the given histogram `h`.
 
 `h` must only contain a single peak. The peak should have a Gaussian-like
 shape.
-`calib_type` specifies the calibration type. Currently only `:th228` is implemented.
-If you want get the peak statistics for a PSD calibration, use `:psd`.
+`calib_type` specifies the calibration type. Currently `:th228`, `:psd` and `:simple` is implemented..
 
 # Returns 
 `NamedTuple` with the fields
@@ -16,21 +15,20 @@ If you want get the peak statistics for a PSD calibration, use `:psd`.
     * `peak_counts`: estimated number of counts in the peak
     * `mean_background`: estimated mean background value
 """
-function estimate_single_peak_stats(h::Histogram,; calib_type::Symbol=:th228)
+function estimate_single_peak_stats(args...; calib_type::Symbol=:th228)
     if calib_type == :th228
-        return estimate_single_peak_stats_th228(h)
+        return estimate_single_peak_stats_th228(args...)
     elseif calib_type == :psd
-        return estimate_single_peak_stats_psd(h)
+        return estimate_single_peak_stats_psd(args...)
+    elseif calib_type == :simple
+        return estimate_single_peak_stats_simple(args...)
     else
         error("Calibration type not supported")
     end
 end
 export estimate_single_peak_stats
 
-function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
-    W = h.weights
-    E = first(h.edges)
-    bin_width = step(E)
+function _get_hist_peakpos_fwhm(E::AbstractVector, W::Vector{<:Real})
     peak_amplitude, peak_idx = findmax(W)
     fwhm_idx_left = findfirst(w -> w >= (first(W) + peak_amplitude) / 2, W)
     fwhm_idx_right = findlast(w -> w >= (last(W) + peak_amplitude) / 2, W)
@@ -39,14 +37,43 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
     peak_pos = (peak_max_pos + peak_mid_pos) / 2.0
     peak_fwhm = (E[fwhm_idx_right] - E[fwhm_idx_left]) / 1.0
     peak_sigma = peak_fwhm * inv(2*√(2log(2)))
+    return peak_fwhm, peak_sigma, peak_pos, fwhm_idx_left, fwhm_idx_right
+end
+_get_hist_peakpos_fwhm(h::Histogram) = _get_hist_peakpos_fwhm(first(h.edges), h.weights)
+
+
+function _get_hist_fwqm(E::AbstractVector, W::Vector{<:Real})
+    peak_amplitude, peak_idx = findmax(W)
+    fwqm_idx_left = findfirst(w -> w >= (first(W) + peak_amplitude) / 4, W)
+    fwqm_idx_right = findlast(w -> w >= (last(W) + peak_amplitude) / 4, W)
+    peak_fwqm = (E[fwqm_idx_right] - E[fwqm_idx_left]) / 1.0
+    peak_sigma = peak_fwqm * inv(2*√(2log(4)))
+    peak_fwhm  = peak_sigma * 2*√(2log(2))
+    return peak_fwqm, peak_sigma, peak_fwhm, fwqm_idx_left, fwqm_idx_right
+end
+
+function estimate_single_peak_stats_th228(e::Vector{<:Real}, bin_width::Real)
+    h = fit(Histogram, e, minimum(e):bin_width:maximum(e))
+    peak_fwhm, _, _, _, _ = _get_hist_peakpos_fwhm(h)
+    while peak_fwhm == 0.0
+        bin_width /= 2
+        @debug "Decrease bin width for peak estimation to $bin_width"
+        h = fit(Histogram, e, minimum(e):bin_width:maximum(e))
+        peak_fwhm, _, _, _, _ = _get_hist_peakpos_fwhm(h)
+    end
+    estimate_single_peak_stats_th228(h)
+end
+
+function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
+    W = h.weights
+    E = first(h.edges)
+    bin_width = step(E)
+    peak_amplitude, peak_idx = findmax(W)
+    peak_fwhm, peak_sigma, peak_pos, fwhm_idx_left, fwhm_idx_right = _get_hist_peakpos_fwhm(E, W)
     peak_fwqm = NaN
     # make sure that peakstats have non-zero sigma and fwhm values to prevent fit priors from being zero
     if peak_fwhm == 0
-        fwqm_idx_left = findfirst(w -> w >= (first(W) + peak_amplitude) / 4, W)
-        fwqm_idx_right = findlast(w -> w >= (last(W) + peak_amplitude) / 4, W)
-        peak_fwqm = (E[fwqm_idx_right] - E[fwqm_idx_left]) / 1.0
-        peak_sigma = peak_fwqm * inv(2*√(2log(4)))
-        peak_fwhm  = peak_sigma * 2*√(2log(2))
+        peak_fwqm, peak_sigma, peak_fwhm, fwqm_idx_left, fwqm_idx_right = _get_hist_fwqm(E, W)
     end
     if peak_sigma == 0
         peak_sigma = 1.0
@@ -61,7 +88,7 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
     mean_background_step = (mean_background_left - mean_background_right) / bin_width
     mean_background = mean_background_right / bin_width #(mean_background_left + mean_background_right) / 2 / bin_width
     mean_background_std = 0.5*(std(view(W, 1:idx_bkg_left)) + std(view(W, idx_bkg_right:length(W)))) / bin_width
-    #mean_background_err = 0.5*(std(view(W, 1:idx_bkg_left))/sqrt(length(1:idx_bkg_left)) + std(view(W, idx_bkg_right:length(W)))/sqrt(length(idx_bkg_right:length(W))) ) / bin_width # error of the mean 
+    # mean_background_err = 0.5*(std(view(W, 1:idx_bkg_left))/sqrt(length(1:idx_bkg_left)) + std(view(W, idx_bkg_right:length(W)))/sqrt(length(idx_bkg_right:length(W))) ) / bin_width # error of the mean 
     
     # sanity checks
     mean_background = ifelse(mean_background == 0, 0.01, mean_background)
@@ -78,7 +105,8 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
         peak_pos = peak_pos, 
         peak_fwhm = peak_fwhm,
         peak_sigma = peak_sigma, 
-        peak_counts = peak_counts, 
+        peak_counts = peak_counts,
+        bin_width = bin_width,
         mean_background = mean_background,
         mean_background_step = mean_background_step,
         mean_background_std = mean_background_std,
@@ -104,14 +132,8 @@ function estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
         peak_sigma = peak_fwqm * inv(2*√(2log(4)))
         peak_fwhm  = peak_sigma * 2*√(2log(2))
     end
-    #peak_area = peak_amplitude * peak_sigma * sqrt(2*π)
-    # mean_background = (first(W) + last(W)) / 2
-    # five_sigma_idx_left = findfirst(e -> e >= peak_pos - 5*peak_sigma, E)
-    three_sigma_idx_left = findfirst(e -> e >= peak_pos - 3*peak_sigma, E)
     mean_background = convert(typeof(peak_pos), (sum(view(W, 1:three_sigma_idx_left))))
     mean_background = ifelse(mean_background == 0.0, 100.0, mean_background)
-    # peak_counts = inv(0.761) * (sum(view(W,fwhm_idx_left:fwhm_idx_right)) - mean_background * peak_fwhm)
-    # peak_counts = sum(view(W,three_sigma_idx_left:lastindex(W))) / (1 - exp(-3))
     peak_counts = 2*sum(view(W,peak_idx:lastindex(W)))
 
     (
@@ -120,5 +142,46 @@ function estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
         peak_sigma = peak_sigma, 
         peak_counts = peak_counts, 
         mean_background = mean_background
+    )
+end
+
+
+function estimate_single_peak_stats_simple(h::Histogram{T}) where T<:Real
+    W = h.weights
+    E = first(h.edges)
+    bin_width = step(E)
+    peak_amplitude, peak_idx = findmax(W)
+    fwhm_idx_left = findfirst(w -> w >= (first(W) + peak_amplitude) / 2, W)
+    fwhm_idx_right = findlast(w -> w >= (last(W) + peak_amplitude) / 2, W)
+    peak_max_pos = (E[peak_idx] + E[peak_idx+1]) / 2
+    peak_mid_pos = (E[fwhm_idx_right] + E[fwhm_idx_left]) / 2
+    peak_pos = (peak_max_pos + peak_mid_pos) / 2.0
+    peak_fwhm = (E[fwhm_idx_right] - E[fwhm_idx_left]) / 1.0
+    peak_sigma = peak_fwhm * inv(2*√(2log(2)))
+    peak_fwqm = NaN
+    # make sure that peakstats have non-zero sigma and fwhm values to prevent fit priors from being zero
+    if peak_fwhm == 0
+        fwqm_idx_left = findfirst(w -> w >= (first(W) + peak_amplitude) / 4, W)
+        fwqm_idx_right = findlast(w -> w >= (last(W) + peak_amplitude) / 4, W)
+        peak_fwqm = (E[fwqm_idx_right] - E[fwqm_idx_left]) / 1.0
+        peak_sigma = peak_fwqm * inv(2*√(2log(4)))
+        peak_fwhm  = peak_sigma * 2*√(2log(2))
+    end
+    if peak_sigma == 0
+        peak_sigma = 1.0
+        peak_fwhm = 2.0
+    end
+
+    peak_counts = inv(0.761) * (sum(view(W,fwhm_idx_left:fwhm_idx_right)))
+    peak_counts = ifelse(peak_counts < 0.0, inv(0.761) * sum(view(W,fwhm_idx_left:fwhm_idx_right)), peak_counts)
+    if !isnan(peak_fwqm)
+        peak_counts = inv(0.904) * (sum(view(W,fwqm_idx_left:fwqm_idx_right)))
+        peak_counts = ifelse(peak_counts < 0.0, inv(0.904) * sum(view(W,fwqm_idx_left:fwqm_idx_right)), peak_counts)
+    end
+    (
+        peak_pos = peak_pos, 
+        peak_fwhm = peak_fwhm,
+        peak_sigma = peak_sigma, 
+        peak_counts = peak_counts, 
     )
 end
