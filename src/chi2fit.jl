@@ -15,7 +15,9 @@ v_init : initial value for fit parameter optimization. If left blank, the initia
 - report: 
 
 """ 
-function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}}; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), first(methods(f_fit)).nargs - 2), v_init::Vector = [], uncertainty::Bool=true )
+function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}}; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), first(methods(f_fit)).nargs - 2), v_init::Vector{<:Real} = ones(first(methods(f_fit)).nargs - 2), lower_bound::Vector{<:Real}=fill(-Inf, length(pull_t)), upper_bound::Vector{<:Real}=fill(Inf, length(pull_t)), uncertainty::Bool=true)
+    @assert length(x) == length(y) "x and y must have the same length"
+    @assert length(pull_t) == length(v_init) == length(lower_bound)  == length(upper_bound) "Length of pull_t does not match the number of fit parameters"
     # prepare pull terms
     f_pull(v::Number,pull_t::NamedTuple) = isempty(pull_t) ? zero(v) : (v .- pull_t.mean) .^2 ./ pull_t.std.^2  # pull term is zero if pull_t is zero
     f_pull(v::Vector,pull_t::Vector)     = sum(f_pull.(v,pull_t))
@@ -48,21 +50,16 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
 
     # init guess for fit parameter: this could be improved. 
     npar = length(pull_t) # number of fit parameter (including nuisance parameters)
-    if isempty(v_init) 
-        v_init = ones(npar)
-    end
 
     # minimization and error estimation
-    opt_r = optimize(f_opt, v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=contains(get(ENV, "JULIA_DEBUG", ""), "LegendSpecFits"), callback=advanced_time_and_memory_control()), autodiff=:forward)
-    if !Optim.converged(opt_r)
-        opt_r = optimize(f_opt, v_init, NelderMead(), Optim.Options(callback=advanced_time_and_memory_control(time_limit=20), iterations = 3000))
-    end
+    optf = OptimizationFunction((u, p) -> f_opt(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [], lb=lower_bound, ub=upper_bound)
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
     
-    converged = Optim.converged(opt_r)
-    @debug opt_r
+    converged = (res.retcode == ReturnCode.Success)
 
     # get best fit results
-    v_chi2  = Optim.minimizer(opt_r)
+    v_chi2  = res.u
     
     if !converged @warn "Fit did not converge" end
     par = measurement.(v_chi2,Ref(NaN)) # if ucnertainty is not calculated, return NaN
@@ -77,7 +74,7 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
             
             @debug "Best Fit parameters: $par"
             # gof 
-            chi2min = minimum(opt_r)
+            chi2min = res.objective
             dof = length(x) - length(v_chi2)
             pvalue = ccdf(Chisq(dof), chi2min)
             function get_y_pred_err(f_fit, x_val, x_err, pars)  # get final uncertainties for normalized residuals
@@ -120,7 +117,3 @@ chi2fit(f_fit, x::AbstractVector, y::AbstractVector{<:Real}, yerr::AbstractVecto
 chi2fit(f_fit, x::AbstractVector{<:Real}, y::AbstractVector{<:Real}, yerr::AbstractVector{<:Real}, xerr::AbstractVector{<:Real}; kwargs...) = chi2fit(f_fit, measurement.(x, xerr), measurement.(y, yerr); kwargs...)
 
 export chi2fit
-
-
-
-#f5(x,p1,p2,p3) =  PolCalFun(p1,p2,p3)
