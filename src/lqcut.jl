@@ -21,17 +21,16 @@ function lq_drift_time_correction(
     t_tcal = ustrip.(tdrift[DEP_left .< e_cal .< DEP_right])
 
     #lq cutoff
-    #sort array to exclude outliers
-    sort_lq = sort(lq_DEP)
-    low_cut = Int(round(length(sort_lq) * lower_exclusion)) # cut lower 0.5%
-    high_cut = Int(round(length(sort_lq) * upper_exclusion)) # cut upper 2%
+    #sort array to exclude outliers for better fit
+    low_cut_value = quantile(lq_DEP, lower_exclusion)  # 0.5% quantile
+    high_cut_value = quantile(lq_DEP, upper_exclusion)  # 2% quantile
 
-    #ideal bin width for histogram
-    ideal_bin_width = LegendSpecFits.get_friedman_diaconis_bin_width(sort_lq)
-    ideal_length = Int(round(abs(sort_lq[low_cut] - sort_lq[high_cut]) / ideal_bin_width))
+    ideal_bin_width = LegendSpecFits.get_friedman_diaconis_bin_width(lq_DEP[low_cut_value .< lq_DEP .< high_cut_value])
+    ideal_length = Int(round(abs(high_cut_value - low_cut_value) / ideal_bin_width))
 
-    lq_prehist = fit(Histogram, lq_DEP, range(sort_lq[low_cut], sort_lq[high_cut], length=ideal_length))
+    lq_prehist = fit(Histogram, lq_DEP, range(low_cut_value, high_cut_value, length=ideal_length))
     lq_prestats = estimate_single_peak_stats(lq_prehist)
+
     lq_start = lq_prestats.peak_pos - 3*lq_prestats.peak_sigma
     lq_stop = lq_prestats.peak_pos + 3*lq_prestats.peak_sigma
 
@@ -65,6 +64,13 @@ function lq_drift_time_correction(
         #set cutoff in drift time dimension for later fit
         t_lower = µ_t - drift_cutoff_sigma * σ_t
         t_upper = µ_t + drift_cutoff_sigma * σ_t
+    elseif mode == :percentile
+        #set cutoff at the 15% and 95% percentile
+        t_lower = quantile(t_tcal, 0.15)
+        t_upper = quantile(t_tcal, 0.95)
+        drift_prehist = nothing
+        drift_report = nothing
+
     elseif mode == :double_gaussian
         #create histogram for drift time
         drift_prehist = fit(Histogram, t_tcal, range(minimum(t_tcal), stop=maximum(t_tcal), length=100))
@@ -100,8 +106,8 @@ function lq_drift_time_correction(
     drift_time_func(x) = parameters[1] .+ parameters[2] .* x
 
     #property function for drift time correction
-    lq_class_func = "lq - ($(parameters[2]) * (qdrift / $e_expression) + $(parameters[1]))"
-    lq_class_func_generic = "lq - (slope * tdrift + y_inter)"
+    lq_class_func = "lq / $e_expression - ($(parameters[2]) * (qdrift / $e_expression) + $(parameters[1]))"
+    lq_class_func_generic = "lq / e  - (slope * tdrift + y_inter)"
 
     #create result and report
     result = (
@@ -141,10 +147,9 @@ function LQ_cut(
     
     # Generate values for histogram edges
     #exclude outliers
-    sort_lq = sort(lq_DEP)
-    low_cut = Int(round(length(sort_lq) * lower_exclusion)) # cut lower 0.5%
-    high_cut = Int(round(length(sort_lq) * upper_exclusion)) # cut upper 5%
-    prehist = fit(Histogram, lq_DEP, range(sort_lq[low_cut], sort_lq[high_cut], length=100))
+    low_cut_value = quantile(lq_DEP, lower_exclusion)  # 0.5% quantile
+    high_cut_value = quantile(lq_DEP, upper_exclusion)  # 95% quantile
+    prehist = fit(Histogram, lq_DEP, range(low_cut_value, high_cut_value, length=100))
     prestats = estimate_single_peak_stats(prehist)
     start = prestats.peak_pos - 3*prestats.peak_sigma
     stop = prestats.peak_pos + 3*prestats.peak_sigma
@@ -156,7 +161,7 @@ function LQ_cut(
     hist_sb2 = fit(Histogram, lq_sb2, edges)
     
     # Subtract histograms
-    weights_subtracted = hist_DEP.weights - hist_sb1.weights - hist_sb2.weights
+    weights_subtracted = hist_DEP.weights .- hist_sb1.weights .- hist_sb2.weights
     hist_subtracted = Histogram(edges, weights_subtracted)
 
     # Replace negative bins with 0
@@ -174,10 +179,11 @@ function LQ_cut(
 
     result = (
         cut = cut_3σ,
-        fit_result = fit_result,
+
     )
 
     report = (
+        fit_result = fit_result,
         temp_hists = temp_hists,
         fit_report = fit_report,
     )
