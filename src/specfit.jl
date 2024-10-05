@@ -22,7 +22,7 @@ end
 export fit_peaks
 
 function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Vector{T},; e_unit::Union{Nothing, Unitful.EnergyUnits}=nothing, uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false,
-    fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::MaybeWithEnergyUnits = 1.0) where T<:Any
+    fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), m_cal_simple::MaybeWithEnergyUnits = 1.0) where T<:Any
     
     e_unit = ifelse(isnothing(e_unit), NoUnits, e_unit)
 
