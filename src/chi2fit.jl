@@ -15,18 +15,36 @@ v_init : initial value for fit parameter optimization. If left blank, the initia
 - report: 
 
 """ 
-function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}}; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), first(methods(f_fit)).nargs - 2), v_init::Vector{<:Real} = ones(first(methods(f_fit)).nargs - 2), lower_bound::Vector{<:Real}=fill(-Inf, length(pull_t)), upper_bound::Vector{<:Real}=fill(Inf, length(pull_t)), uncertainty::Bool=true)
+function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}}; 
+                    pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), first(methods(f_fit)).nargs - 2), 
+                    v_init::Vector{<:Real} = ones(length(pull_t)),
+                    lower_bound::Vector{<:Real}=fill(-Inf, length(pull_t)),
+                    upper_bound::Vector{<:Real}=fill(Inf, length(pull_t)),
+                    pseudo_prior::Union{ContinuousMultivariateDistribution, Nothing}=nothing,
+                    uncertainty::Bool=true)
     @assert length(x) == length(y) "x and y must have the same length"
-    @assert length(pull_t) == length(v_init) == length(lower_bound)  == length(upper_bound) "Length of pull_t does not match the number of fit parameters"
+    @assert length(pull_t) == length(v_init) == length(lower_bound)  == length(upper_bound) "Length of pull_t, v_init, lower_bound and upper_bound does not match."
+
     # prepare pull terms
     f_pull(v::Number,pull_t::NamedTuple) = isempty(pull_t) ? zero(v) : (v .- pull_t.mean) .^2 ./ pull_t.std.^2  # pull term is zero if pull_t is zero
     f_pull(v::Vector,pull_t::Vector)     = sum(f_pull.(v,pull_t))
     pull_t_sum = Base.Fix2(f_pull, pull_t)
 
+    @debug "Initial guess for fit parameters: $v_init"
+    @debug "Pull terms: $pull_t"
+    @debug "Lower bound: $lower_bound"
+    @debug "Upper bound: $upper_bound"
+
+    f_trafo = if isnothing(pseudo_prior)
+        identity
+    else
+        BAT.DistributionTransform(Normal, pseudo_prior)
+    end
+
     # get rid of measurements 
-    X_val = mvalue.(x) 
-    Y_val = mvalue.(y) 
-    X_err= muncert.(x) 
+    X_val = mvalue.(x)
+    Y_val = mvalue.(y)
+    X_err= muncert.(x)
     Y_err = muncert.(y)
     if all(X_err .== 0) && all(Y_err .== 0)
         Y_err = ones(length(Y_val))
@@ -52,14 +70,14 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     npar = length(pull_t) # number of fit parameter (including nuisance parameters)
 
     # minimization and error estimation
-    optf = OptimizationFunction((u, p) -> f_opt(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [], lb=lower_bound, ub=upper_bound)
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    optf = OptimizationFunction((u, p) -> (f_opt ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optprob = OptimizationProblem(optf, f_trafo(v_init), [], lb=lower_bound, ub=upper_bound)
+    res = solve(optprob, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
     
     converged = (res.retcode == ReturnCode.Success)
 
     # get best fit results
-    v_chi2  = res.u
+    v_chi2  = inverse(f_trafo)(res.u)
     
     if !converged @warn "Fit did not converge" end
     par = measurement.(v_chi2,Ref(NaN)) # if ucnertainty is not calculated, return NaN
