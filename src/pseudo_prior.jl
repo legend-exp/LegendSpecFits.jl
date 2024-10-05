@@ -1,8 +1,8 @@
 function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; low_e_tail::Bool=true, fixed_position::Bool=false) where T<:Real
     pprior_base = NamedTupleDist(
-        μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Normal(ps.peak_pos, 1*ps.peak_sigma)),
-        σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
-        n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
+        μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Normal(ps.peak_pos, 0.2*ps.peak_sigma)),
+        σ = weibull_from_mx(ps.peak_sigma, 1.5*ps.peak_sigma),
+        n = weibull_from_mx(ps.peak_counts, 1.5*ps.peak_counts),
         step_amplitude = weibull_from_mx(ps.mean_background_step, ps.mean_background_step + 5*ps.mean_background_std),
         skew_fraction = ifelse(low_e_tail, truncated(weibull_from_mx(0.002, 0.008), 0.0, 0.5), ConstValueDist(0.0)),
         skew_width = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
