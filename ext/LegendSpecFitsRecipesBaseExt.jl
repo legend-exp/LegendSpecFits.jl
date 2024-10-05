@@ -570,7 +570,7 @@ end
 
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof)}; plot_ribbon=true, xerrscaling=1, additional_pts=NamedTuple())
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof)}; plot_ribbon=true, xerrscaling=1, yerrscaling=1, additional_pts=NamedTuple())
     thickness_scaling := 2.0
     xlims := (0, 1.2*value(maximum(report.x)))
     framestyle := :box
@@ -601,22 +601,32 @@ end
     @series begin
         seriestype := :scatter
         subplot := 1
-        if xerrscaling == 1
+        if xerrscaling == 1 && yerrscaling == 1
             label := "Data"
+        elseif xerrscaling == 1
+            label := "Data (y-Error x$(yerrscaling))"
+        elseif yerrscaling == 1
+            label := "Data (x-Error x$(xerrscaling))"
         else
-            label := "Data (Error x$(xerrscaling))"
+            label := "Data (x-Error x$(xerrscaling), y-Error x$(yerrscaling))"
         end
         markercolor --> :black
-        value.(report.x), report.y
+        xerror := uncertainty.(report.x) .* xerrscaling
+        yerror := uncertainty.(report.y) .* yerrscaling
+        value.(report.x), value.(report.y)
     end
     if !isempty(additional_pts)
         @series begin
             seriestype := :scatter
             subplot --> 1
-            if xerrscaling == 1
+            if xerrscaling == 1 && yerrscaling == 1
                 label := "Data not used for fit"
+            elseif xerrscaling == 1
+                label := "Data not used for fit (y-Error x$(yerrscaling))"
+            elseif yerrscaling == 1
+                label := "Data not used for fit (x-Error x$(xerrscaling))"
             else
-                label := "Data not used for fit (Error x$(xerrscaling))"
+                label := "Data not used for fit (x-Error x$(xerrscaling), y-Error x$(yerrscaling))"
             end
             ms --> 3
             markershape --> :circle
@@ -624,7 +634,8 @@ end
             linewidth --> 0.5
             markercolor --> :silver
             xerror := uncertainty.(additional_pts.x) .* xerrscaling
-            value.(additional_pts.x), additional_pts.y
+            yerror := uncertainty.(additional_pts.y) .* yerrscaling
+            value.(additional_pts.x), value.(additional_pts.y)
         end
     end
     if !isempty(report.gof)
@@ -674,7 +685,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :qbb, :type)}; additional_pts=NamedTuple())
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :qbb, :type)}; xerrscaling=1, yerrscaling=1, additional_pts=NamedTuple())
     bottom_margin --> (0, :mm)
     if report.type == :fwhm
         y_max = value(maximum(report.y))
@@ -693,7 +704,8 @@ end
         xticks := (0:500:3000, ["$i" for i in 0:500:3000])
         @series begin
             grid --> :all
-            xerrscaling --> 1
+            xerrscaling --> xerrscaling
+            yerrscaling --> yerrscaling
             additional_pts --> additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = get(report, :gof, NamedTuple()))
         end
@@ -713,7 +725,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :type)}; xerrscaling=1, additional_pts=NamedTuple())
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :type)}; xerrscaling=1, yerrscaling=1, additional_pts=NamedTuple())
     bottom_margin --> (0, :mm)
     if report.type == :cal
         additional_pts = if !isempty(additional_pts)
@@ -730,7 +742,8 @@ end
         xticks := (0:16000:176000)
         @series begin
             grid --> :all
-            xerrscaling := xerrscaling
+            xerrscaling --> xerrscaling
+            yerrscaling --> yerrscaling
             additional_pts := additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = report.gof)
         end
