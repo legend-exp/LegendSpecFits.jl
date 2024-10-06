@@ -72,7 +72,7 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     # minimization and error estimation
     optf = OptimizationFunction((u, p) -> (f_opt ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optprob = OptimizationProblem(optf, f_trafo(v_init), [], lb=lower_bound, ub=upper_bound)
-    res = solve(optprob, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optprob, NLopt.LN_BOBYQA(), maxiters = 3000, maxtime=optim_time_limit)
     
     converged = (res.retcode == ReturnCode.Success)
 
