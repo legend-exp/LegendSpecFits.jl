@@ -1,6 +1,6 @@
 
 optim_max_mem=10.0 # in GB for the whole current process ignoring if things could run in parallel
-optim_time_limit=10.0 # in seconds a single Optim.jl optimization step
+optim_time_limit=20.0 # in seconds a single Optim.jl optimization step
 
 """
     set_memlimit(gig::Float64)
