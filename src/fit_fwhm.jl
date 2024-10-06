@@ -56,7 +56,7 @@ function get_fit_fwhm_pseudo_prior(pol_order::Int, intercept_guess::Real; fano_t
     unshaped(if pol_order == 1
         NamedTupleDist(
             enc = weibull_from_mx(intercept_guess, 1.2*intercept_guess),
-            fano = Normal(fano_term, 0.2*fano_term)
+            fano = Normal(fano_term, 0.33*fano_term)
         )
     elseif pol_order == 2
         NamedTupleDist(
