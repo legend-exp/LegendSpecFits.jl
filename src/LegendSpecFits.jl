@@ -23,6 +23,7 @@ using InverseFunctions
 using IrrationalConstants
 using LineSearches
 using LinearRegression
+using LineSearches
 using LsqFit
 using Measurements
 using Measurements: value as mvalue
