@@ -19,10 +19,10 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist)) 
 
     # get fit function with background center
-    fit_function = get_aoe_fit_functions(; )[fit_func]
+    fit_function = get_aoe_fit_functions(; background_center = background_center)[fit_func]
 
     # create loglikehood function
     f_loglike = let f_fit=fit_function, h=h
@@ -30,15 +30,17 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
 
-    converged = Optim.converged(opt_r)
-    !converged && @warn "Fit did not converge"
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    v_ml = inverse(f_trafo)(res.u)
 
-    if uncertainty
+    if uncertainty && converged
             
         # only calculate errors for non-fixed parameters
         f_loglike_array(v) = - f_loglike(array_to_tuple(vcat([μ, σ], v), v_ml)) 
@@ -103,7 +105,7 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
 end
 
 # This function calculates the same thing as fit_single_aoe_compton_with_fixed_μ_and_σ, but just returns the value of the negative log-likelihood
-function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; fit_func::Symbol = :f_fit, background_center::Union{Real,Nothing} = μ, uncertainty::Bool=false)
+function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; fit_func::Symbol = :f_fit, background_center::Union{Real,Nothing} = μ)
     
     # create pseudo priors
     pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func;
@@ -113,10 +115,10 @@ function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist)) 
 
     # get fit function with background center
-    fit_function = get_aoe_fit_functions(; )[fit_func]
+    fit_function = get_aoe_fit_functions(; background_center = background_center)[fit_func]
 
     # create loglikehood function
     f_loglike = let f_fit=fit_function, h=h
@@ -124,12 +126,14 @@ function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
 
-    converged = Optim.converged(opt_r)
-    !converged && @warn "Fit did not converge"
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
 
-    return Optim.minimum(opt_r)
+    return res.objective
 end
 
 """
@@ -164,7 +168,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
     
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist)) 
 
     # create loglikehood function
     f_loglike = pars -> begin
@@ -193,12 +197,14 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     end
     
     # MLE
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), f_trafo(v_init), NelderMead(), Optim.Options(time_limit = 300, show_trace=false, iterations = 1000))
+    optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, NLopt.LN_BOBYQA(), maxiters = 3000, maxtime=optim_time_limit)
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
 
-    converged = Optim.converged(opt_r)
-    !converged && @warn "Fit did not converge"
-
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    # best fit results
+    v_ml = inverse(f_trafo)(res.u)
 
     v_results = Vector{NamedTuple{(:μ, :σ, :n, :B, :δ, :gof)}}(undef, length(compton_bands))
     v_reports = Vector{NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}}(undef, length(compton_bands))
@@ -259,13 +265,12 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 
-        param_covariance = nothing
-        if !all(isfinite.(H))
+        param_covariance = if !all(isfinite.(H))
             @warn "Hessian matrix is not finite"
-            param_covariance = zeros(length(v_ml), length(v_ml))
+            zeros(length(v_ml), length(v_ml))
         else
             # Calculate the parameter covariance matrix
-            param_covariance = inv(H)
+            inv(H)
         end
         if ~isposdef(param_covariance)
             param_covariance = nearestSPD(param_covariance)

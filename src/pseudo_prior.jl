@@ -1,8 +1,8 @@
-function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}, fit_func::Symbol; low_e_tail::Bool=true, fixed_position::Bool=false) where T<:Real
+function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; low_e_tail::Bool=true, fixed_position::Bool=false) where T<:Real
     pprior_base = NamedTupleDist(
-        μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Normal(ps.peak_pos, 5*ps.peak_sigma)),
-        σ = weibull_from_mx(ps.peak_sigma, 2*ps.peak_sigma),
-        n = weibull_from_mx(ps.peak_counts, 2*ps.peak_counts),
+        μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Normal(ps.peak_pos, 0.2*ps.peak_sigma)),
+        σ = weibull_from_mx(ps.peak_sigma, 1.5*ps.peak_sigma),
+        n = weibull_from_mx(ps.peak_counts, 1.5*ps.peak_counts),
         step_amplitude = weibull_from_mx(ps.mean_background_step, ps.mean_background_step + 5*ps.mean_background_std),
         skew_fraction = ifelse(low_e_tail, truncated(weibull_from_mx(0.002, 0.008), 0.0, 0.5), ConstValueDist(0.0)),
         skew_width = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
@@ -16,8 +16,8 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
         return merge(pprior_base, 
         if fit_func == :f_fit_bckSlope
             NamedTupleDist(
-             background_slope = ifelse(ps.mean_background < 5, ConstValueDist(0), 
-             truncated(Normal(0, 0.1*ps.mean_background_std / (window_left + window_right)), - ps.mean_background / window_right, 0)),
+            background_slope = ifelse(ps.mean_background < 5, ConstValueDist(0), 
+            truncated(Normal(0, 0.1*ps.mean_background_std / (window_left + window_right)), - ps.mean_background / window_right, 0)),
             )
         elseif fit_func ==:f_fit_bckExp
             NamedTupleDist(background_exp = weibull_from_mx(3e-2, 5e-2))
@@ -31,7 +31,7 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
     end
 end
 
-function get_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}, fit_func::Symbol; pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), kwargs...) where T<:Real
+function get_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), kwargs...) where T<:Real
     standard_pseudo_prior = get_standard_pseudo_prior(h, ps, fit_func; kwargs...)
     # use standard priors in case of no overwrites given
     if !(:empty in keys(pseudo_prior))

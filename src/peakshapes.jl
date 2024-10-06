@@ -113,11 +113,8 @@ export gamma_peakshape
     
 Describes the signal part of the shape of a typical gamma peak in a detector.
 """
-function signal_peakshape(
-    x::Real, μ::Real, σ::Real, n::Real,
-    skew_fraction::Real;  skew_fraction_highE::Real = 0.0
-)
-    return n * (1 - skew_fraction - skew_fraction_highE) * gauss_pdf(x, μ, σ)
+function signal_peakshape(x::Real, μ::Real, σ::Real, n::Real, skew_fraction::Real;  skew_fraction_highE::Real = 0.0)
+    return iszero(σ) ? zero(x) : n * (1 - skew_fraction - skew_fraction_highE) * gauss_pdf(x, μ, σ)
 end
 export signal_peakshape
 
@@ -156,7 +153,7 @@ function lowEtail_peakshape(
     skew_fraction::Real, skew_width::Real
 )
     skew = skew_width * μ
-    return n * skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
+    return iszero(σ) ? zero(x) : n * skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
 end
 export lowEtail_peakshape
 
@@ -173,7 +170,7 @@ function highEtail_peakshape(
     skew_fraction_h::Real, skew_width_h::Real
 )
     skew = skew_width_h * μ
-    return n * skew_fraction_h * ex_gauss_pdf(x, μ, σ, skew)
+    return return iszero(σ) ? zero(x) : n * skew_fraction_h * ex_gauss_pdf(x, μ, σ, skew)
 end
 export highEtail_peakshape
 
