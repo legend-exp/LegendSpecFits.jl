@@ -63,17 +63,17 @@ export fit_calibration
 function get_fit_calibration_pseudo_prior(pol_order::Int, m_cal_simple::Real)
     unshaped(if pol_order == 0
         NamedTupleDist(
-            intercept = Normal(0.0, 2.0/m_cal_simple)
+            intercept = Normal(0.0, 1.0/m_cal_simple)
         )
     elseif pol_order == 1
         NamedTupleDist(
-            intercept = Normal(0.0, 2.0/m_cal_simple),
-            slope = Normal(m_cal_simple, 0.1*m_cal_simple)
+            intercept = Normal(0.0, 1.0/m_cal_simple),
+            slope = Normal(m_cal_simple, 0.02*m_cal_simple)
         )
     elseif pol_order == 2
         NamedTupleDist(
-            intercept = Normal(0.0, 2.0/m_cal_simple),
-            slope = Normal(m_cal_simple, 0.1*m_cal_simple),
+            intercept = Normal(0.0, 1.0/m_cal_simple),
+            slope = Normal(m_cal_simple, 0.02*m_cal_simple),
             quad = Normal(0.0, (0.005*m_cal_simple)^2)
         )
     else

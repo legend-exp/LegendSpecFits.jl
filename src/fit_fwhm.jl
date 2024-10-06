@@ -49,13 +49,13 @@ fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{
 function get_fit_fwhm_pseudo_prior(pol_order::Int, min_peak_fwhm::Real; fano_term::Float64=2.96e-3*0.11)
     unshaped(if pol_order == 1
         NamedTupleDist(
-            enc = weibull_from_mx(min_peak_fwhm, 1.2*min_peak_fwhm),
-            fano = Normal(fano_term, 0.2*fano_term)
+            enc = weibull_from_mx(min_peak_fwhm, 1.1*min_peak_fwhm),
+            fano = Normal(fano_term, 0.1*fano_term)
         )
     elseif pol_order == 2
         NamedTupleDist(
-            enc = weibull_from_mx(min_peak_fwhm, 1.2*min_peak_fwhm),
-            fano = Normal(fano_term, 0.2*fano_term),
+            enc = weibull_from_mx(min_peak_fwhm, 1.1*min_peak_fwhm),
+            fano = Normal(fano_term, 0.1*fano_term),
             ct = weibull_from_mx((0.01*fano_term)^2, (0.05*fano_term)^2)
         )
     else
