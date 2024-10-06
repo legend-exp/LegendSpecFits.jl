@@ -330,12 +330,15 @@ function fit_subpeaks_th228(
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=false, callback=advanced_time_and_memory_control()), autodiff=:forward)
-    converged = Optim.converged(opt_r)
-    @debug opt_r
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    v_ml = inverse(f_trafo)(res.u)
     
     v_ml_survived = (
         μ = v_ml.μ, 
