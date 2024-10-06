@@ -16,11 +16,17 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     
     # fit FWHM fit function
     e_unit = u"keV"
-    min_peak_fwhm = mvalue(ustrip(e_unit, fwhm[argmin(peaks)]))
+    _linear_intercept(x1::Float64, x2::Float64, y1::Float64, y2::Float64) = y1 - ((y2 - y1) / (x2 - x1)) * x1
+    intercept_first_two_points = _linear_intercept(mvalue.(ustrip.(e_unit,sort(peaks)[1:2]))..., mvalue.(ustrip.(e_unit, fwhm[sortperm(peaks)[1:2]]))...)
+    intercept_guess = if intercept_first_two_points > 0.1
+        intercept_first_two_points
+    else
+        0.9*mvalue(ustrip(e_unit, fwhm[argmin(peaks)]))
+    end
     @debug "Fit resolution curve with $(pol_order)-order polynominal function"
-    p_start = append!([min_peak_fwhm, 2.96e-3*0.11], fill(0.0, pol_order-1))
+    p_start = append!([intercept_guess, 2.96e-3*0.11], fill(0.0, pol_order-1))
     @debug "Initial parameters: $p_start"
-    pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, min_peak_fwhm)
+    pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, intercept_guess)
     @debug "Pseudo prior: $pseudo_prior"
 
     # fit FWHM fit function as a square root of a polynomial
@@ -46,16 +52,16 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
 end
 fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = fit_fwhm(1, peaks, fwhm; kwargs...)
 
-function get_fit_fwhm_pseudo_prior(pol_order::Int, min_peak_fwhm::Real; fano_term::Float64=2.96e-3*0.11)
+function get_fit_fwhm_pseudo_prior(pol_order::Int, intercept_guess::Real; fano_term::Float64=2.96e-3*0.11)
     unshaped(if pol_order == 1
         NamedTupleDist(
-            enc = weibull_from_mx(min_peak_fwhm, 1.2*min_peak_fwhm),
-            fano = Normal(fano_term, 0.1*fano_term)
+            enc = weibull_from_mx(intercept_guess, 1.2*intercept_guess),
+            fano = Normal(fano_term, 0.2*fano_term)
         )
     elseif pol_order == 2
         NamedTupleDist(
-            enc = weibull_from_mx(min_peak_fwhm, 1.2*min_peak_fwhm),
-            fano = Normal(fano_term, 0.1*fano_term),
+            enc = weibull_from_mx(intercept_guess, 1.2*intercept_guess),
+            fano = Normal(fano_term, 0.2*fano_term),
             ct = weibull_from_mx((0.01*fano_term)^2, (0.05*fano_term)^2)
         )
     else
