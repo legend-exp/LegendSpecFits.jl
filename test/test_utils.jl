@@ -10,7 +10,7 @@ Sample Legend200 calibration data based on "Inverse Transform Sampling" method
 * find the value x such that  F(x) = u  by solving for  x . done by interpolation of the inverse cdf
 * repeat for many u : energy samples 
 """
-function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpecFits.get_th228_fit_functions().f_fit)
+function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpecFits.get_th228_fit_functions().gamma_def)
 
     th228_lines =  [583.191,  727.330,  860.564,  1592.53,    1620.50,    2103.53,    2614.51]
 
