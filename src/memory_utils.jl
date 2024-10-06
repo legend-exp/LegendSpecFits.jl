@@ -7,7 +7,7 @@ optim_time_limit=10.0 # in seconds a single Optim.jl optimization step
     Set memory limit in GB for the whole current process ignoring if things could run in parallel
 """
 function set_memlimit(gig::Real)
-    @info "Setting `Optim.jl` memory limit to $gig GB"
+    @info "Setting `Optimization.jl` memory limit to $gig GB"
     global optim_max_mem=gig
 end
 
@@ -16,7 +16,7 @@ end
     Set time limit in seconds a single Optim.jl optimization step
 """
 function set_timelimit(sec::Real)
-    @info "Setting `Optim.jl` time limit to $sec seconds"
+    @info "Setting `Optimization.jl` time limit to $sec seconds"
     global optim_time_limit=sec
 end
 
