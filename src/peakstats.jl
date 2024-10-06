@@ -132,6 +132,7 @@ function estimate_single_peak_stats_psd(h::Histogram{T}) where T<:Real
         peak_sigma = peak_fwqm * inv(2*√(2log(4)))
         peak_fwhm  = peak_sigma * 2*√(2log(2))
     end
+    three_sigma_idx_left = findfirst(e -> e >= peak_pos - 3*peak_sigma, E)
     mean_background = convert(typeof(peak_pos), (sum(view(W, 1:three_sigma_idx_left))))
     mean_background = ifelse(mean_background == 0.0, 100.0, mean_background)
     peak_counts = 2*sum(view(W,peak_idx:lastindex(W)))
