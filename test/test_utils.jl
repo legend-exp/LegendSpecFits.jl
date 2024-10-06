@@ -31,9 +31,9 @@ function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpe
     PeakMax             = zeros(length(th228_lines))#u"keV"
 
     for i=1:length(th228_lines)  # get fine binned model function to estimate pdf 
-        n_step = 5000 # fine binning 
-        bin_centers_all[i] = range(v[i].µ, stop=v[i].µ+30, length=n_step)
-        bw = bin_centers_all[i][2]-bin_centers_all[i][1]
+        n_step = 10000 # fine binning 
+        bin_centers_all[i] = range(v[i].µ-30, stop=v[i].µ+30, length=n_step)
+        bw = Float64(bin_centers_all[i].step)
         bin_widths = range(bw,bw, length=n_step) 
 
         # save as intermediate result 

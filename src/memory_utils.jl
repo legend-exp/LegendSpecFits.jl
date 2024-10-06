@@ -1,13 +1,13 @@
 
 optim_max_mem=10.0 # in GB for the whole current process ignoring if things could run in parallel
-optim_time_limit=10.0 # in seconds a single Optim.jl optimization step
+optim_time_limit=20.0 # in seconds a single Optim.jl optimization step
 
 """
     set_memlimit(gig::Float64)
     Set memory limit in GB for the whole current process ignoring if things could run in parallel
 """
 function set_memlimit(gig::Real)
-    @info "Setting `Optim.jl` memory limit to $gig GB"
+    @info "Setting `Optimization.jl` memory limit to $gig GB"
     global optim_max_mem=gig
 end
 
@@ -16,7 +16,7 @@ end
     Set time limit in seconds a single Optim.jl optimization step
 """
 function set_timelimit(sec::Real)
-    @info "Setting `Optim.jl` time limit to $sec seconds"
+    @info "Setting `Optimization.jl` time limit to $sec seconds"
     global optim_time_limit=sec
 end
 
@@ -41,18 +41,18 @@ function advanced_time_and_memory_control( ; start_time::Float64=time(), start_m
     if mem_limit < 0
         mem_limit = optim_max_mem
     end
-    function callback(x::Optim.OptimizationState)
+    function callback(x::Optimization.OptimizationState)
         # @debug " * Iteration:       $(x.iteration)"
         so_far =  time() - start_time
         # @debug " * Time so far:     $so_far"
-        if x.iteration == 0
+        if x.iter == 0
             time_to_setup .= time() - start_time
             return false
         elseif Sys.maxrss()/2^30 - start_mem > mem_limit
             @warn " * Memory limit reached"
             return true
         else
-            expected_next_time = so_far + (time() - start_time - time_to_setup[1])/(x.iteration)
+            expected_next_time = so_far + (time() - start_time - time_to_setup[1])/(x.iter)
             # @debug " * Next iteration ≈ $expected_next_time"
             # @debug " * Time limit:      $time_limit"
             # @debug " * Start limit:     $start_time"
