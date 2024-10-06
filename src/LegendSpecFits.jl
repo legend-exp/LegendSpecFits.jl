@@ -21,14 +21,10 @@ using ForwardDiff
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
-using LineSearches
-using LinearRegression
-using LineSearches
 using LsqFit
 using Measurements
 using Measurements: value as mvalue
 using Measurements: uncertainty as muncert
-using Optim
 using Optimization
 using OptimizationBBO
 using OptimizationNLopt
