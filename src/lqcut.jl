@@ -1,5 +1,6 @@
 """
-    lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_left=1589u"keV", det_icpc = false, DEP_right=1596u"keV", lower_exclusion=0.005, upper_exclusion=0.98, drift_cutoff_sigma=2.0)
+    lq_norm::Vector{Float64}, tdrift::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Array{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity;
+    DEP_edgesigma::Float64 = 3.0 , mode::Symbol = :gaussian, lower_exclusion::Float64 = 0.005, upper_exclusion::Float64 = 0.98, drift_cutoff_sigma::Float64 = 2.0, e_expression::Union{String,Symbol}="e")
 
 Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a linear fit on the remaining data. The data is Corrected by subtracting the linear fit from the lq data.
 # Returns
@@ -7,10 +8,9 @@ Perform the drift time correction on the LQ data using the DEP peak. The functio
     * `report`: NamedTuple of the histograms used for the fit
 """
 function lq_drift_time_correction(
-    lq_norm::Vector{Float64}, tdrift::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Array{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity;
+    lq_norm::Vector{Float64}, tdrift::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity;
      DEP_edgesigma::Float64 = 3.0 , mode::Symbol = :gaussian, lower_exclusion::Float64 = 0.005, upper_exclusion::Float64 = 0.98, drift_cutoff_sigma::Float64 = 2.0,
-     e_expression::Union{String,Symbol}="e")
-
+     prehist_sigma::Float64 = 3.0, e_expression::Union{String,Symbol}="e")
 
     #calculate DEP edges
     DEP_left = DEP_µ - DEP_edgesigma * DEP_σ
@@ -21,18 +21,16 @@ function lq_drift_time_correction(
     t_tcal = ustrip.(tdrift[DEP_left .< e_cal .< DEP_right])
 
     #lq cutoff
-    #sort array to exclude outliers for better fit
     low_cut_value = quantile(lq_DEP, lower_exclusion)  # 0.5% quantile
     high_cut_value = quantile(lq_DEP, upper_exclusion)  # 2% quantile
 
-    ideal_bin_width = LegendSpecFits.get_friedman_diaconis_bin_width(lq_DEP[low_cut_value .< lq_DEP .< high_cut_value])
-    ideal_length = Int(round(abs(high_cut_value - low_cut_value) / ideal_bin_width))
+    ideal_bin_width = get_friedman_diaconis_bin_width(lq_DEP[low_cut_value .< lq_DEP .< high_cut_value])
 
-    lq_prehist = fit(Histogram, lq_DEP, range(low_cut_value, high_cut_value, length=ideal_length))
+    lq_prehist = fit(Histogram, lq_DEP, range(low_cut_value, high_cut_value, step=ideal_bin_width))
     lq_prestats = estimate_single_peak_stats(lq_prehist)
 
-    lq_start = lq_prestats.peak_pos - 3*lq_prestats.peak_sigma
-    lq_stop = lq_prestats.peak_pos + 3*lq_prestats.peak_sigma
+    lq_start = lq_prestats.peak_pos - prehist_sigma * lq_prestats.peak_sigma
+    lq_stop = lq_prestats.peak_pos + prehist_sigma * lq_prestats.peak_sigma
 
     lq_result, lq_report = fit_binned_trunc_gauss(lq_prehist, (low=lq_start, high=lq_stop, max=NaN))
     µ_lq = mvalue(lq_result.μ)
@@ -42,22 +40,22 @@ function lq_drift_time_correction(
     lq_lower = µ_lq - drift_cutoff_sigma * σ_lq 
     lq_upper = µ_lq + drift_cutoff_sigma * σ_lq 
 
+
     #t_tcal cutoff; method dependant on detector type
     if mode == :gaussian 
         
         #ideal bin width for histogram
-        ideal_bin_width = LegendSpecFits.get_friedman_diaconis_bin_width(t_tcal)
-        ideal_length = Int(round((maximum(t_tcal) - minimum(t_tcal)) / ideal_bin_width))
+        ideal_bin_width = get_friedman_diaconis_bin_width(t_tcal)
 
-        drift_prehist = fit(Histogram, t_tcal, range(minimum(t_tcal), stop=maximum(t_tcal), length=ideal_length))
+        drift_prehist = fit(Histogram, t_tcal, range(minimum(t_tcal), stop=maximum(t_tcal), step=ideal_bin_width))
         drift_prestats = estimate_single_peak_stats(drift_prehist)
-        drift_start = drift_prestats.peak_pos - 3*drift_prestats.peak_sigma
-        drift_stop = drift_prestats.peak_pos + 3*drift_prestats.peak_sigma
+        drift_start = drift_prestats.peak_pos - prehist_sigma * drift_prestats.peak_sigma
+        drift_stop = drift_prestats.peak_pos + prehist_sigma * drift_prestats.peak_sigma
         
         drift_edges = range(drift_start, stop=drift_stop, length=ideal_length)
         drift_hist_DEP = fit(Histogram, t_tcal, drift_edges)
         
-        drift_result, drift_report = LegendSpecFits.fit_binned_trunc_gauss(drift_hist_DEP)
+        drift_result, drift_report = fit_binned_trunc_gauss(drift_hist_DEP)
         µ_t = mvalue(drift_result.μ)
         σ_t = mvalue(drift_result.σ)
 
@@ -107,7 +105,7 @@ function lq_drift_time_correction(
 
     #property function for drift time correction
     lq_class_func = "lq / $e_expression - ($(parameters[2]) * (qdrift / $e_expression) + $(parameters[1]))"
-    lq_class_func_generic = "lq / e  - (slope * tdrift + y_inter)"
+    lq_class_func_generic = "lq / e  - (slope * qdrift / e + y_inter)"
 
     #create result and report
     result = (
@@ -130,7 +128,7 @@ end
 export lq_drift_time_correction
 
 """
-    LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier)
+    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{Float64}; lower_exclusion::Float64=0.005, upper_exclusion::Float64=0.95, cut_sigma::Float64=3.0)
 
 Evaluates the cutoff value for the LQ cut. The function performs a binned gaussian fit on the sidebandsubtracted LQ histogram and evaluates the cutoff value difined at 3σ of the fit.
 # Returns
