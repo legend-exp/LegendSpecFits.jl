@@ -6,7 +6,7 @@ using RecipesBase
 using Unitful, Format, Measurements, LaTeXStrings
 using Measurements: value, uncertainty
 using StatsBase, LinearAlgebra
-using BAT 
+using KernelDensity
 function round_wo_units(x::Unitful.RealOrRealQuantity; digits::Integer=2)
     if unit(x) == NoUnits
         round(x, digits=digits)
@@ -492,7 +492,7 @@ end
         colorbar := :none
         fill := true
         label := "Before correction"
-        BAT.kde((ustrip(report_ctc.e_peak), report_ctc.qdrift_peak ./ maximum(report_ctc.qdrift_peak)))
+        kde((ustrip(report_ctc.e_peak), report_ctc.qdrift_peak ./ maximum(report_ctc.qdrift_peak)))
     end
     @series begin
         seriestype := :line
@@ -506,7 +506,7 @@ end
         yformatter := :plain
         xlabel := "Energy (keV)"
         ylabel := "Drift time (a.u.)"
-        BAT.kde((ustrip(report_ctc.e_ctc), report_ctc.qdrift_peak ./ maximum(report_ctc.qdrift_peak)))
+        kde((ustrip(report_ctc.e_ctc), report_ctc.qdrift_peak ./ maximum(report_ctc.qdrift_peak)))
     end
 end
 
