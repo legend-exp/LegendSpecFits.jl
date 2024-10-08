@@ -1,5 +1,5 @@
 """
-    lq_norm::Vector{Float64}, tdrift::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Array{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity;
+    lq_norm::Vector{Float64}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Array{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity;
     DEP_edgesigma::Float64 = 3.0 , mode::Symbol = :gaussian, lower_exclusion::Float64 = 0.005, upper_exclusion::Float64 = 0.98, drift_cutoff_sigma::Float64 = 2.0, e_expression::Union{String,Symbol}="e")
 
 Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a linear fit on the remaining data. The data is Corrected by subtracting the linear fit from the lq data.
@@ -8,7 +8,7 @@ Perform the drift time correction on the LQ data using the DEP peak. The functio
     * `report`: NamedTuple of the histograms used for the fit
 """
 function lq_drift_time_correction(
-    lq_norm::Vector{Float64}, tdrift::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity;
+    lq_norm::Vector{Float64}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity;
      DEP_edgesigma::Float64 = 3.0 , mode::Symbol = :gaussian, lower_exclusion::Float64 = 0.005, upper_exclusion::Float64 = 0.98, drift_cutoff_sigma::Float64 = 2.0,
      prehist_sigma::Float64 = 3.0, e_expression::Union{String,Symbol}="e")
 
@@ -18,7 +18,7 @@ function lq_drift_time_correction(
 
     #cut data to DEP peak
     lq_DEP = lq_norm[DEP_left .< e_cal .< DEP_right]
-    t_tcal = ustrip.(tdrift[DEP_left .< e_cal .< DEP_right])
+    dt_eff_DEP = ustrip.(dt_eff[DEP_left .< e_cal .< DEP_right])
 
     #lq cutoff
     low_cut_value = quantile(lq_DEP, lower_exclusion)  # 0.5% quantile
@@ -41,19 +41,19 @@ function lq_drift_time_correction(
     lq_upper = µ_lq + drift_cutoff_sigma * σ_lq 
 
 
-    #t_tcal cutoff; method dependant on detector type
+    #dt_eff_DEP cutoff; method dependant on detector type
     if mode == :gaussian 
         
         #ideal bin width for histogram
-        ideal_bin_width = get_friedman_diaconis_bin_width(t_tcal)
+        ideal_bin_width = get_friedman_diaconis_bin_width(dt_eff_DEP)
 
-        drift_prehist = fit(Histogram, t_tcal, range(minimum(t_tcal), stop=maximum(t_tcal), step=ideal_bin_width))
+        drift_prehist = fit(Histogram, dt_eff_DEP, range(minimum(dt_eff_DEP), stop=maximum(dt_eff_DEP), step=ideal_bin_width))
         drift_prestats = estimate_single_peak_stats(drift_prehist)
         drift_start = drift_prestats.peak_pos - prehist_sigma * drift_prestats.peak_sigma
         drift_stop = drift_prestats.peak_pos + prehist_sigma * drift_prestats.peak_sigma
         
         drift_edges = range(drift_start, stop=drift_stop, length=ideal_length)
-        drift_hist_DEP = fit(Histogram, t_tcal, drift_edges)
+        drift_hist_DEP = fit(Histogram, dt_eff_DEP, drift_edges)
         
         drift_result, drift_report = fit_binned_trunc_gauss(drift_hist_DEP)
         µ_t = mvalue(drift_result.μ)
@@ -64,14 +64,14 @@ function lq_drift_time_correction(
         t_upper = µ_t + drift_cutoff_sigma * σ_t
     elseif mode == :percentile
         #set cutoff at the 15% and 95% percentile
-        t_lower = quantile(t_tcal, 0.15)
-        t_upper = quantile(t_tcal, 0.95)
+        t_lower = quantile(dt_eff_DEP, 0.15)
+        t_upper = quantile(dt_eff_DEP, 0.95)
         drift_prehist = nothing
         drift_report = nothing
 
     elseif mode == :double_gaussian
         #create histogram for drift time
-        drift_prehist = fit(Histogram, t_tcal, range(minimum(t_tcal), stop=maximum(t_tcal), length=100))
+        drift_prehist = fit(Histogram, dt_eff_DEP, range(minimum(dt_eff_DEP), stop=maximum(dt_eff_DEP), length=100))
         drift_prestats = estimate_single_peak_stats(drift_prehist)
 
         #fit histogram with double gaussian
@@ -95,8 +95,8 @@ function lq_drift_time_correction(
     box = (lq_lower = lq_lower, lq_upper = lq_upper, t_lower = t_lower, t_upper = t_upper)
 
     #cut data according to cutoff values
-    lq_cut = lq_DEP[lq_lower .< lq_DEP .< lq_upper .&& t_lower .< t_tcal .< t_upper]
-    t_cut = t_tcal[lq_lower .< lq_DEP .< lq_upper .&& t_lower .< t_tcal .< t_upper]
+    lq_cut = lq_DEP[lq_lower .< lq_DEP .< lq_upper .&& t_lower .< dt_eff_DEP .< t_upper]
+    t_cut = dt_eff_DEP[lq_lower .< lq_DEP .< lq_upper .&& t_lower .< dt_eff_DEP .< t_upper]
 
     #linear fit
     result_µ, report_µ = chi2fit(1, t_cut, lq_cut; uncertainty=true)
