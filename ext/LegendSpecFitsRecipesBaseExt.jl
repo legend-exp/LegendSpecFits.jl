@@ -461,12 +461,18 @@ end
 end
 
 @recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after, :fwhm_before, :fwhm_after, :report_before, :report_after)})
+    if !("StatsPlots" in string.(Base.loaded_modules_array()))
+        throw(ErrorException("StatsPlots not loaded. Please load StatsPlots before using this recipe."))
+    end
     layout := (2, 1)
-    size := (600, 700)
+    size := (1000, 1000)
     framestyle := :semi
     grid := false 
     left_margin --> (5, :mm)
     right_margin --> (5, :mm)
+    bottom_margin := (-4, :mm)
+    margins --> (0, :mm)
+    link --> :x
     foreground_color_legend := :silver
     background_color_legend := :white
     xtickfontsize := 12
@@ -474,20 +480,19 @@ end
     ylabelfontsize := 14
     ytickfontsize := 12
     legendfontsize := 12
-    xl = (2590, 2641)
-    hist_bins = range(xl[1], xl[2], 100)
+    xl = (first(report_ctc.h_before.edges[1]), last(report_ctc.h_before.edges[1]))
     @series begin
-        seriestype := :stephist 
+        seriestype := :stepbins 
         fill := true
         color := :darkgrey
         label := "Before correction"
         legend := :topleft
         subplot := 1
-        bins := hist_bins
-        report_ctc.e_peak
+        ylims := (0, :auto)
+        report_ctc.h_before
     end
     @series begin
-        seriestype := :stephist 
+        seriestype := :stepbins 
         fill := true
         alpha := 0.5
         color := :purple
@@ -496,9 +501,10 @@ end
         subplot := 1
         ylims := (0, :auto)
         xlims := xl
-        xlabel := "Energy"
-        bins := hist_bins
-        report_ctc.e_ctc
+        xlabel := ""
+        xticks := ([], [])
+        ylabel := "Counts / $(round_wo_units(report_ctc.bin_width, digits=2))"
+        report_ctc.h_after
     end
     @series begin
         seriestype := :line
@@ -518,9 +524,10 @@ end
         label := "After correction"
         xlims := xl
         ylims := (0, 1)
+        yticks := 0.1:0.1:0.9
         yformatter := :plain
-        xlabel := "Energy (keV)"
-        ylabel := "Drift time (a.u.)"
+        xlabel := "Energy ($(unit(report_ctc.peak)))"
+        ylabel := "Eff. Drift time (a.u.)"
         kde((ustrip(report_ctc.e_ctc), report_ctc.qdrift_peak ./ maximum(report_ctc.qdrift_peak)))
     end
 end
