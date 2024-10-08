@@ -12,6 +12,9 @@ function lq_drift_time_correction(
      DEP_edgesigma::Float64 = 3.0 , mode::Symbol = :gaussian, lower_exclusion::Float64 = 0.005, upper_exclusion::Float64 = 0.98, drift_cutoff_sigma::Float64 = 2.0,
      prehist_sigma::Float64 = 3.0, e_expression::Union{String,Symbol}="e")
 
+    #get energy units to remve later
+    e_unit = unit(first(e_cal))
+
     #calculate DEP edges
     DEP_left = DEP_µ - DEP_edgesigma * DEP_σ
     DEP_right = DEP_µ + DEP_edgesigma * DEP_σ
@@ -52,7 +55,7 @@ function lq_drift_time_correction(
         drift_start = drift_prestats.peak_pos - prehist_sigma * drift_prestats.peak_sigma
         drift_stop = drift_prestats.peak_pos + prehist_sigma * drift_prestats.peak_sigma
         
-        drift_edges = range(drift_start, stop=drift_stop, length=ideal_length)
+        drift_edges = range(drift_start, stop=drift_stop, length=100)
         drift_hist_DEP = fit(Histogram, dt_eff_DEP, drift_edges)
         
         drift_result, drift_report = fit_binned_trunc_gauss(drift_hist_DEP)
@@ -104,7 +107,7 @@ function lq_drift_time_correction(
     drift_time_func(x) = parameters[1] .+ parameters[2] .* x
 
     #property function for drift time correction
-    lq_class_func = "lq / $e_expression - ($(parameters[2]) * (qdrift / $e_expression) + $(parameters[1]))"
+    lq_class_func = "(lq / ($(e_expression))$(e_unit)^-1) - ($(parameters[2]) * (qdrift / ($(e_expression))$(e_unit)^-1) + $(parameters[1]))"  #removes the units to get unitless lq classifier
     lq_class_func_generic = "lq / e  - (slope * qdrift / e + y_inter)"
 
     #create result and report
