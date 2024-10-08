@@ -119,7 +119,9 @@ function lq_drift_time_correction(
     drift_prehist = drift_prehist, 
     drift_report = drift_report,
     lq_box = box,
-    drift_time_func = drift_time_func
+    drift_time_func = drift_time_func,
+    DEP_left = DEP_left,
+    DEP_right = DEP_right,
     )
     
 
