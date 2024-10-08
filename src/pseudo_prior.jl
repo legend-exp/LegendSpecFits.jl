@@ -1,4 +1,5 @@
 function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; low_e_tail::Bool=true, fixed_position::Bool=false) where T<:Real
+    # base priors common with all functions
     pprior_base = NamedTupleDist(
         μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Normal(ps.peak_pos, 0.2*ps.peak_sigma)),
         σ = weibull_from_mx(ps.peak_sigma, 1.5*ps.peak_sigma),
@@ -7,11 +8,15 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
         skew_width = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
         background = weibull_from_mx(ps.mean_background, ps.mean_background + 5*ps.mean_background_std),
         )
+    # base step prior
     pprior_step = NamedTupleDist(step_amplitude = weibull_from_mx(ps.mean_background_step, ps.mean_background_step + 5*ps.mean_background_std),)
+    # gamma standard peakshape
     if fit_func == :gamma_def
         return merge(pprior_base, pprior_step)
+    # gamma standard peakshape with flat background
     elseif fit_func == :gamma_bckFlat
         return pprior_base
+    # gamma standard peakshape with high-energy tail w/o flat background
     elseif fit_func == :gamma_tails || fit_func == :gamma_tails_bckFlat
         pprior_tails = merge(pprior_base, NamedTupleDist(
             skew_fraction_highE = ifelse(low_e_tail, truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1), ConstValueDist(0.0)),
@@ -25,12 +30,14 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
     else
         window_left = ps.peak_pos - minimum(h.edges[1])
         window_right = maximum(h.edges[1]) - ps.peak_pos
+        # gamma standard peakshape with linear background slope
         return merge(pprior_base, pprior_step,
         if fit_func == :gamma_bckSlope
             NamedTupleDist(
             background_slope = ifelse(ps.mean_background < 5, ConstValueDist(0), 
             truncated(Normal(0, 0.1*ps.mean_background_std / (window_left + window_right)), - ps.mean_background / window_right, 0)),
             )
+        # gamma standard peakshape with exponential background
         elseif fit_func ==:gamma_bckExp
             NamedTupleDist(background_exp = weibull_from_mx(3e-2, 5e-2))
         end

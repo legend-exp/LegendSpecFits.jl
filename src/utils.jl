@@ -157,3 +157,4 @@ export nearestSPD
 
 Measurements.value(nt::NamedTuple) = NamedTuple{keys(nt)}([Measurements.value(nt[f]) for f in keys(nt)]...)
 Measurements.value(x::AbstractArray) = Measurements.value.(x)
+Measurements.value(x) = x

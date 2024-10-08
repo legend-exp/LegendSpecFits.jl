@@ -268,7 +268,7 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
     * `report`: NamedTuple of the fit report which can be plotted
 """
 function fit_subpeaks_th228(
-    h_survived::Histogram, h_cut::Histogram, h_result; 
+    h_survived::Histogram, h_cut::Histogram, h_result::NamedTuple; 
     uncertainty::Bool=false, low_e_tail::Bool=true, fix_σ::Bool = true, fix_skew_fraction::Bool = true, fix_skew_width::Bool = true, 
     pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol= :gamma_def, background_center::Real = h_result.μ
 )
@@ -422,7 +422,7 @@ function fit_subpeaks_th228(
         @debug "σ cut     : $(v_ml.σ_cut) ± $(v_ml_err.σ_cut)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err),), #NamedTuple{(:gof_survived, :gof_cut)}(gofs))
+                (fwhm = measurement(fwhm, fwhm_err), fit_func = fit_func, ), #NamedTuple{(:gof_survived, :gof_cut)}(gofs))
                 (gof = (converged = converged,
                     survived = (pvalue = gofs[1].pvalue, chi2 = gofs[1].chi2, dof = gofs[1].dof, covmat = gofs[1].covmat),
                     cut = (pvalue = gofs[2].pvalue, chi2 = gofs[2].chi2, dof = gofs[2].dof, covmat = gofs[2].covmat)
