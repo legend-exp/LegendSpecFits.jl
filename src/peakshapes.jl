@@ -20,19 +20,20 @@ It is the PDF of the distribution that descibes the random process
 function ex_gauss_pdf(x::Real, μ::Real, σ::Real, θ::Real)
     R = float(promote_type(typeof(x), typeof(σ), typeof(θ)))
     x_μ = x - μ
-    gauss_pdf_value = inv(σ * sqrt2π) * exp(-(x_μ/σ)^2 / 2)
 
-    y = if θ < σ * R(10^-6)
+    y = if iszero(θ) && iszero(σ)
+        iszero(x_μ) ? one(R) : zero(R)
+    elseif θ < σ * R(10^-6)
         # Use asymptotic form for very small θ - necessary?
-        R(gauss_pdf_value / (1 + x_μ * θ / σ^2))
+        R(inv(sqrt2π) * exp(-(x_μ/σ)^2 / 2) / (σ + x_μ * θ / σ))
     elseif σ/θ - x_μ/σ < 0
         # Original:
         R(inv(2*θ) * exp((σ/θ)^2/2 - x_μ/θ) * erfc(invsqrt2 * (σ/θ - x_μ/σ)))
     else
         # More stable, numerically, for small values of θ:
-        R(gauss_pdf_value * σ/θ * sqrthalfπ * erfcx(invsqrt2 * (σ/θ - x_μ/σ)))
+        R(inv(sqrt2π) * exp(-(x_μ/σ)^2 / 2)/θ * sqrthalfπ * erfcx(invsqrt2 * (σ/θ - x_μ/σ)))
     end
-    @assert !isnan(y) && !isinf(y)
+    @assert isfinite(y)
     return y
 end
 
@@ -112,11 +113,8 @@ export gamma_peakshape
     
 Describes the signal part of the shape of a typical gamma peak in a detector.
 """
-function signal_peakshape(
-    x::Real, μ::Real, σ::Real, n::Real,
-    skew_fraction::Real;  skew_fraction_highE::Real = 0.0
-)
-    return n * (1 - skew_fraction - skew_fraction_highE) * gauss_pdf(x, μ, σ)
+function signal_peakshape(x::Real, μ::Real, σ::Real, n::Real, skew_fraction::Real;  skew_fraction_highE::Real = 0.0)
+    return iszero(σ) ? zero(x) : n * (1 - skew_fraction - skew_fraction_highE) * gauss_pdf(x, μ, σ)
 end
 export signal_peakshape
 
@@ -155,7 +153,7 @@ function lowEtail_peakshape(
     skew_fraction::Real, skew_width::Real
 )
     skew = skew_width * μ
-    return n * skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
+    return iszero(σ) ? zero(x) : n * skew_fraction * ex_gauss_pdf(-x, -μ, σ, skew)
 end
 export lowEtail_peakshape
 
@@ -172,7 +170,7 @@ function highEtail_peakshape(
     skew_fraction_h::Real, skew_width_h::Real
 )
     skew = skew_width_h * μ
-    return n * skew_fraction_h * ex_gauss_pdf(x, μ, σ, skew)
+    return return iszero(σ) ? zero(x) : n * skew_fraction_h * ex_gauss_pdf(x, μ, σ, skew)
 end
 export highEtail_peakshape
 

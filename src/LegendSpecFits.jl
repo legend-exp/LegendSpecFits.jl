@@ -21,12 +21,13 @@ using ForwardDiff
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
-using LinearRegression
 using LsqFit
 using Measurements
 using Measurements: value as mvalue
 using Measurements: uncertainty as muncert
-using Optim
+using Optimization
+using OptimizationBBO
+using OptimizationNLopt
 using PropDicts
 using RadiationSpectra
 using Roots
@@ -38,21 +39,29 @@ using TypedTables
 using Unitful
 using ValueShapes
 
+MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
+
 include("utils.jl")
+include("memory_utils.jl")
 include("peakshapes.jl")
 include("likelihoods.jl")
 include("priors.jl")
-include("cut.jl")
-include("aoefit.jl")
+include("peakstats.jl")
+include("simple_cuts.jl")
 include("filter_optimization.jl")
 include("singlefit.jl")
 include("specfit.jl")
 include("chi2fit.jl")
 include("fit_calibration.jl")
-include("fwhm.jl")
+include("fit_fwhm.jl")
 include("simple_calibration.jl")
 include("auto_calibration.jl")
-include("aoe_calibration.jl")
+include("aoefit_functions.jl")
+include("aoe_pseudo_prior.jl")
+include("aoefit.jl")
+include("aoe_fit_calibration.jl")
+include("aoefit_combined.jl")
+include("aoe_cut.jl")
 include("specfit_combined.jl")
 include("ctc.jl")
 include("qc.jl")
