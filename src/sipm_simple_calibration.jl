@@ -1,9 +1,19 @@
 """
     sipm_simple_calibration(pe_uncal::Array)
 
-
 Perform a simple calibration for the uncalibrated p.e. spectrum array `pe_uncal`
 using just the 1 p.e. and 2 p.e. peak positions estimated by a peakfinder.
+
+Inputs:
+    * `pe_uncal`: array of uncalibrated peak amplitudes
+kwargs:
+    * `expect_noise_peak`: bool value stating whether noise peak exists in the uncalibrated spectrum or not
+    * `initial_min_amp`: uncalibrated amplitude value as a left boundary to build the uncalibrated histogram where the peak search is performed on.
+                        For the peak search with noise peak, this value is consecutively increased i.o.t exclude the noise peak from the histogram.
+    * `initial_max_quantile`: quantile of the uncalibrated amplitude array to used as right boundary to build the uncalibrated histogram
+    * `step_size_min_amp`: only for if noise peak exists, this gives the step size for the minimal amplitude increase, to exclude the noise peak from the uncalibrated histogram eventually
+    * `peakfinder_σ`: sigma value in number of bins for peakfinder
+    * `peakfinder_threshold`: threshold value for peakfinder
 
 Returns 
     * `pe_simple_cal`: array of the calibrated pe array with the simple calibration
@@ -13,7 +23,6 @@ Returns
     * `h_uncal`: histogram of the uncalibrated pe array
     * `h_calsimple`: histogram of the calibrated pe array with the simple calibration
 """
-
 function sipm_simple_calibration end
 export sipm_simple_calibration
 
@@ -21,10 +30,10 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
                                 expect_noise_peak::Bool=false, 
                                 kwargs...)
     
-    if expect_noise_peak
-        h_uncal, peakpos = find_peaks_noise_peak_exists(pe_uncal; kwargs...)
+    h_uncal, peakpos = if expect_noise_peak
+            find_peaks_noise_peak_exists(pe_uncal; kwargs...)
     else
-        h_uncal, peakpos = find_peaks(pe_uncal; kwargs...)
+            find_peaks(pe_uncal; kwargs...)
     end
 
     # simple calibration
@@ -34,6 +43,7 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
 
     f_simple_calib = Base.Fix1(*, c)
     pe_simple_cal = pe_uncal .* c .+ offset
+    peakpos_cal = peakpos .* c .+ offset
 
     h_calsimple = histogram(pe_simple_cal, bins=0.5:.01:4.5)
 
@@ -45,6 +55,7 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     )
     report = (
         peakpos = peakpos,
+        peakpos_cal = peakpos_cal,
         h_uncal = h_uncal, 
         h_calsimple = h_calsimple
     )
@@ -56,17 +67,17 @@ end
 # search the 1 p.e. and 2 p.e. peak, noise peak exists
 function find_peaks_noise_peak_exists(
     amps::Vector{<:Real}; initial_min_amp::Real=1.0, initial_max_quantile::Real=0.99, 
-    step_size_min_amp::Real=1.0, peakfinder_σ::Real=1.0, peakfinder_threshold::Real=10.0
+    step_size_min_amp::Real=1.0, peakfinder_σ::Real=2.0, peakfinder_threshold::Real=10.0
 )
     # Start with a big window where the noise peak is included
     min_amp = initial_min_amp
     max_quantile = initial_max_quantile
     max_amp = quantile(amps, max_quantile)
-    bin_width = LegendSpecFits.get_friedman_diaconis_bin_width(filter(in(quantile(amps, 0.01)..quantile(amps, 0.9)), amps))
+    bin_width = get_friedman_diaconis_bin_width(filter(in(quantile(amps, 0.01)..quantile(amps, 0.9)), amps))
 
     # Initial peak search
     h_uncal = fit(Histogram, amps, min_amp:bin_width:max_amp)
-    h_decon, peakpos = RadiationSpectra.peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
+    h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
 
     num_peaks = length(peakpos)
 
@@ -90,7 +101,7 @@ function find_peaks_noise_peak_exists(
         min_amp += step_size_min_amp
 
         h_uncal = fit(Histogram, amps, min_amp:bin_width:max_amp)
-        h_decon, peakpos = RadiationSpectra.peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
+        h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
         println("Current peak positions: ", peakpos)
 
         num_peaks = length(peakpos)
@@ -110,7 +121,7 @@ function find_peaks_noise_peak_exists(
             max_amp = quantile(amps, max_quantile)
 
             h_uncal = fit(Histogram, amps, min_amp:bin_width:max_amp)
-            h_decon, peakpos = RadiationSpectra.peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
+            h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
 
             num_peaks = length(peakpos)
 
@@ -128,17 +139,17 @@ end
 
 function find_peaks(
     amps::Vector{<:Real}; initial_min_amp::Real=1.0, initial_max_quantile::Real=0.99, 
-    peakfinder_σ::Real=1.0, peakfinder_threshold::Real=10.0
+    peakfinder_σ::Real=2.0, peakfinder_threshold::Real=10.0
 )
     # Start with a big window where the noise peak is included
     min_amp = initial_min_amp
     max_quantile = initial_max_quantile
     max_amp = quantile(amps, max_quantile)
-    bin_width = LegendSpecFits.get_friedman_diaconis_bin_width(filter(in(quantile(amps, 0.01)..quantile(amps, 0.9)), amps))
+    bin_width = get_friedman_diaconis_bin_width(filter(in(quantile(amps, 0.01)..quantile(amps, 0.9)), amps))
 
     # Initial peak search
     h_uncal = fit(Histogram, amps, min_amp:bin_width:max_amp)
-    h_decon, peakpos = RadiationSpectra.peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
+    h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
 
     num_peaks = length(peakpos)
 
@@ -154,7 +165,7 @@ function find_peaks(
     while num_peaks < 2
         # Try increasing σ first
         while num_peaks < 2 && peakfinder_σ < 5.0
-            h_decon, peakpos = RadiationSpectra.peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
+            h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
             num_peaks = length(peakpos)
 
             if num_peaks < 2
@@ -200,7 +211,7 @@ function find_peaks(
             max_amp = quantile(amps, max_quantile)
 
             h_uncal = fit(Histogram, amps, min_amp:bin_width:max_amp)
-            h_decon, peakpos = RadiationSpectra.peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
+            h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
 
             num_peaks = length(peakpos)
 
