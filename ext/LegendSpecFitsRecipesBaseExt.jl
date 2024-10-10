@@ -271,6 +271,7 @@ end
                 ylims := (ylims_res_min, ylims_res_max)
                 xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
                 yscale --> :identity
+                markersize --> 2.5 # changed this since I think the ms is too big atm
                 if ylims_res_max == 5
                     yticks := ([-3, 0, 3])
                 end
