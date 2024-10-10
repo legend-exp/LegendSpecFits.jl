@@ -143,17 +143,17 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
     
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err),
-                    fit_func = fit_func, 
+                (fwhm = measurement(fwhm, fwhm_err), fit_func = fit_func, 
                     gof = (pvalue = pval, 
-                    chi2 = chi2, 
-                    dof = dof, 
-                    covmat = param_covariance, 
-                    mean_residuals = mean(residuals_norm),
-                    median_residuals = median(residuals_norm),
-                    std_residuals = std(residuals_norm),
-                    converged = converged))
-                )
+                            chi2 = chi2, 
+                            dof = dof, 
+                            covmat = param_covariance, 
+                            mean_residuals = mean(residuals_norm),
+                            median_residuals = median(residuals_norm),
+                            std_residuals = std(residuals_norm),
+                            converged = converged)
+                        )
+                    )
         report = (
             v = v_ml,
             h = h,
@@ -273,38 +273,11 @@ function fit_subpeaks_th228(
     pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol= :gamma_def, background_center::Real = h_result.μ
 )
 
-    # create standard pseudo priors
-    standard_pseudo_prior = let ps = h_result, ps_cut = estimate_single_peak_stats(h_cut), ps_survived = estimate_single_peak_stats(h_survived)
-        NamedTupleDist(
-            μ = ConstValueDist(mvalue(ps.μ)),
-            σ_survived = ifelse(fix_σ, ConstValueDist(mvalue(ps.σ)), weibull_from_mx(mvalue(ps.σ), 2*mvalue(ps.σ))),
-            σ_cut = ifelse(fix_σ, ConstValueDist(mvalue(ps.σ)), weibull_from_mx(mvalue(ps.σ), 2*mvalue(ps.σ))),
-            n = ConstValueDist(mvalue(ps.n)),
-            sf = Uniform(0,1), # signal survival fraction
-            bsf = Uniform(0,1), # background survival fraction 
-            sasf = Uniform(0,1), # step amplitude survival fraction
-            step_amplitude = ConstValueDist(mvalue(ps.step_amplitude)),
-            skew_fraction_survived = ifelse(low_e_tail, ifelse(fix_skew_fraction, ConstValueDist(mvalue(ps.skew_fraction)), truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1)), ConstValueDist(0.0)),
-            skew_fraction_cut = ifelse(low_e_tail, ifelse(fix_skew_fraction, ConstValueDist(mvalue(ps.skew_fraction)), truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1)), ConstValueDist(0.0)),
-            skew_width_survived = ifelse(low_e_tail, ifelse(fix_skew_width, mvalue(ps.skew_width), weibull_from_mx(0.001, 1e-2)), ConstValueDist(1.0)),
-            skew_width_cut = ifelse(low_e_tail, ifelse(fix_skew_width, mvalue(ps.skew_width), weibull_from_mx(0.001, 1e-2)), ConstValueDist(1.0)),
-            background = ConstValueDist(mvalue(ps.background))
-        )
-    end
+    # create pseudo priors
+    pseudo_prior = get_subpeaks_pseudo_prior(h_survived, h_cut, h_result, fit_func; pseudo_prior = pseudo_prior, fix_σ = fix_σ, fix_skew_fraction = fix_skew_fraction, low_e_tail = low_e_tail)
 
     # get fit function with background center
     fit_function = get_th228_fit_functions(; background_center = background_center)[fit_func]
-
-    # use standard priors in case of no overwrites given
-    if !(:empty in keys(pseudo_prior))
-        # check if input overwrite prior has the same fields as the standard prior set
-        @assert all(f -> f in keys(standard_pseudo_prior), keys(pseudo_prior)) "Pseudo priors can only have $(keys(standard_pseudo_prior)) as fields."
-        # replace standard priors with overwrites
-        pseudo_prior = merge(standard_pseudo_prior, pseudo_prior)
-    else
-        # take standard priors as pseudo priors with overwrites
-        pseudo_prior = standard_pseudo_prior    
-    end
 
     # transform back to frequency space
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
@@ -313,20 +286,9 @@ function fit_subpeaks_th228(
     v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
-    f_loglike = let f_fit=fit_function, h_cut=h_cut, h_survived=h_survived
+    f_loglike = let f_fit=fit_function, h_cut=h_cut, h_survived=h_survived, get_v_ml=Base.Fix2(get_subpeaks_v_ml, fit_func)
         v -> begin
-            v_survived = (μ = v.μ, σ = v.σ_survived, n = v.n * v.sf, 
-                step_amplitude = v.step_amplitude * v.sasf,
-                skew_fraction = v.skew_fraction_survived,
-                skew_width = v.skew_width_survived,
-                background = v.background * v.bsf
-            )
-            v_cut = (μ = v.μ, σ = v.σ_cut, n = v.n * (1 - v.sf), 
-                step_amplitude = v.step_amplitude * (1 - v.sasf),
-                skew_fraction = v.skew_fraction_cut,
-                skew_width = v.skew_width_cut,
-                background = v.background * (1 - v.bsf)
-            )
+            v_survived, v_cut = get_v_ml(v)
             hist_loglike(Base.Fix2(f_fit, v_survived), h_survived) + hist_loglike(Base.Fix2(f_fit, v_cut), h_cut)
         end
     end
@@ -342,25 +304,7 @@ function fit_subpeaks_th228(
     # best fit results
     v_ml = inverse(f_trafo)(res.u)
     
-    v_ml_survived = (
-        μ = v_ml.μ, 
-        σ = v_ml.σ_survived, 
-        n = v_ml.n * v_ml.sf, 
-        step_amplitude = v_ml.step_amplitude * v_ml.sasf,
-        skew_fraction = v_ml.skew_fraction_survived,
-        skew_width = v_ml.skew_width_survived,
-        background = v_ml.background * v_ml.bsf
-    ) 
-            
-    v_ml_cut = (
-        μ = v_ml.μ, 
-        σ = v_ml.σ_cut, 
-        n = v_ml.n * (1 - v_ml.sf), 
-        step_amplitude = v_ml.step_amplitude * (1 - v_ml.sasf),
-        skew_fraction = v_ml.skew_fraction_cut,
-        skew_width = v_ml.skew_width_cut,
-        background = v_ml.background * (1 - v_ml.bsf)
-    )
+    v_ml_survived, v_ml_cut = get_subpeaks_v_ml(v_ml, fit_func)
 
     gof_survived = NamedTuple()
     gof_cut = NamedTuple()
