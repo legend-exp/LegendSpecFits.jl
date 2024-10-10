@@ -94,12 +94,27 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
     mean_background = ifelse(mean_background == 0, 0.01, mean_background)
     mean_background_step = ifelse(mean_background_step < 1e-2, 1e-2, mean_background_step)
     mean_background_std = ifelse(!isfinite(mean_background_std) || mean_background_std == 0, sqrt(mean_background), mean_background_std)
-
     peak_counts = inv(0.761) * (sum(view(W,fwhm_idx_left:fwhm_idx_right)) - mean_background * peak_fwhm)
-    peak_counts = ifelse(peak_counts < 0.0, inv(0.761) * sum(view(W,fwhm_idx_left:fwhm_idx_right)), peak_counts)
-    if !isnan(peak_fwqm)
+    if peak_counts <= 0.0
+        peak_counts = inv(0.761) * sum(view(W,fwhm_idx_left:fwhm_idx_right))
+    end
+    if peak_counts <= 0.0 && !isnan(peak_fwqm)
         peak_counts = inv(0.904) * (sum(view(W,fwqm_idx_left:fwqm_idx_right)) - mean_background * peak_fwqm)
-        peak_counts = ifelse(peak_counts < 0.0, inv(0.904) * sum(view(W,fwqm_idx_left:fwqm_idx_right)), peak_counts)
+    end
+    if peak_counts <= 0.0 && !isnan(peak_fwqm)
+        peak_counts = inv(0.904) * sum(view(W,fwqm_idx_left:fwqm_idx_right))
+    end
+    if peak_counts <= 0.0
+        if peak_idx == 1 
+            peak_counts = inv(0.761) * sum(view(W,peak_idx:peak_idx + 4))
+        elseif peak_idx == length(W)
+            peak_counts = inv(0.761) * sum(view(W,peak_idx - 4:peak_idx))
+        else
+            peak_counts = inv(0.761) * sum(view(W,peak_idx - 2:peak_idx + 2))
+        end
+    end
+    if peak_counts <= 0.0
+        peak_counts = 2.0
     end
     (
         peak_pos = peak_pos, 
