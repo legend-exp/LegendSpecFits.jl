@@ -174,6 +174,9 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
 
+    # best fit results
+    v_ml = inverse(f_trafo)(res.u)
+
     if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike, tuple_to_array(v_ml))
@@ -289,7 +292,10 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
-
+    
+    # best fit results
+    v_ml = inverse(f_trafo)(res.u)
+    
     if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike, tuple_to_array(v_ml))
