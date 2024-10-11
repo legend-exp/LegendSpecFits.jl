@@ -274,7 +274,7 @@ function fit_subpeaks_th228(
 )
 
     # create pseudo priors
-    pseudo_prior = get_subpeaks_pseudo_prior(h_survived, h_cut, h_result, fit_func; pseudo_prior = pseudo_prior, fix_σ = fix_σ, fix_skew_fraction = fix_skew_fraction, low_e_tail = low_e_tail)
+    pseudo_prior = get_subpeaks_pseudo_prior(h_survived, h_cut, h_result, fit_func; pseudo_prior = pseudo_prior, fix_σ = fix_σ, fix_skew_fraction = fix_skew_fraction, fix_skew_width = fix_skew_width, low_e_tail = low_e_tail)
 
     # get fit function with background center
     fit_function = get_th228_fit_functions(; background_center = background_center)[fit_func]
