@@ -23,8 +23,8 @@ using InverseFunctions
 using IrrationalConstants
 using LsqFit
 using Measurements
-using Measurements: value as mvalue
-using Measurements: uncertainty as muncert
+using Measurements: value
+using Measurements: uncertainty
 using Optim
 using Optimization
 using OptimizationBBO

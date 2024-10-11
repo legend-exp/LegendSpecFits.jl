@@ -155,6 +155,16 @@ end
 export nearestSPD
 
 
-Measurements.value(nt::NamedTuple) = NamedTuple{keys(nt)}([Measurements.value(nt[f]) for f in keys(nt)]...)
-Measurements.value(x::AbstractArray) = Measurements.value.(x)
-Measurements.value(x) = x
+function mvalue end
+mvalue(x) = Measurements.value(x)
+mvalue(x::AbstractArray) = mvalue.(x)
+mvalue(x::AbstractString) = x
+mvalue(x::Symbol) = x
+mvalue(nt::NamedTuple) = NamedTuple{keys(nt)}([mvalue(nt[f]) for f in keys(nt)]...)
+
+function muncert end
+muncert(x) = Measurements.uncertainty(x)
+muncert(x::AbstractArray) = muncert.(x)
+muncert(x::AbstractString) = x
+muncert(x::Symbol) = x
+muncert(nt::NamedTuple) = NamedTuple{keys(nt)}([muncert(nt[f]) for f in keys(nt)]...)
