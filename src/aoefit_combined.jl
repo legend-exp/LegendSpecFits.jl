@@ -105,7 +105,7 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
 end
 
 # This function calculates the same thing as fit_single_aoe_compton_with_fixed_μ_and_σ, but just returns the value of the negative log-likelihood
-function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; fit_func::Symbol = :f_fit, background_center::Union{Real,Nothing} = μ)
+function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Real, σ::Real, ps::NamedTuple; fit_func::Symbol = :f_fit, background_center::Union{Real,Nothing} = μ, optimize::Bool=true)
     
     # create pseudo priors
     pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func;
@@ -126,14 +126,18 @@ function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram
     end
 
     # MLE
-    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    if optimize
+        optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+        optpro = OptimizationProblem(optf, v_init, [])
+        res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
 
-    converged = (res.retcode == ReturnCode.Success)
-    if !converged @warn "Fit did not converge" end
+        converged = (res.retcode == ReturnCode.Success)
+        if !converged @warn "Fit did not converge" end
 
-    return res.objective
+        return res.objective
+    else
+        return f_loglike(merge((μ = μ, σ = σ), ps))
+    end
 end
 
 """
@@ -236,6 +240,19 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
     if uncertainty && converged
 
+        # create loglikehood function for single hist
+        function _get_neg_log_likehood(e::Real, h::Histogram, vi::NamedTuple)
+            # get fit function with background center
+            fit_function = get_aoe_fit_functions(; background_center = f_aoe_mu(e, (v_ml.μA, v_ml.μB)))[fit_func]
+
+            # create loglikehood function
+            f_loglike = let f_fit=fit_function, h=h
+                v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+            end
+            - f_loglike(vi)
+        end
+
+        # create full loglikehood function
         f_loglike_array = array -> begin
             pars = array_to_tuple(array, v_ml)
         
@@ -246,18 +263,19 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
                 # get histogram and peakstats
                 h  = peakhists[i]
-                ps = peakstats[i]
+                vi = v_results[i]
                 e = ustrip(compton_bands[i])
                 μ = f_aoe_mu(e, (pars.μA, pars.μB))
                 σ = f_aoe_sigma(e, (pars.σA, pars.σB))
+                
+                neg_log_likelihoods[i] = _get_neg_log_likehood(e, h, merge(mvalue(vi), (μ = μ, σ = σ)))
 
                 # fit peak
-                try
-                    neg_log_likelihoods[i] = neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h, μ, σ, ps; fit_func=fit_func)
-                catch e
-                    @warn "Error fitting band $(compton_bands[i]): $e"
-                    continue
-                end
+                # try
+                # catch e
+                #     @warn "Error fitting band $(compton_bands[i]): $e"
+                #     continue
+                # end
             end
             return sum(neg_log_likelihoods)
         end
@@ -294,7 +312,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         @debug "σB: $(v_ml.σB) ± $(v_ml_err.σB)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                (gof = (converged = converged, pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
                 residuals = residuals, residuals_norm = residuals_norm),) #, bin_centers = bin_centers),)
                 )
     else
@@ -304,7 +322,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         @debug "σA: $(v_ml.σA)"
         @debug "σB: $(v_ml.σB)"
 
-        result = merge(v_ml, )
+        result = merge(v_ml, (gof = (converged = converged, ), ))
     end
 
     # Add same fields to result as fit_aoe_corrections
