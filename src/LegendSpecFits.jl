@@ -25,7 +25,6 @@ using LsqFit
 using Measurements
 using Measurements: value
 using Measurements: uncertainty
-using Optim
 using Optimization
 using OptimizationBBO
 using OptimizationNLopt
