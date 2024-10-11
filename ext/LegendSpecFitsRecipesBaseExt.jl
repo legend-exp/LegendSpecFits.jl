@@ -932,7 +932,7 @@ end
     ylabel := "Counts / $(round_wo_units(report.bin_width, digits=2))"
     framestyle := :box
     thickness_scaling := 1.2
-    xticks := (0:300:3000, ["$i" for i in 0:300:3000])
+    xticks := (0:300:3000)
     xlims := (0, 3000)
     ylim_max = 3*maximum(report.h_before.weights)
     @series begin
@@ -1011,7 +1011,7 @@ end
     framestyle := :box
     thickness_scaling := 1.2
     xlims := (first(report.h_after_low.edges[1])), last(report.h_after_low.edges[1])
-    xticks := (ceil(Int, first(report.h_after_low.edges[1])):15:ceil(Int, last(report.h_after_low.edges[1])), ["$i" for i in ceil(Int, first(report.h_after_low.edges[1])):15:ceil(Int, last(report.h_after_low.edges[1]))])
+    xticks := (ceil(Int, first(report.h_after_low.edges[1])):15:ceil(Int, last(report.h_after_low.edges[1])))
     ylims := (0.5*minimum(report.h_after_ds.weights), 1.5*maximum(report.h_before.weights))
     @series begin
         seriestype := :stepbins
