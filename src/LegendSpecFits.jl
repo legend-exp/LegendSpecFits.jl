@@ -34,6 +34,7 @@ using Roots
 using SpecialFunctions
 using StatsBase
 using StructArrays
+using Suppressor
 using Tables
 using TypedTables
 using Unitful
