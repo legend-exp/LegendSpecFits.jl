@@ -105,9 +105,9 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
         peak_counts = inv(0.904) * sum(view(W,fwqm_idx_left:fwqm_idx_right))
     end
     if peak_counts <= 0.0
-        if peak_idx == 1 
+        if peak_idx <= 2
             peak_counts = inv(0.761) * sum(view(W,peak_idx:peak_idx + 4))
-        elseif peak_idx == length(W)
+        elseif peak_idx >= length(W) - 1
             peak_counts = inv(0.761) * sum(view(W,peak_idx - 4:peak_idx))
         else
             peak_counts = inv(0.761) * sum(view(W,peak_idx - 2:peak_idx + 2))
