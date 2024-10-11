@@ -3,6 +3,7 @@
 module LegendSpecFitsRecipesBaseExt
 
 using RecipesBase
+import Plots
 using Unitful, Format, Measurements, LaTeXStrings
 using Measurements: value, uncertainty
 using StatsBase, LinearAlgebra
@@ -921,4 +922,124 @@ end
         report.x, report.gof.residuals_norm
     end
 end
+
+@recipe function f(report::NamedTuple{(:h_before, :h_after_low, :h_after_ds, :dep_h_before, :dep_h_after_low, :dep_h_after_ds, :sf, :n0, :lowcut, :highcut, :e_unit, :bin_width)})
+    legend := :topright
+    foreground_color_legend := :silver
+    background_color_legend := :white
+    size := (1000, 600)
+    xlabel := "Energy ($(report.e_unit))"
+    ylabel := "Counts / $(round_wo_units(report.bin_width, digits=2))"
+    framestyle := :box
+    thickness_scaling := 1.2
+    xticks := (0:300:3000, ["$i" for i in 0:300:3000])
+    xlims := (0, 3000)
+    ylim_max = 3*maximum(report.h_before.weights)
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        color := 1
+        alpha := 0.3
+        label := "Before A/E"
+        yscale := :log10
+        report.h_before
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        color := 2
+        alpha := 0.8
+        label := "After low A/E"
+        yscale := :log10
+        report.h_after_low
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        color := 3
+        alpha := 0.5
+        label := "After DS A/E"
+        yscale := :log10
+        ylims := (1, ylim_max)
+        report.h_after_ds
+    end
+
+    @series begin
+        seriestype := :stepbins
+        subplot --> 2
+        color := 1
+        alpha := 0.3
+        inset := (1, Plots.bbox(0.3, 0.03, 0.4, 0.2, :top))
+        label := "Before A/E"
+        yscale := :log10
+        report.dep_h_before
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 2
+        color := 2
+        alpha := 0.8
+        label := "After low A/E"
+        yscale := :log10
+        report.dep_h_after_low
+    end
+    @series begin
+        seriestype := :stepbins
+        legend := false
+        ylabelfontsize := 8
+        subplot --> 2
+        color := 3
+        alpha := 0.5
+        label := "After DS A/E"
+        yscale := :log10
+        margin := (1, :mm)
+        ylabel := "Counts"
+        xlims := (first(report.dep_h_after_low.edges[1])), last(report.dep_h_after_low.edges[1])
+        xticks := (ceil(Int, first(report.dep_h_after_low.edges[1])):15:ceil(Int, last(report.dep_h_after_low.edges[1])), ["$i" for i in ceil(Int, first(report.dep_h_after_low.edges[1])):15:ceil(Int, last(report.dep_h_after_low.edges[1]))])
+        report.dep_h_after_ds
+    end
+end
+
+@recipe function f(report::NamedTuple{(:h_before, :h_after_low, :h_after_ds, :window, :n_before, :n_after, :sf, :e_unit, :bin_width)})
+    legend := :topright
+    foreground_color_legend := :silver
+    background_color_legend := :white
+    yformatter := :plain
+    size := (800, 500)
+    xlabel := "Energy ($(report.e_unit))"
+    ylabel := "Counts / $(round_wo_units(report.bin_width, digits=2))"
+    framestyle := :box
+    thickness_scaling := 1.2
+    xlims := (first(report.h_after_low.edges[1])), last(report.h_after_low.edges[1])
+    xticks := (ceil(Int, first(report.h_after_low.edges[1])):15:ceil(Int, last(report.h_after_low.edges[1])), ["$i" for i in ceil(Int, first(report.h_after_low.edges[1])):15:ceil(Int, last(report.h_after_low.edges[1]))])
+    ylims := (0.5*minimum(report.h_after_ds.weights), 1.5*maximum(report.h_before.weights))
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        linewidth := 1.5
+        color := 1
+        label := "Before A/E"
+        yscale := :log10
+        report.h_before
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        color := 2
+        linewidth := 1.5
+        label := "After low A/E"
+        yscale := :log10
+        report.h_after_low
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        linewidth := 1.5
+        color := 3
+        label := "After DS A/E"
+        yscale := :log10
+        report.h_after_ds
+    end
+end
+
 end # module LegendSpecFitsRecipesBaseExt
