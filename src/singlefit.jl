@@ -50,13 +50,15 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     end
 
     # MLE
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=false, callback=advanced_time_and_memory_control()), autodiff=:forward)
-    converged = Optim.converged(opt_r)
-    @debug opt_r
+    optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+
+    converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
 
     # best fit results
-    v_ml = inverse(f_trafo)(opt_r.minimizer)
+    v_ml = inverse(f_trafo)(res.u)
 
     if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
@@ -165,13 +167,12 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     end
 
     # MLE
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=false, callback=advanced_time_and_memory_control()), autodiff=:forward)
-    converged = Optim.converged(opt_r)
-    @debug opt_r
-    if !converged @warn "Fit did not converge" end
+    optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
 
-    # best fit results
-    v_ml = inverse(f_trafo)(opt_r.minimizer)
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
 
     if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
@@ -282,13 +283,12 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     end
 
     # MLE
-    opt_r = optimize(f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=false, callback=advanced_time_and_memory_control()), autodiff=:forward)
-    converged = Optim.converged(opt_r)
-    @debug opt_r
-    if !converged @warn "Fit did not converge" end
+    optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
 
-    # best fit results
-    v_ml = inverse(f_trafo)(opt_r.minimizer)
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
 
     if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
@@ -410,13 +410,15 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=false, callback=advanced_time_and_memory_control()), autodiff=:forward)
-    converged = Optim.converged(opt_r)
-    @debug opt_r
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+
+    converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
 
     # best fit results
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    v_ml = inverse(f_trafo)(res.u)
 
     if uncertainty && converged
         f_loglike_array(v) = - f_loglike(array_to_tuple(v, v_ml))
@@ -514,13 +516,15 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, allow_f_increases=false, show_trace=false, callback=advanced_time_and_memory_control()), autodiff=:forward)
-    converged = Optim.converged(opt_r)
-    @debug opt_r
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+
+    converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
 
     # best fit results
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    v_ml = inverse(f_trafo)(res.u)
 
     if uncertainty && converged
         f_loglike_array = let f_fit=double_gaussian, h=h
