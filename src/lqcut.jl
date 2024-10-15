@@ -142,17 +142,16 @@ Evaluates the cutoff value for the LQ cut. The function performs a binned gaussi
     * `report`: NamedTuple of the histograms used for the fit
 """
 function LQ_cut(
-    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{Float64}; lower_exclusion::Float64=0.005, upper_exclusion::Float64=0.95, cut_sigma::Float64=3.0)
+    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{Float64}; cut_sigma::Float64=3.0, truncation_sigma::Float64=2.0)
 
     # Define sidebands
     lq_DEP = lq_classifier[DEP_µ - 4.5 * DEP_σ .< e_cal .< DEP_µ + 4.5 * DEP_σ]
     lq_sb1 = lq_classifier[DEP_µ -  2 * 4.5 * DEP_σ .< e_cal .< DEP_µ - 4.5 * DEP_σ]
     lq_sb2 = lq_classifier[DEP_µ + 4.5 * DEP_σ .< e_cal .< DEP_µ + 2 * 4.5 * DEP_σ]
     
-    combined = [lq_DEP; lq_sb1; lq_sb2]
-
     # Generate values for histogram edges
-    ideal_bin_width = LegendSpecFits.get_friedman_diaconis_bin_width(combined)
+    combined = [lq_DEP; lq_sb1; lq_sb2]
+    ideal_bin_width = get_friedman_diaconis_bin_width(combined)
     edges = range(start=minimum(combined), stop=maximum(combined), step=ideal_bin_width)
 
     # Create histograms with the same bin edges
@@ -173,8 +172,8 @@ function LQ_cut(
 
     #get truncate values for fit; needed if outliers are present after in sideband subtracted histogram
     lq_prestats = estimate_single_peak_stats(hist_corrected)
-    lq_start = lq_prestats.peak_pos - 5.0 * lq_prestats.peak_sigma
-    lq_stop = lq_prestats.peak_pos + 5.0 * lq_prestats.peak_sigma
+    lq_start = lq_prestats.peak_pos - truncation_sigma * lq_prestats.peak_sigma
+    lq_stop = lq_prestats.peak_pos + truncation_sigma * lq_prestats.peak_sigma
 
     # Fit the sideband subtracted histogram
     fit_result, fit_report = fit_binned_trunc_gauss(hist_corrected, (low=lq_start, high=lq_stop, max=NaN))
@@ -184,7 +183,6 @@ function LQ_cut(
 
     result = (
         cut = cut_3σ,
-
     )
 
     report = (
