@@ -22,7 +22,7 @@ end
 export fit_peaks
 
 function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Vector{T},; e_unit::Union{Nothing, Unitful.EnergyUnits}=nothing, uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false,
-    fit_func::Symbol= :f_fit, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::MaybeWithEnergyUnits = 1.0) where T<:Any
+    fit_func::Vector{Symbol}= fill(:gamma_def, length(th228_lines)), pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::MaybeWithEnergyUnits = 1.0) where T<:Any
     
     e_unit = ifelse(isnothing(e_unit), NoUnits, e_unit)
 
@@ -30,22 +30,23 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
     v_result = Vector{NamedTuple}(undef, length(th228_lines))
     v_report = Vector{NamedTuple}(undef, length(th228_lines))
 
-
     # iterate throuh all peaks
     Threads.@threads for i in eachindex(th228_lines)
         # get histogram and peakstats
         peak = th228_lines[i]
         h  = peakhists[i]
         ps = peakstats[i]
+        f = fit_func[i] 
+
         # fit peak
-        result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=uncertainty, low_e_tail=low_e_tail, fit_func = fit_func, pseudo_prior = pseudo_prior)
+        result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=uncertainty, low_e_tail=low_e_tail, fit_func = f, pseudo_prior = pseudo_prior)
 
         # check covariance matrix for being semi positive definite (no negative uncertainties)
         if uncertainty
             if iterative_fit && !isposdef(result_peak.covmat)
                 @warn "Covariance matrix not positive definite for peak $peak - repeat fit without low energy tail"
                 pval_save = result_peak.pval
-                result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false, fit_func = fit_func, pseudo_prior = pseudo_prior)
+                result_peak, report_peak = fit_single_peak_th228(h, ps, ; uncertainty=uncertainty, low_e_tail=false, fit_func = f, pseudo_prior = pseudo_prior)
                 @info "New covariance matrix is positive definite: $(isposdef(result_peak.covmat))"
                 @info "p-val with low-energy tail  p=$(round(pval_save,digits=5)) , without low-energy tail: p=$(round((result_peak.pval),digits=5))"
                 end
@@ -74,9 +75,9 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
 """
-function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}; 
+function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}; 
     uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
-    fit_func::Symbol=:f_fit, background_center::Union{Real,Nothing} = ps.peak_pos, m_cal_simple::Real = 1.0) where T<:Real
+    fit_func::Symbol=:gamma_def, background_center::Union{Real,Nothing} = ps.peak_pos, m_cal_simple::Real = 1.0) where T<:Real
     # create standard pseudo priors
     pseudo_prior = get_pseudo_prior(h, ps, fit_func; pseudo_prior = pseudo_prior, fixed_position = fixed_position, low_e_tail = low_e_tail)
     
@@ -84,25 +85,29 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = Vector(mean(f_trafo.target_dist))  
+    v_init = Vector(mean(f_trafo.target_dist)) 
 
     # get fit function with background center
     fit_function = get_th228_fit_functions(; background_center = background_center)[fit_func]
 
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
     f_loglike = let f_fit = fit_function, h = h
-        v -> hist_loglike(Base.Fix2(f_fit, v), h)
+        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, LBFGS(linesearch = MoreThuente()), Optim.Options(iterations = 3000, callback=advanced_time_and_memory_control()), autodiff=:forward)
-    converged = Optim.converged(opt_r)
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    v_ml = inverse(f_trafo)(res.u)
 
     f_loglike_array = let f_fit=fit_function, h=h, v_keys = keys(pseudo_prior) #same loglikelihood function as f_loglike, but has array as input instead of NamedTuple
-        v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h) 
+        v ->  - hist_loglike(x -> f_fit(x, NamedTuple{v_keys}(v)), h)
     end
 
     if uncertainty && converged
@@ -112,7 +117,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         # Calculate the parameter covariance matrix
         param_covariance_raw = inv(H)
         param_covariance = nearestSPD(param_covariance_raw)
-    
+
         # Extract the parameter uncertainties
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
@@ -138,8 +143,17 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
     
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err), gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, converged = converged))
-                )
+                (fwhm = measurement(fwhm, fwhm_err), fit_func = fit_func, 
+                    gof = (pvalue = pval, 
+                            chi2 = chi2, 
+                            dof = dof, 
+                            covmat = param_covariance, 
+                            mean_residuals = mean(residuals_norm),
+                            median_residuals = median(residuals_norm),
+                            std_residuals = std(residuals_norm),
+                            converged = converged)
+                        )
+                    )
         report = (
             v = v_ml,
             h = h,
@@ -158,7 +172,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
         @debug "FWHM: $(fwhm)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
-            (fwhm = measurement(fwhm, NaN), ), (gof = (converged = converged,),))
+            (fwhm = measurement(fwhm, NaN), fit_func = fit_func, ), (gof = (converged = converged,),))
         report = (
             v = v_ml,
             h = h,
@@ -196,7 +210,7 @@ Get the FWHM of a peak from the fit parameters.
 """
 function estimate_fwhm(v::NamedTuple)
     # get FWHM
-    f_sigWithTail = Base.Fix2(get_th228_fit_functions().f_sigWithTail,v)
+    f_sigWithTail = Base.Fix2(get_th228_fit_functions().gamma_sigWithTail,v)
     try
         if v.skew_fraction <= 0.5
             half_max_sig = maximum(f_sigWithTail.(v.μ - v.σ:0.001:v.μ + v.σ))/2
@@ -254,43 +268,16 @@ Also, FWHM is calculated from the fitted peakshape with MC error propagation. Th
     * `report`: NamedTuple of the fit report which can be plotted
 """
 function fit_subpeaks_th228(
-    h_survived::Histogram, h_cut::Histogram, h_result; 
+    h_survived::Histogram, h_cut::Histogram, h_result::NamedTuple; 
     uncertainty::Bool=false, low_e_tail::Bool=true, fix_σ::Bool = true, fix_skew_fraction::Bool = true, fix_skew_width::Bool = true, 
-    pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:f_fit, background_center::Real = h_result.μ
+    pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol= :gamma_def, background_center::Real = h_result.μ
 )
 
-    # create standard pseudo priors
-    standard_pseudo_prior = let ps = h_result, ps_cut = estimate_single_peak_stats(h_cut), ps_survived = estimate_single_peak_stats(h_survived)
-        NamedTupleDist(
-            μ = ConstValueDist(mvalue(ps.μ)),
-            σ_survived = ifelse(fix_σ, ConstValueDist(mvalue(ps.σ)), weibull_from_mx(mvalue(ps.σ), 2*mvalue(ps.σ))),
-            σ_cut = ifelse(fix_σ, ConstValueDist(mvalue(ps.σ)), weibull_from_mx(mvalue(ps.σ), 2*mvalue(ps.σ))),
-            n = ConstValueDist(mvalue(ps.n)),
-            sf = Uniform(0,1), # signal survival fraction
-            bsf = Uniform(0,1), # background survival fraction 
-            sasf = Uniform(0,1), # step amplitude survival fraction
-            step_amplitude = ConstValueDist(mvalue(ps.step_amplitude)),
-            skew_fraction_survived = ifelse(low_e_tail, ifelse(fix_skew_fraction, ConstValueDist(mvalue(ps.skew_fraction)), truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1)), ConstValueDist(0.0)),
-            skew_fraction_cut = ifelse(low_e_tail, ifelse(fix_skew_fraction, ConstValueDist(mvalue(ps.skew_fraction)), truncated(weibull_from_mx(0.01, 0.05), 0.0, 0.1)), ConstValueDist(0.0)),
-            skew_width_survived = ifelse(low_e_tail, ifelse(fix_skew_width, mvalue(ps.skew_width), weibull_from_mx(0.001, 1e-2)), ConstValueDist(1.0)),
-            skew_width_cut = ifelse(low_e_tail, ifelse(fix_skew_width, mvalue(ps.skew_width), weibull_from_mx(0.001, 1e-2)), ConstValueDist(1.0)),
-            background = ConstValueDist(mvalue(ps.background))
-        )
-    end
+    # create pseudo priors
+    pseudo_prior = get_subpeaks_pseudo_prior(h_survived, h_cut, h_result, fit_func; pseudo_prior = pseudo_prior, fix_σ = fix_σ, fix_skew_fraction = fix_skew_fraction, fix_skew_width = fix_skew_width, low_e_tail = low_e_tail)
 
     # get fit function with background center
     fit_function = get_th228_fit_functions(; background_center = background_center)[fit_func]
-
-    # use standard priors in case of no overwrites given
-    if !(:empty in keys(pseudo_prior))
-        # check if input overwrite prior has the same fields as the standard prior set
-        @assert all(f -> f in keys(standard_pseudo_prior), keys(pseudo_prior)) "Pseudo priors can only have $(keys(standard_pseudo_prior)) as fields."
-        # replace standard priors with overwrites
-        pseudo_prior = merge(standard_pseudo_prior, pseudo_prior)
-    else
-        # take standard priors as pseudo priors with overwrites
-        pseudo_prior = standard_pseudo_prior    
-    end
 
     # transform back to frequency space
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
@@ -299,50 +286,25 @@ function fit_subpeaks_th228(
     v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
-    f_loglike = let f_fit=fit_function, h_cut=h_cut, h_survived=h_survived
+    f_loglike = let f_fit=fit_function, h_cut=h_cut, h_survived=h_survived, get_v_ml=Base.Fix2(get_subpeaks_v_ml, fit_func)
         v -> begin
-            v_survived = (μ = v.μ, σ = v.σ_survived, n = v.n * v.sf, 
-                step_amplitude = v.step_amplitude * v.sasf,
-                skew_fraction = v.skew_fraction_survived,
-                skew_width = v.skew_width_survived,
-                background = v.background * v.bsf
-            )
-            v_cut = (μ = v.μ, σ = v.σ_cut, n = v.n * (1 - v.sf), 
-                step_amplitude = v.step_amplitude * (1 - v.sasf),
-                skew_fraction = v.skew_fraction_cut,
-                skew_width = v.skew_width_cut,
-                background = v.background * (1 - v.bsf)
-            )
+            v_survived, v_cut = get_v_ml(v)
             hist_loglike(Base.Fix2(f_fit, v_survived), h_survived) + hist_loglike(Base.Fix2(f_fit, v_cut), h_cut)
         end
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), v_init, Optim.Options(time_limit = 60, iterations = 5000))
-    converged = Optim.converged(opt_r)
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    v_ml = inverse(f_trafo)(res.u)
     
-    v_ml_survived = (
-        μ = v_ml.μ, 
-        σ = v_ml.σ_survived, 
-        n = v_ml.n * v_ml.sf, 
-        step_amplitude = v_ml.step_amplitude * v_ml.sasf,
-        skew_fraction = v_ml.skew_fraction_survived,
-        skew_width = v_ml.skew_width_survived,
-        background = v_ml.background * v_ml.bsf
-    ) 
-            
-    v_ml_cut = (
-        μ = v_ml.μ, 
-        σ = v_ml.σ_cut, 
-        n = v_ml.n * (1 - v_ml.sf), 
-        step_amplitude = v_ml.step_amplitude * (1 - v_ml.sasf),
-        skew_fraction = v_ml.skew_fraction_cut,
-        skew_width = v_ml.skew_width_cut,
-        background = v_ml.background * (1 - v_ml.bsf)
-    )
+    v_ml_survived, v_ml_cut = get_subpeaks_v_ml(v_ml, fit_func)
 
     gof_survived = NamedTuple()
     gof_cut = NamedTuple()
@@ -404,7 +366,7 @@ function fit_subpeaks_th228(
         @debug "σ cut     : $(v_ml.σ_cut) ± $(v_ml_err.σ_cut)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err),), #NamedTuple{(:gof_survived, :gof_cut)}(gofs))
+                (fwhm = measurement(fwhm, fwhm_err), fit_func = fit_func, ), #NamedTuple{(:gof_survived, :gof_cut)}(gofs))
                 (gof = (converged = converged,
                     survived = (pvalue = gofs[1].pvalue, chi2 = gofs[1].chi2, dof = gofs[1].dof, covmat = gofs[1].covmat),
                     cut = (pvalue = gofs[2].pvalue, chi2 = gofs[2].chi2, dof = gofs[2].dof, covmat = gofs[2].covmat)
@@ -421,7 +383,7 @@ function fit_subpeaks_th228(
         @debug "σ cut     : $(v_ml.σ_cut)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
-        (fwhm = measurement(fwhm, NaN), gof = (converged = converged, survived = NamedTuple(), cut = NamedTuple())))
+        (fwhm = measurement(fwhm, NaN), fit_func = fit_func, gof = (converged = converged, survived = NamedTuple(), cut = NamedTuple())))
     end
 
     report = (

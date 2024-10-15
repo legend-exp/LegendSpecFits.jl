@@ -3,10 +3,11 @@
 module LegendSpecFitsRecipesBaseExt
 
 using RecipesBase
+import Plots
 using Unitful, Format, Measurements, LaTeXStrings
 using Measurements: value, uncertainty
 using StatsBase, LinearAlgebra
-
+using KernelDensity
 function round_wo_units(x::Unitful.RealOrRealQuantity; digits::Integer=2)
     if unit(x) == NoUnits
         round(x, digits=digits)
@@ -171,7 +172,7 @@ end
         fillrange := 1e-7
         bar_width := diff(report.h.edges[1])[1]
         label --> ifelse(show_label, "Data", "")
-        yscale := :log10
+        yscale --> :log10
         bins --> :sqrt
         xlabel --> "Energy (keV)"
         subplot --> _subplot
@@ -461,72 +462,74 @@ end
 end
 
 @recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after, :fwhm_before, :fwhm_after, :report_before, :report_after)})
-    layout := (1, 3)
-    thickness_scaling := 1.0
+    if !("StatsPlots" in string.(Base.loaded_modules_array()))
+        throw(ErrorException("StatsPlots not loaded. Please load StatsPlots before using this recipe."))
+    end
+    layout := (2, 1)
+    size := (1000, 1000)
+    framestyle := :semi
+    grid := false 
+    left_margin --> (5, :mm)
+    right_margin --> (5, :mm)
+    bottom_margin := (-4, :mm)
+    margins --> (0, :mm)
+    link --> :x
+    foreground_color_legend := :silver
+    background_color_legend := :white
     xtickfontsize := 12
     xlabelfontsize := 14
     ylabelfontsize := 14
     ytickfontsize := 12
-    legendfontsize := 10
-    size := (1000, 300)
-    margin := (8, :mm)
+    legendfontsize := 12
+    xl = (first(report_ctc.h_before.edges[1]), last(report_ctc.h_before.edges[1]))
     @series begin
-        seriestype := :histogram2d
-        bins := (ustrip.(unit(first(report_ctc.e_peak)), minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak)), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
-        color := :inferno
-        xlabel := "Energy"
-        ylabel := "QDrift"
-        title := "Before Correction"
-        titlelocation := (0.5, 1.1)
-        xlims := (2600, 2630)
-        ylims := (0, quantile(report_ctc.qdrift_peak, 0.99))
-        yformatter := :plain
-        legend := :none
-        colorbar_scale := :log10
+        seriestype := :stepbins 
+        fill := true
+        color := :darkgrey
+        label := "Before correction"
+        legend := :topleft
         subplot := 1
-        report_ctc.e_peak, report_ctc.qdrift_peak
-    end
-    @series begin
-        seriestype := :histogram2d
-        bins := (ustrip.(unit(first(report_ctc.e_peak)), minimum(report_ctc.e_peak):report_ctc.bin_width:maximum(report_ctc.e_peak)), quantile(report_ctc.qdrift_peak, 0.01):report_ctc.bin_width_qdrift:quantile(report_ctc.qdrift_peak, 0.99))
-        color := :magma
-        xlabel := "Energy"
-        ylabel := "QDrift"
-        title := "After Correction"
-        xlims := (2600, 2630)
-        titlelocation := (0.5, 1.1)
-        xlims := (2600, 2630)
-        ylims := (0, quantile(report_ctc.qdrift_peak, 0.99))
-        yformatter := :plain
-        legend := :none
-        colorbar_scale := :log10
-        subplot := 3
-        report_ctc.e_ctc, report_ctc.qdrift_peak
-    end
-    @series begin
-        seriestype := :stepbins
-        color := :red
-        label := "Before CTC"
-        xlabel := "Energy (keV)"
-        ylabel := "Counts"
-        yscale := :log10
-        subplot := 2
+        ylims := (0, :auto)
         report_ctc.h_before
     end
     @series begin
-        seriestype := :stepbins
-        color := :green
-        label := "After CTC"
-        xlabel := "Energy (keV)"
-        ylabel := "Counts"
-        title := "FWHM $(round(u"keV", report_ctc.fwhm_after, digits=2))"
-        titlelocation := (0.5, 1.1)
-        xlims := (2600, 2630)
-        xticks := (2600:10:2630)
-        legend := :bottomright
-        yscale := :log10
-        subplot := 2
+        seriestype := :stepbins 
+        fill := true
+        alpha := 0.5
+        color := :purple
+        label := "After correction"
+        legend := :topleft
+        subplot := 1
+        ylims := (0, :auto)
+        xlims := xl
+        xlabel := ""
+        xticks := ([], [])
+        ylabel := "Counts / $(round_wo_units(report_ctc.bin_width, digits=2))"
         report_ctc.h_after
+    end
+    @series begin
+        seriestype := :line
+        subplot := 2
+        c := :binary
+        colorbar := :none
+        fill := true
+        label := "Before correction"
+        kde((ustrip(report_ctc.e_peak), report_ctc.qdrift_peak ./ maximum(report_ctc.qdrift_peak)))
+    end
+    @series begin
+        seriestype := :line
+        subplot := 2
+        c := :plasma
+        colorbar := :none
+        fill := false
+        label := "After correction"
+        xlims := xl
+        ylims := (0, 1)
+        yticks := 0.1:0.1:0.9
+        yformatter := :plain
+        xlabel := "Energy ($(unit(report_ctc.peak)))"
+        ylabel := "Eff. Drift time (a.u.)"
+        kde((ustrip(report_ctc.e_ctc), report_ctc.qdrift_peak ./ maximum(report_ctc.qdrift_peak)))
     end
 end
 
@@ -570,7 +573,7 @@ end
 
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof)}; plot_ribbon=true, xerrscaling=1, additional_pts=NamedTuple())
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof)}; plot_ribbon=true, xerrscaling=1, yerrscaling=1, additional_pts=NamedTuple())
     thickness_scaling := 2.0
     xlims := (0, 1.2*value(maximum(report.x)))
     framestyle := :box
@@ -601,22 +604,32 @@ end
     @series begin
         seriestype := :scatter
         subplot := 1
-        if xerrscaling == 1
+        if xerrscaling == 1 && yerrscaling == 1
             label := "Data"
+        elseif xerrscaling == 1
+            label := "Data (y-Error x$(yerrscaling))"
+        elseif yerrscaling == 1
+            label := "Data (x-Error x$(xerrscaling))"
         else
-            label := "Data (Error x$(xerrscaling))"
+            label := "Data (x-Error x$(xerrscaling), y-Error x$(yerrscaling))"
         end
         markercolor --> :black
-        value.(report.x), report.y
+        xerror := uncertainty.(report.x) .* xerrscaling
+        yerror := uncertainty.(report.y) .* yerrscaling
+        value.(report.x), value.(report.y)
     end
     if !isempty(additional_pts)
         @series begin
             seriestype := :scatter
             subplot --> 1
-            if xerrscaling == 1
+            if xerrscaling == 1 && yerrscaling == 1
                 label := "Data not used for fit"
+            elseif xerrscaling == 1
+                label := "Data not used for fit (y-Error x$(yerrscaling))"
+            elseif yerrscaling == 1
+                label := "Data not used for fit (x-Error x$(xerrscaling))"
             else
-                label := "Data not used for fit (Error x$(xerrscaling))"
+                label := "Data not used for fit (x-Error x$(xerrscaling), y-Error x$(yerrscaling))"
             end
             ms --> 3
             markershape --> :circle
@@ -624,7 +637,8 @@ end
             linewidth --> 0.5
             markercolor --> :silver
             xerror := uncertainty.(additional_pts.x) .* xerrscaling
-            value.(additional_pts.x), additional_pts.y
+            yerror := uncertainty.(additional_pts.y) .* yerrscaling
+            value.(additional_pts.x), value.(additional_pts.y)
         end
     end
     if !isempty(report.gof)
@@ -674,7 +688,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :qbb, :type)}; additional_pts=NamedTuple())
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :qbb, :type)}; xerrscaling=1, yerrscaling=1, additional_pts=NamedTuple())
     bottom_margin --> (0, :mm)
     if report.type == :fwhm
         y_max = value(maximum(report.y))
@@ -687,13 +701,14 @@ end
             NamedTuple()
         end
         xlabel := "Energy (keV)"
-        legend := :bottomright
+        legend := :topleft
         framestyle := :box
         xlims := (0, 3000)
         xticks := (0:500:3000, ["$i" for i in 0:500:3000])
         @series begin
             grid --> :all
-            xerrscaling --> 1
+            xerrscaling --> xerrscaling
+            yerrscaling --> yerrscaling
             additional_pts --> additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = get(report, :gof, NamedTuple()))
         end
@@ -713,7 +728,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :type)}; xerrscaling=1, additional_pts=NamedTuple())
+@recipe function f(report::NamedTuple{(:par, :f_fit, :x, :y, :gof, :e_unit, :type)}; xerrscaling=1, yerrscaling=1, additional_pts=NamedTuple())
     bottom_margin --> (0, :mm)
     if report.type == :cal
         additional_pts = if !isempty(additional_pts)
@@ -730,7 +745,8 @@ end
         xticks := (0:16000:176000)
         @series begin
             grid --> :all
-            xerrscaling := xerrscaling
+            xerrscaling --> xerrscaling
+            yerrscaling --> yerrscaling
             additional_pts := additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = report.gof)
         end
@@ -832,11 +848,11 @@ end
     xmin = floor(Int, minimum(report.x)/100)*100
     xmax = ceil(Int, maximum(report.x)/100)*100
 
-    yguidefontsize := 18
-    xguidefontsize := 18
+    yguidefontsize := 16
+    xguidefontsize := 16
     ytickfontsize := 12
     xtickfontsize := 12
-    legendfontsize := 14
+    legendfontsize := 12
     foreground_color_legend := :silver
     background_color_legend := :white
     framestyle := :box
@@ -847,7 +863,7 @@ end
         seriestype := :line
         subplot --> 1
         color := :orange
-        ms := 3
+        markersize := 3
         linewidth := 3
         label := report.label_fit
         ribbon := uncertainty.(report.f_fit(report.x))
@@ -856,6 +872,7 @@ end
     @series begin
         ylabel := "$(report.label_y) (a.u.)"
         seriestype := :scatter
+        markersize := 3
         subplot --> 1
         color := :black 
         #ylims := (0.98 * (Measurements.value(minimum(report.y)) - Measurements.uncertainty(median(report.y))), 1.02 * (Measurements.value(maximum(report.y)) + Measurements.uncertainty(median(report.y)) ) )
@@ -895,7 +912,7 @@ end
         seriestype := :scatter
         subplot --> 2
         color := :black 
-        ms := 3
+        markersize := 3
         label := false
         framestyle := :box
         grid := :false
@@ -907,4 +924,124 @@ end
         report.x, report.gof.residuals_norm
     end
 end
+
+@recipe function f(report::NamedTuple{(:h_before, :h_after_low, :h_after_ds, :dep_h_before, :dep_h_after_low, :dep_h_after_ds, :sf, :n0, :lowcut, :highcut, :e_unit, :bin_width)})
+    legend := :topright
+    foreground_color_legend := :silver
+    background_color_legend := :white
+    size := (1000, 600)
+    xlabel := "Energy ($(report.e_unit))"
+    ylabel := "Counts / $(round_wo_units(report.bin_width, digits=2))"
+    framestyle := :box
+    thickness_scaling := 1.2
+    xticks := (0:300:3000)
+    xlims := (0, 3000)
+    ylim_max = 3*maximum(report.h_before.weights)
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        color := 1
+        alpha := 0.3
+        label := "Before A/E"
+        yscale := :log10
+        report.h_before
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        color := 2
+        alpha := 0.8
+        label := "After low A/E"
+        yscale := :log10
+        report.h_after_low
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        color := 3
+        alpha := 0.5
+        label := "After DS A/E"
+        yscale := :log10
+        ylims := (1, ylim_max)
+        report.h_after_ds
+    end
+
+    @series begin
+        seriestype := :stepbins
+        subplot --> 2
+        color := 1
+        alpha := 0.3
+        inset := (1, Plots.bbox(0.3, 0.03, 0.4, 0.2, :top))
+        label := "Before A/E"
+        yscale := :log10
+        report.dep_h_before
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 2
+        color := 2
+        alpha := 0.8
+        label := "After low A/E"
+        yscale := :log10
+        report.dep_h_after_low
+    end
+    @series begin
+        seriestype := :stepbins
+        legend := false
+        ylabelfontsize := 8
+        subplot --> 2
+        color := 3
+        alpha := 0.5
+        label := "After DS A/E"
+        yscale := :log10
+        margin := (1, :mm)
+        ylabel := "Counts"
+        xlims := (first(report.dep_h_after_low.edges[1])), last(report.dep_h_after_low.edges[1])
+        xticks := (ceil(Int, first(report.dep_h_after_low.edges[1])):15:ceil(Int, last(report.dep_h_after_low.edges[1])), ["$i" for i in ceil(Int, first(report.dep_h_after_low.edges[1])):15:ceil(Int, last(report.dep_h_after_low.edges[1]))])
+        report.dep_h_after_ds
+    end
+end
+
+@recipe function f(report::NamedTuple{(:h_before, :h_after_low, :h_after_ds, :window, :n_before, :n_after, :sf, :e_unit, :bin_width)})
+    legend := :topright
+    foreground_color_legend := :silver
+    background_color_legend := :white
+    yformatter := :plain
+    size := (800, 500)
+    xlabel := "Energy ($(report.e_unit))"
+    ylabel := "Counts / $(round_wo_units(report.bin_width, digits=2))"
+    framestyle := :box
+    thickness_scaling := 1.2
+    xlims := (first(report.h_after_low.edges[1])), last(report.h_after_low.edges[1])
+    xticks := (ceil(Int, first(report.h_after_low.edges[1])):15:ceil(Int, last(report.h_after_low.edges[1])))
+    ylims := (0.5*minimum(report.h_after_ds.weights), 1.5*maximum(report.h_before.weights))
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        linewidth := 1.5
+        color := 1
+        label := "Before A/E"
+        yscale := :log10
+        report.h_before
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        color := 2
+        linewidth := 1.5
+        label := "After low A/E"
+        yscale := :log10
+        report.h_after_low
+    end
+    @series begin
+        seriestype := :stepbins
+        subplot --> 1
+        linewidth := 1.5
+        color := 3
+        label := "After DS A/E"
+        yscale := :log10
+        report.h_after_ds
+    end
+end
+
 end # module LegendSpecFitsRecipesBaseExt

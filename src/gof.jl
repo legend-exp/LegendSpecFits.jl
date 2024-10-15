@@ -79,10 +79,14 @@ function p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml
 
     loglikelihood_null = sum(logpdf.(Poisson.(counts), counts))  # joint loglikelihood, evaluate for data only
     chi2 = -2*(loglikelihood_ml - loglikelihood_null) # likelihood ratio. this quantity should follow chi2 distribution. 
-    
+
     npar = length(v_ml)
     dof = length(counts[counts .> 0]) - npar
-    pval = ccdf(Chisq(dof), chi2)
+    pval = if dof <= 0
+        0.0
+    else
+        ccdf(Chisq(dof), chi2)
+    end
 
     return pval, chi2, dof
 end

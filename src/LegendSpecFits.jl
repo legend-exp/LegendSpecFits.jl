@@ -21,13 +21,14 @@ using ForwardDiff
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
-using LinearRegression
-using LineSearches
 using LsqFit
 using Measurements
-using Measurements: value as mvalue
-using Measurements: uncertainty as muncert
-using Optim
+using Measurements: value
+using Measurements: uncertainty
+using Optimization
+using OptimizationBBO
+using OptimizationNLopt
+using OptimizationOptimJL
 using PropDicts
 using RadiationSpectra
 using Roots
@@ -72,6 +73,7 @@ include("lqcut.jl")
 include("pseudo_prior.jl")
 include("specfit_functions.jl")
 include("calfunc.jl")
+include("sipm_simple_calibration.jl")
 abstract type UncertTag end
 ForwardDiff.:(≺)(::Type{<:ForwardDiff.Tag}, ::Type{UncertTag}) = true
 ForwardDiff.:(≺)(::Type{UncertTag}, ::Type{<:ForwardDiff.Tag}) = false

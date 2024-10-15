@@ -75,7 +75,7 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
     # start values for MLE
-    v_init = mean(pseudo_prior)
+    v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function
     f_loglike = let f_fit=f_lq_compton, h=h
@@ -83,16 +83,21 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
     end
 
     # MLE
-    opt_r = optimize((-) ∘ f_loglike ∘ inverse(f_trafo), f_trafo(v_init))
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, [])
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
 
     # best fit results
-    v_ml = inverse(f_trafo)(Optim.minimizer(opt_r))
+    v_ml = inverse(f_trafo)(res.u)
 
     f_loglike_array = let f_fit=aoe_compton_peakshape, h=h
         v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v...) : 0, h)
     end
 
-    if uncertainty
+    if uncertainty && converged
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 
@@ -122,8 +127,8 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
         @debug "B: $(v_ml.B) ± $(v_ml_err.B)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                  (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                  residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+                    (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                    residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
     else
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"
