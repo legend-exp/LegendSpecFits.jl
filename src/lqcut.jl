@@ -8,34 +8,29 @@ Perform the drift time correction on the LQ data using the DEP peak. The functio
     * `report`: NamedTuple of the histograms used for the fit
 """
 function lq_drift_time_correction(
-    lq_norm::Vector{Float64}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity;
-     DEP_edgesigma::Float64 = 3.0 , mode::Symbol = :percentile, lower_exclusion::Float64 = 0.005, upper_exclusion::Float64 = 0.98, drift_cutoff_sigma::Float64 = 2.0,
-     prehist_sigma::Float64 = 3.0, e_expression::Union{String,Symbol}="e", dt_eff_low_quantile::Float64=0.15, dt_eff_high_quantile::Float64=0.95)
+    lq_norm::Vector{Float64}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
+    DEP_edgesigma::Float64=3.0 , mode::Symbol=:percentile, drift_cutoff_sigma::Float64 = 2.0, prehist_sigma::Float64=2.5, e_expression::Union{String,Symbol}="e", dt_eff_low_quantile::Float64=0.15, dt_eff_high_quantile::Float64=0.95)
 
-    #get energy units to remve later
+    # get energy units to remve later
     e_unit = unit(first(e_cal))
 
-    #calculate DEP edges
+    # calculate DEP edges
     DEP_left = DEP_µ - DEP_edgesigma * DEP_σ
     DEP_right = DEP_µ + DEP_edgesigma * DEP_σ
 
-    #cut data to DEP peak
+    # cut data to DEP peak
     lq_DEP = lq_norm[DEP_left .< e_cal .< DEP_right]
     dt_eff_DEP = ustrip.(dt_eff[DEP_left .< e_cal .< DEP_right])
 
-    #lq cutoff
-    low_cut_value = quantile(lq_DEP, lower_exclusion)  # 0.5% quantile
-    high_cut_value = quantile(lq_DEP, upper_exclusion)  # 2% quantile
-
-    ideal_bin_width = get_friedman_diaconis_bin_width(lq_DEP[low_cut_value .< lq_DEP .< high_cut_value])
-
-    lq_prehist = fit(Histogram, lq_DEP, range(low_cut_value, high_cut_value, step=ideal_bin_width))
+    # Calculate range to truncate lq data for outlier removal
+    ideal_bin_width = get_friedman_diaconis_bin_width(lq_DEP)
+    lq_prehist = fit(Histogram, lq_DEP, range(minimum(lq_DEP), maximum(lq_DEP), step=ideal_bin_width))
     lq_prestats = estimate_single_peak_stats(lq_prehist)
-
     lq_start = lq_prestats.peak_pos - prehist_sigma * lq_prestats.peak_sigma
     lq_stop = lq_prestats.peak_pos + prehist_sigma * lq_prestats.peak_sigma
 
-    lq_result, lq_report = fit_binned_trunc_gauss(lq_prehist, (low=lq_start, high=lq_stop, max=NaN))
+    # truncated gaussian fit
+    lq_result, lq_report = fit_single_trunc_gauss(lq_DEP, (low=lq_start, high=lq_stop, max=NaN))
     µ_lq = mvalue(lq_result.μ)
     σ_lq = mvalue(lq_result.σ)
 
@@ -44,7 +39,7 @@ function lq_drift_time_correction(
     lq_upper = µ_lq + drift_cutoff_sigma * σ_lq 
 
 
-    #dt_eff_DEP cutoff; method dependant on detector type
+    # dt_eff_DEP cutoff; method dependant on detector type
     
     if mode == :percentile #standard method; can be used for all detectors
         #set cutoff; default at the 15% and 95% percentile
@@ -53,7 +48,7 @@ function lq_drift_time_correction(
         drift_prehist = nothing
         drift_report = nothing
 
-    elseif mode == :gaussian #can't be used for detectors with double peaks
+    elseif mode == :gaussian # can't be used for detectors with double peaks
         
         ideal_bin_width = get_friedman_diaconis_bin_width(dt_eff_DEP)
 
@@ -73,7 +68,7 @@ function lq_drift_time_correction(
         t_lower = µ_t - drift_cutoff_sigma * σ_t
         t_upper = µ_t + drift_cutoff_sigma * σ_t
 
-    elseif mode == :double_gaussian #can be used for detectors with double peaks
+    elseif mode == :double_gaussian # can be used for detectors with double peaks
         #create histogram for drift time
         drift_prehist = fit(Histogram, dt_eff_DEP, range(minimum(dt_eff_DEP), stop=maximum(dt_eff_DEP), length=100))
         drift_prestats = estimate_single_peak_stats(drift_prehist)
@@ -108,7 +103,7 @@ function lq_drift_time_correction(
     drift_time_func(x) = parameters[1] .+ parameters[2] .* x
 
     #property function for drift time correction
-    lq_class_func = "(lq / ($(e_expression))$(e_unit)^-1) - ($(parameters[2]) * (qdrift / ($(e_expression))$(e_unit)^-1) + $(parameters[1]))"  #removes the units to get unitless lq classifier
+    lq_class_func = "(lq / ($(e_expression))$(e_unit)^-1) - ($(parameters[2]) * (qdrift / ($(e_expression))$(e_unit)^-1) + $(parameters[1]))"  # removes the units to get unitless lq classifier
     lq_class_func_generic = "lq / e  - (slope * qdrift / e + y_inter)"
 
     #create result and report
