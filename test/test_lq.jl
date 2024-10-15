@@ -1,4 +1,4 @@
-
+using Test
 using LegendSpecFits
 using Unitful
 using Distributions
@@ -20,11 +20,11 @@ using Plots
     # Peak 1: Normally distributed LQ values
     lq_classifier_peak1 = randn(n_peak)
     # Peak 2: Flat background within the peak
-    lq_classifier_peak2 = -3 .+ 20 .* rand(n_bg)
+    lq_classifier_peak2 = -4 .+ 14 .* rand(n_bg)
 
     # Below: Flat background below the peak
-    lq_classifier_below = -3 .+ 20 .* rand(n_bg ÷ 2)
-    lq_classifier_above = -3 .+ 20 .* rand(n_bg ÷ 2)
+    lq_classifier_below = -4 .+ 14 .* rand(n_bg ÷ 2)
+    lq_classifier_above = -4 .+ 14 .* rand(n_bg ÷ 2)
 
     # Combine all cases into the LQ classifier array
     lq_classifier_combined = vcat(lq_classifier_peak1, lq_classifier_peak2, lq_classifier_below, lq_classifier_above)
@@ -36,16 +36,21 @@ using Plots
     plot!(report.temp_hists.hist_sb1, label="LQ SB1")
     plot!(report.temp_hists.hist_sb2, label="LQ SB2")
     plot!(report.temp_hists.hist_subtracted, label="DEP Subtracted")
-    plot(report.temp_hists.hist_corrected, label="Fit")
+    plot(report.temp_hists.hist_corrected, label="original histogram")
     plot!(report.fit_report.f_fit, label="Fit function")
 
     # Extract the cutoff value
+    report.fit_result.μ
+    report.fit_result.σ
     cut_3σ = result.cut
   
-    # Verify if the cutoff is correctly 3 sigma
-    expected_cut = mean(lq_classifier_peak1) + 3 * std(lq_classifier_peak1)
+    # Calculate the expected mean, sigma and cutoff value
+    expected_mean = mean(lq_classifier_peak1)
+    expected_sigma = std(lq_classifier_peak1)
+    expected_cut = expected_mean + 3 * expected_sigma
 
+    # Test the parameters
+    @test isapprox(report.fit_result.μ, expected_mean, atol=0.05)
+    @test isapprox(report.fit_result.σ, expected_sigma, atol=0.05)
     @test isapprox(cut_3σ, expected_cut, atol=0.1)
 end
-
-
