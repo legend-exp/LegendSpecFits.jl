@@ -10,6 +10,10 @@ of the histogram.
 
 Currently uses a simple midpoint-rule integration of `f_fit` over the
 bins of `h`.
+
+# Arguments
+    * 'f_fit': fit function 
+    * 'h': Histogram data
 """
 function hist_loglike(f_fit::Base.Callable, h::Histogram{<:Real,1})
     bin_edges = first(h.edges)

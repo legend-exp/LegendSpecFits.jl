@@ -1,11 +1,22 @@
 
 """
-    prepare_dep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
+    prepare_dep_peakhist(e::Array{T}, dep::Quantity{T},; relative_cut::T=0.5, n_bins_cut::Int=500, uncertainty::Bool=true) where T<:Real
 
 Prepare an array of uncalibrated DEP energies for parameter extraction and calibration.
+
+# Arguments
+    * 'e': Calibrated energies
+    * 'dep': DEP energies
+
+#Keywords
+    * 'relative_cut': 
+    * 'n_bins_cut': Number of histogram bins to cut from plot
+    * 'uncertainty': Energy uncertainty
+
 # Returns
-- `result`: Result of the initial fit
-- `report`: Report of the initial fit
+    * `result`: Result of the initial fit
+    * `report`: Report of the initial fit
+
 """
 function prepare_dep_peakhist(e::Array{T}, dep::Quantity{T},; relative_cut::T=0.5, n_bins_cut::Int=500, uncertainty::Bool=true) where T<:Real
     # get cut window around peak
@@ -26,12 +37,64 @@ export prepare_dep_peakhist
 
 
 """
+    get_n_after_aoe_cut(aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple, peakstats::NamedTuple; uncertainty::Bool=true, fixed_position::Bool=true) where T<:Unitful.Energy{<:Real}
+
+Get the number of counts after a AoE cut value `aoe_cut` for a given `peak` and `window` size while performing a peak fit with fixed position. The number of counts is determined by fitting the peak with a pseudo prior for the peak position.
+
+# Arguments
+    * 'aoe_cut': A/E cut value
+    * 'aoe': A/E
+    * 'e': Calibrated energies
+    * 'peak': Data peak 
+    * 'window': histogram window size of counts used
+    * 'bin_width': Histogram bin widths
+    * 'result_before': 
+    * 'peakstats': Peak statistics 
+
+# Keywords
+    * 'uncertainty': Data uncertainty
+    * 'fixed_position': Position of peak 
+
+# Returns
+    * `n`: Number of counts after the cut
+
+"""
+function get_n_after_aoe_cut(aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple, peakstats::NamedTuple; uncertainty::Bool=true, fixed_position::Bool=true) where T<:Unitful.Energy{<:Real}
+    # get energy after cut and create histogram
+    peakhist = fit(Histogram, ustrip.(e[aoe .> aoe_cut]), ustrip(peak-first(window):bin_width:peak+last(window)))
+    # create pseudo_prior with known peak sigma in signal for more stable fit
+    pseudo_prior = if fixed_position
+        NamedTupleDist(σ = Normal(result_before.σ, 0.1), μ = ConstValueDist(result_before.μ))
+    else
+        NamedTupleDist(σ = Normal(result_before.σ, 0.1), )
+    end
+    # fit peak and return number of signal counts
+    result, _ = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, low_e_tail=false, pseudo_prior=pseudo_prior)
+    return result.n
+end
+export get_n_after_aoe_cut
+
+
+"""
     get_sf_after_aoe_cut(aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple; uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
 
 Get the survival fraction after a AoE cut value `aoe_cut` for a given `peak` and `window` size from a combined fit to the survived and cut histograms.
 
+# Arguments
+    * 'aoe_cut': A/E cut value
+    * 'aoe': A/E
+    * 'e': Calibrated energies
+    * 'peak': Peak name
+    * 'window': Data window in energy
+    * 'bin_width': Histogram bin widths
+    * 'result_before': Survival fraction before A/E cut
+
+# Keywords
+    * 'uncertainty': uncertainty of survival fraction 
+    * `fit_func`: Fit function
+
 # Returns
-- `sf`: Survival fraction after the cut
+    * `sf`: Survival fraction after the cut
 """
 function get_sf_after_aoe_cut(aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple; uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
     # get energy after cut and create histogram
@@ -51,12 +114,30 @@ export get_sf_after_aoe_cut
             cut_search_interval::Tuple{<:Unitful.RealOrRealQuantity, <:Unitful.RealOrRealQuantity}=(-25.0*unit(first(aoe)), 1.0*unit(first(aoe))), 
             bin_width_window::T=3.0u"keV", max_e_plot::T=3000.0u"keV",  plot_window::Vector{<:T}=[12.0, 50.0]u"keV",
             fixed_position::Bool=true, fit_func::Symbol=:gamma_def, uncertainty::Bool=true) where T<:Unitful.Energy{<:Real}
+            
 Get the AoE cut value for a given `dep` and `window` size while performing a peak fit with fixed position. The AoE cut value is determined by finding the cut value for which the number of counts after the cut is equal to `dep_sf` times the number of counts before the cut.
 The algorhithm utilizes a root search algorithm to find the cut value with a relative tolerance of `rtol`.
+
+# Arguments
+    * 'aoe': A/E
+    * 'e': Calibrated energies
+
+# Keywords
+    * 'dep': DEP energies
+    * 'window': Data window in energy
+    * 'dep_sf': Surrival fraction of DEP energies
+    * 'cut_search_interval': Data interval to search for a cut value
+    * 'rtol': Relative tolerance
+    * 'bin_width_window': Specified window around the peak in which the bin algorithm is applied
+    * 'fixed_position': Fixed position of cut
+    * 'sigma_high_sided': Fixed upper limit cut
+    * 'uncertainty': Uncertainty
+    * 'maxiters': Maximum iterations
+
 # Returns
-- `cut`: AoE cut value
-- `n0`: Number of counts before the cut
-- `nsf`: Number of counts after the cut
+    * `cut`: AoE cut value
+    * `n0`: Number of counts before the cut
+    * `nsf`: Number of counts after the cut
 """
 function get_low_aoe_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; 
             dep::T=1592.53u"keV", window::Vector{<:T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, rtol::Float64=0.001, maxiters::Int=300, sigma_high_sided::Float64=Inf,
@@ -117,9 +198,24 @@ export get_low_aoe_cut
     get_peaks_surrival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
 
 Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size while performing a peak fit with fixed position.
+
+# Arguments
+    * 'aoe': A/E
+    * 'e': Calibrated energies
+    * 'peaks': Data range of several peaks
+    * 'peak_names': Name of the peak
+    * 'windows': Energy data window 
+    * 'aoe_cut': A/E cut value
+
+# Keywords
+    * 'Uncertainty':
+    * 'bin_width_window': Specified window around the peak where the binning algorithm is applied to
+    * 'low_e_tail': Low energy tail
+    * 'sigma_high_sided': Fixed upper limit cut
+
 # Return 
-- `result`: Dict of results for each peak
-- `report`: Dict of reports for each peak
+    * `result`: Dict of results for each peak
+    * `report`: Dict of reports for each peak
 """
 function get_peaks_surrival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
     @assert length(peaks) == length(peak_names) == length(windows) "Length of peaks, peak_names and windows must be equal"
@@ -149,16 +245,30 @@ get_peaks_surrival_fractions(aoe, e, peaks, peak_names, left_window_sizes::Vecto
 
 
 """
-    get_peak_surrival_fraction(aoe::Array{T}, e::Array{T}, peak::T, window::Array{T}, aoe_cut::T,; uncertainty::Bool=true, low_e_tail::Bool=true) where T<:Real
+    get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, lq_mode::Bool=false, low_e_tail::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
 
 Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size while performing a peak fit with fixed position.
     
+# Arguments
+    * 'aoe': A/E
+    * 'e': Calibrated energies
+    * 'peak': Peak name
+    * 'window': Data window in energy
+    * 'aoe_cut': A/E cut value
+
+# Keywords
+    * 'Uncertainty': Uncertainty 
+    * 'lq_mode': Inverts the cut logic
+    * 'low_e_tail': Low energy tail
+    * 'bin_width_window': Specified window around the peak to apply the binning algorithm
+    * 'sigma_high_sided': Fixed upper limit cut
+    
 # Returns
-- `peak`: Peak position
-- `n_before`: Number of counts before the cut
-- `n_after`: Number of counts after the cut
-- `sf`: Surrival fraction
-- `err`: Uncertainties
+    * `peak`: Peak position
+    * `n_before`: Number of counts before the cut
+    * `n_after`: Number of counts after the cut
+    * `sf`: Surrival fraction
+    * `err`: Uncertainties
 """
 function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; 
     uncertainty::Bool=true, lq_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
@@ -211,16 +321,27 @@ export get_peak_surrival_fraction
 
 
 """
-    get_continuum_surrival_fraction(aoe:::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
+    get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; lq_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
 
 Get the surrival fraction of a continuum after a AoE cut value `aoe_cut` for a given `center` and `window` size.
 
+# Arguments
+    * 'aoe': A/E
+    * 'e': Calibrated energies
+    * 'center': Center of the fit
+    * 'window': Data window in energy
+    * 'aoe_cut': A/E cut value
+
+# Keywords
+    * 'lq_mode': Inverted cut logic
+    * 'sigma_high_sided': Fixed upper limit cut 
+    
 # Returns
-- `center`: Center of the continuum
-- `window`: Window size
-- `n_before`: Number of counts before the cut
-- `n_after`: Number of counts after the cut
-- `sf`: Surrival fraction
+    * `window`: Window size
+    * `n_before`: Number of counts before the cut
+    * `n_after`: Number of counts after the cut
+    * `sf`: Surrival fraction
+
 """
 function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; lq_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
     # scale unit
