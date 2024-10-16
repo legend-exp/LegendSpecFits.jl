@@ -24,13 +24,13 @@ function lq_drift_time_correction(
 
     # Calculate range to truncate lq data for outlier removal
     ideal_bin_width = get_friedman_diaconis_bin_width(lq_DEP)
-    lq_prehist = fit(Histogram, lq_DEP, range(low_cut_value, high_cut_value, step=ideal_bin_width))
+    lq_prehist = fit(Histogram, lq_DEP, range(minimum(lq_DEP), maximum(lq_DEP), step=ideal_bin_width))
     lq_prestats = estimate_single_peak_stats(lq_prehist)
     lq_start = lq_prestats.peak_pos - prehist_sigma * lq_prestats.peak_sigma
     lq_stop = lq_prestats.peak_pos + prehist_sigma * lq_prestats.peak_sigma
 
     # truncated gaussian fit
-    lq_result, lq_report = fit_single_trunc_gauss(lq_DEP_dt, (low=lq_start, high=lq_stop, max=NaN))
+    lq_result, lq_report = fit_single_trunc_gauss(lq_DEP, (low=lq_start, high=lq_stop, max=NaN))
     µ_lq = mvalue(lq_result.μ)
     σ_lq = mvalue(lq_result.σ)
 
