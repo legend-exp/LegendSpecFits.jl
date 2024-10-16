@@ -9,7 +9,7 @@ Fit a single A/E Compton band using the `f_aoe_compton` function consisting of a
     * `neg_log_likelihood`: The negative log-likelihood of the likelihood fit
     * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
-function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; fit_func::Symbol = :f_fit, background_center::Union{Real,Nothing} = μ, uncertainty::Bool=false)
+function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, σ::Number, ps::NamedTuple; fit_func::Symbol = :aoe_one_bck, background_center::Union{Real,Nothing} = μ, uncertainty::Bool=false)
     
     # create pseudo priors
     pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func;
@@ -105,7 +105,7 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
 end
 
 # This function calculates the same thing as fit_single_aoe_compton_with_fixed_μ_and_σ, but just returns the value of the negative log-likelihood
-function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Real, σ::Real, ps::NamedTuple; fit_func::Symbol = :f_fit, background_center::Union{Real,Nothing} = μ, optimize::Bool=true)
+function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Real, σ::Real, ps::NamedTuple; fit_func::Symbol = :aoe_one_bck, background_center::Union{Real,Nothing} = μ, optimize::Bool=true)
     
     # create pseudo priors
     pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func;
@@ -153,7 +153,7 @@ assuming `f_aoe_mu` for `μ` and `f_aoe_sigma` for `σ`.
     * `report_bands`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
 function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T}, result_corrections::NamedTuple; 
-    fit_func::Symbol = :f_fit, aoe_expression::Union{String,Symbol}="a / e", e_expression::Union{String,Symbol}="e", uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
+    fit_func::Symbol = :aoe_one_bck, aoe_expression::Union{String,Symbol}="a / e", e_expression::Union{String,Symbol}="e", uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
     
     μA = ustrip(result_corrections.μ_compton.par[1])
     μB = ustrip(result_corrections.μ_compton.par[2])

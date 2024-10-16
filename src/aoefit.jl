@@ -160,7 +160,7 @@ Perform a fit of the peakshape to the data in `h` using the initial values in `p
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
 """
-function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:f_fit, background_center::Union{Real,Nothing} = ps.peak_pos, fixed_position::Bool=false)
+function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:aoe_one_bck, background_center::Union{Real,Nothing} = ps.peak_pos, fixed_position::Bool=false)
     # create pseudo priors
     pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func; pseudo_prior = pseudo_prior, fixed_position = fixed_position)
         
