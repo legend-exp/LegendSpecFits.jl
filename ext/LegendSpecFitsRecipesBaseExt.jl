@@ -1073,4 +1073,185 @@ end
     end
 end
 
+
+### lq recipe functions
+
+# recipe for the lq_drift_time_correction report
+
+@recipe function f(report::NamedTuple{(:lq_prehist, :lq_report, :drift_prehist, :drift_report, :lq_box, :drift_time_func, :DEP_left, :DEP_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
+
+    # Extract data from the report
+    DEP_left = report.DEP_left
+    DEP_right = report.DEP_right
+    box = report.lq_box
+
+    #cut data to DEP
+    dt_DEP = dt_eff[DEP_left .< e_cal .< DEP_right]
+    lq_DEP = lq_e_corr[DEP_left .< e_cal .< DEP_right]
+
+    # Plot configuration: 2D histogram
+    xlabel := "Drift Time"
+    ylabel := "LQ (A.U.)"
+    framestyle := :box
+    left_margin := -2Plots.mm
+    bottom_margin := -4Plots.mm
+    top_margin := -3Plots.mm
+    color := :viridis
+    formatter := :plain
+    thickness_scaling := 1.6
+    size := (1200, 900)
+
+
+    if plot_type == :DEP
+        # Create 2D histogram with filtered data based on DEP_left and DEP_right
+        
+        # dynamic bin size
+        xmin = ustrip.(minimum(dt_DEP))
+        xmax = ustrip.(maximum(dt_DEP))
+        xstep = (xmax - xmin) / 100 
+        ymin = ustrip.(minimum(lq_DEP))
+        ymax = ustrip.(quantile(lq_DEP, 0.92))
+        ystep = (ymax - ymin) / 100
+        nbins := (xmin:xstep:xmax, ymin:ystep:ymax)
+
+        @series begin
+            seriestype := :histogram2d
+            dt_DEP, lq_DEP
+        end
+    elseif plot_type == :whole
+        # Create 2D histogram with all data
+        colorbar_scale := :log10
+
+        # dynamic bin size
+        xmin = ustrip.(quantile(dt_eff, 0.001))
+        xmax = ustrip.(quantile(dt_eff, 0.99))
+        xstep = (xmax - xmin) / 200
+        ymin = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.005)) #filters NaNs for quantile
+        ymax = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.93)) #filters NaNs for quantile
+        ystep = (ymax - ymin) / 200
+        nbins := (xmin:xstep:xmax, ymin:ystep:ymax)
+
+        @series begin
+            seriestype := :histogram2d
+            dt_eff, lq_e_corr
+        end
+    end
+    
+    # Add vertical and horizontal lines for the fit box limits
+    @series begin
+        seriestype := :vline
+        label := ""
+        linewidth := 1.5
+        color := :red
+        [box.t_lower, box.t_upper]
+    end
+
+    @series begin
+        seriestype := :hline
+        label := ""
+        linewidth := 1.5
+        color := :red
+        [box.lq_lower, box.lq_upper]
+    end
+
+    # Add linear fit plot
+    @series begin
+        label := "Linear Fit"
+        linewidth := 1.5
+        color := :blue
+
+        # Evaluate drift_time_func over the full range of drift time (x-axis)
+        dt_range = range(xmin, xmax, length=100)  # 100 points across the x-axis
+        lq_fit = report.drift_time_func.(dt_range)  # Apply the linear function to the full dt range
+
+        dt_range, lq_fit
+
+    end
+end
+
+
+# recipe for the lq_cut report
+
+@recipe function f(report::NamedTuple{(:cut, :fit_result, :temp_hists, :fit_report)}, lq_class::Vector{Float64}, e_cal, plot_type::Symbol)
+
+    # Extract cutvalue from the report
+    cut_value = Measurements.value.(report.cut)
+
+    # Plot configuration for all types
+    left_margin := -2Plots.mm
+    bottom_margin := -4Plots.mm
+    top_margin := -3Plots.mm
+    thickness_scaling := 1.6
+    size := (1200, 900)
+    framestyle := :box
+    formatter := :plain
+
+    # Plot configuration for each specific type
+    if plot_type == :lq_cut
+        # 2D histogram for LQ Cut
+        xlabel := "Energy"
+        ylabel := "LQ (A.U.)"
+        nbins := (0:6:3000, -2.0:0.012:4.0)
+        colorbar_scale := :log10
+        color := :viridis
+        legend := :bottomright
+        
+        @series begin
+            seriestype := :histogram2d
+            e_cal, lq_class
+        end
+
+        @series begin
+            seriestype := :hline
+            label := "3σ exclusion"
+            linewidth := 2
+            color := :red
+            [cut_value]
+        end
+
+    elseif plot_type == :energy_hist
+        # Energy histogram before/after LQ cut
+        xlabel := "Energy"
+        ylabel := "Counts"
+        nbins := 0:1:3000
+        yscale := :log10
+
+        @series begin
+            seriestype := :stephist
+            label := "Data before LQ Cut"
+            e_cal
+        end
+
+        @series begin
+            seriestype := :stephist
+            label := "Surviving LQ Cut"
+            e_cal[lq_class .< cut_value]
+        end
+
+        @series begin
+            seriestype := :stephist
+            label := "Cut by LQ Cut"
+            e_cal[lq_class .> cut_value]
+        end
+
+    elseif plot_type == :cut_fraction
+        # Percentual cut plot
+        xlabel := "Energy"
+        ylabel := "Fraction"
+        legend := :topleft
+
+        # Calculate fraction of events cut by LQ cut
+        h1 = fit(Histogram, ustrip.(e_cal), 0:3:3000)
+        h2 = fit(Histogram, ustrip.(e_cal[lq_class .> cut_value]), 0:3:3000)
+        h_diff = h2.weights ./ h1.weights
+
+        @series begin
+            label := "Cut Fraction"
+            0:3:3000, h_diff
+        end
+    end
+end
+
+
+
 end # module LegendSpecFitsRecipesBaseExt
