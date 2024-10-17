@@ -1,11 +1,11 @@
 """
-    lq_norm::Vector{Float64}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Array{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity;
-    DEP_edgesigma::Float64 = 3.0 , mode::Symbol = :gaussian, lower_exclusion::Float64 = 0.005, upper_exclusion::Float64 = 0.98, drift_cutoff_sigma::Float64 = 2.0, e_expression::Union{String,Symbol}="e")
+    lq_norm::Vector{Float64}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
+    DEP_edgesigma::Float64=3.0 , mode::Symbol=:percentile, drift_cutoff_sigma::Float64 = 2.0, prehist_sigma::Float64=2.5, e_expression::Union{String,Symbol}="e", dt_eff_low_quantile::Float64=0.15, dt_eff_high_quantile::Float64=0.95)
 
 Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a linear fit on the remaining data. The data is Corrected by subtracting the linear fit from the lq data.
 # Returns
-    * `result`: NamedTuple of the corrected lq data, the box used for the linear fit and the drift time function
-    * `report`: NamedTuple of the histograms used for the fit
+    * `result`: NamedTuple of the function used for lq classifier construction
+    * `report`: NamedTuple of the histograms used for the fit, the cutoff values and the DEP edges
 """
 function lq_drift_time_correction(
     lq_norm::Vector{Float64}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
@@ -129,12 +129,12 @@ end
 export lq_drift_time_correction
 
 """
-    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{Float64}; lower_exclusion::Float64=0.005, upper_exclusion::Float64=0.95, cut_sigma::Float64=3.0)
+    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{Float64}; cut_sigma::Float64=3.0, truncation_sigma::Float64=2.0)
 
 Evaluates the cutoff value for the LQ cut. The function performs a binned gaussian fit on the sidebandsubtracted LQ histogram and evaluates the cutoff value difined at 3σ of the fit.
 # Returns
-    * `result`: NamedTuple of the cutoff value and the fit result
-    * `report`: NamedTuple of the histograms used for the fit
+    * `result`: NamedTuple of the cutoff value
+    * `report`: NamedTuple of the fit result, fit report and temporary histograms
 """
 function LQ_cut(
     DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{Float64}; cut_sigma::Float64=3.0, truncation_sigma::Float64=2.0)
