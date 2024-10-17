@@ -41,7 +41,7 @@ function lq_drift_time_correction(
 
     # dt_eff_DEP cutoff; method dependant on detector type
     
-    if mode == :percentile #standard method; can be used for all detectors
+    if mode == :percentile # standard method; can be used for all detectors
         #set cutoff; default at the 15% and 95% percentile
         t_lower = quantile(dt_eff_DEP, dt_eff_low_quantile)
         t_upper = quantile(dt_eff_DEP, dt_eff_high_quantile)
@@ -68,7 +68,7 @@ function lq_drift_time_correction(
         t_lower = µ_t - drift_cutoff_sigma * σ_t
         t_upper = µ_t + drift_cutoff_sigma * σ_t
 
-    elseif mode == :double_gaussian # can be used for detectors with double peaks
+    elseif mode == :double_gaussian # can be used for detectors with double peaks; not optimized yet
         #create histogram for drift time
         drift_prehist = fit(Histogram, dt_eff_DEP, range(minimum(dt_eff_DEP), stop=maximum(dt_eff_DEP), length=100))
         drift_prestats = estimate_single_peak_stats(drift_prehist)
@@ -181,6 +181,7 @@ function LQ_cut(
     )
 
     report = (
+        cut = cut_3σ,
         fit_result = fit_result,
         temp_hists = temp_hists,
         fit_report = fit_report,
