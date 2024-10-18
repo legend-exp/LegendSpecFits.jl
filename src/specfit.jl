@@ -209,24 +209,30 @@ Get the FWHM of a peak from the fit parameters.
     * `fwhm`: the FWHM of the peak
 """
 function estimate_fwhm(v::NamedTuple)
-    # get FWHM
+    
     f_sigWithTail = Base.Fix2(get_th228_fit_functions().gamma_sigWithTail,v)
     try
-        if v.skew_fraction <= 0.5
-            half_max_sig = maximum(f_sigWithTail.(v.μ - v.σ:0.001:v.μ + v.σ))/2
-            roots_low = find_zero(x -> f_sigWithTail(x) - half_max_sig, v.μ - v.σ, maxiter=100)
-            roots_high = find_zero(x -> f_sigWithTail(x) - half_max_sig, v.μ + v.σ, maxiter=100)
-            return roots_high - roots_low
-        else
-            e_low = v.μ * (1 - v.skew_width) 
-            e_high = v.μ * (1 + v.skew_width)
-            half_max_sig = maximum(f_sigWithTail.(e_low:0.001:e_high))/2
-            roots_low = find_zero(x -> f_sigWithTail(x) - half_max_sig, e_low, maxiter=100)
-            roots_high = find_zero(x -> f_sigWithTail(x) - half_max_sig, e_high, maxiter=100)
-            return roots_high - roots_low
-        end 
-    catch e
-        return NaN 
+        e_low, e_high = v.skew_fraction <= 0.5 ? (v.μ - v.σ, v.μ + v.σ) : (v.μ * (1 - v.skew_width), v.μ * (1 + v.skew_width))
+        
+        max_sig = -Inf
+        for e in e_low:0.001:e_high
+            fe = f_sigWithTail(e)
+            if fe > max_sig
+                max_sig = fe
+            else
+                # if the maximum is reached,
+                # no need to further continue
+                break
+            end
+        end
+        half_max_sig = max_sig/2
+        
+        tmp = x -> f_sigWithTail(x) - half_max_sig
+        roots_low = find_zero(tmp, e_low, maxiter=100)
+        roots_high = find_zero(tmp, e_high, maxiter=100)
+        return roots_high - roots_low
+    catch
+        return NaN
     end
 end
 """

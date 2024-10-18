@@ -80,24 +80,25 @@ end
     get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Integer)
 Generate `n` random samples of fit parameters using their respective best-fit values `v` and covariance matrix `v_err`
 """
-function get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Integer)
-    if !isposdef(v_err)
-        v_err = nearestSPD(v_err)
-        @debug "Covariance matrix not positive definite. Using nearestSPD"
-    end
-    v_err = v_err[1:6,1:6] #remove background, keep only relevant for sampling 
-    v_fitpar = v[keys(v)[1:size(v_err,1)]] # only fit parameter
-    dist = MvNormal([v_fitpar...], v_err) # multivariate distribution using covariance matrix)
-    v_mc = rand(dist, n) # Draw samples
+function get_mc_value_shapes(v::V, v_err::Matrix{T}, n::Integer)::Vector{V} where {V <: NamedTuple, T <: AbstractFloat}
 
-    # constain fit_par_samples to physical values. warning hardcoded. tbd 
-    Idx_keep = findall((v_mc[3,:].>0) .*                #  positive amplitude 
-                        (v_mc[5,:].<0.25).*             # skew fraction 
-                        (v_mc[5,:].>0) .*    #skew fraction 
-                        (v_mc[6,:].>0))                 # positive skew width
-    v_mc = v_mc[:,Idx_keep];
-    n = size(v_mc,2)
-    v_mc = [NamedTuple{keys(v)[1:size(v_err,1)]}(v_mc[:,i]) for i=1:n] # convert back to NamedTuple 
+    v_mc::Matrix{T} = let err = if !isposdef(v_err)
+            @debug "Covariance matrix not positive definite. Using nearestSPD"
+            nearestSPD(v_err)
+        else
+            v_err
+        end
+        dist::FullNormal = MvNormal(collect(v), err) # multivariate distribution using covariance matrix)
+        rand(dist, n)
+    end
+
+    return [ 
+        V(view(v_mc, Colon(), i)) 
+        for i = 1:n if 
+        v_mc[3,i] > 0.0 &&          # positive amplitude
+        0.0 < v_mc[5,i] < 0.25 &&   # skew fraction
+        v_mc[6,i] > 0.0             # positive skew width
+    ]
 end
 """
     get_friedman_diaconis_bin_width(x::AbstractArray)
