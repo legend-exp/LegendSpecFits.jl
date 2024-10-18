@@ -3,7 +3,6 @@ using LegendSpecFits
 using Unitful
 using Distributions
 using Plots
-using Random
 
 # Define the test function
 @testset "LQ_cut Test" begin
