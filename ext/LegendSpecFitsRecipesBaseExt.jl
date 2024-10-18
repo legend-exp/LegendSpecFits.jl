@@ -1105,12 +1105,14 @@ end
     if plot_type == :DEP
         # Create 2D histogram with filtered data based on DEP_left and DEP_right
         
-        # dynamic bin size
-        xmin = ustrip.(minimum(dt_DEP))
-        xmax = ustrip.(maximum(dt_DEP))
+        # dynamic bin size dependant on fit constraint box
+        t_diff = box.t_upper - box.t_lower
+        lq_diff = box.lq_upper - box.lq_lower
+        xmin = box.t_lower - 1*t_diff
+        xmax = box.t_upper + 1*t_diff
         xstep = (xmax - xmin) / 100 
-        ymin = ustrip.(minimum(lq_DEP))
-        ymax = ustrip.(quantile(lq_DEP, 0.92))
+        ymin = box.lq_lower - 1*lq_diff
+        ymax = box.lq_upper + 4*lq_diff
         ystep = (ymax - ymin) / 100
         nbins := (xmin:xstep:xmax, ymin:ystep:ymax)
 
@@ -1124,10 +1126,10 @@ end
 
         # dynamic bin size
         xmin = ustrip.(quantile(dt_eff, 0.001))
-        xmax = ustrip.(quantile(dt_eff, 0.99))
+        xmax = ustrip.(quantile(dt_eff, 0.999))
         xstep = (xmax - xmin) / 200
         ymin = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.005)) #filters NaNs for quantile
-        ymax = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.93)) #filters NaNs for quantile
+        ymax = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.94)) #filters NaNs for quantile
         ystep = (ymax - ymin) / 200
         nbins := (xmin:xstep:xmax, ymin:ystep:ymax)
 
