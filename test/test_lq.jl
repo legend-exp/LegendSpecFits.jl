@@ -58,7 +58,7 @@ end
 @testset "Test lq_drift_time_correction with Tail" begin
 
     # Generate 10000 data points
-    N = 1000
+    N = 10000
 
     # Generate dt_eff (drift time) with a Gaussian distribution
     dt_mean = 500.0
@@ -66,7 +66,7 @@ end
     dt_eff = (dt_mean .+ dt_std .* randn(N)) .* u"µs"
 
     # Generate lq_norm with a linear dependence on dt_eff + some noise
-    true_slope = 0.001
+    true_slope = 0.002
     true_intercept = 3
     noise_level = 0.1
     lq_norm = true_slope .* ustrip.(dt_eff) .+ true_intercept .+ randn(N) .* noise_level
