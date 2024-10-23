@@ -260,12 +260,7 @@ function two_emg_aoe_compton_peakshape( # total fit function with two EMGs
     μ::Real, σ::Real, n::Real, background::Real, δ::Real, 
     μ2::Real, σ2::Real, background2::Real, δ2::Real
 )
-    # Check for sigma values being zero
-    if σ == 0.0 || σ2 == 0.0
-        @warn "Sigma value is zero which may cause numerical instabilities."
-        return 0.0 # return 0.0 or NaN
-    end
-    return n * gauss_pdf(x, μ, σ) + background * ex_gauss_pdf(-x, -μ, σ, δ) + background2 * ex_gauss_pdf(-x, -μ2, σ2, δ2)
+    return iszero(σ) || iszero(σ2) ? zero(x) : n * gauss_pdf(x, μ, σ) + background * ex_gauss_pdf(-x, -μ, σ, δ) + background2 * ex_gauss_pdf(-x, -μ2, σ2, δ2)
 end
 export two_emg_aoe_compton_peakshape
 
