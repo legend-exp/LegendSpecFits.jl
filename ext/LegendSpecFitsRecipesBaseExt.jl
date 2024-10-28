@@ -154,10 +154,14 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, show_components=true, show_residuals=true, f_fit_x_step_scaling=1/100, _subplot=1)
+@recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, show_components=true, show_residuals=true, f_fit_x_step_scaling=1/100, _subplot=1, x_label="Energy (keV)")
     f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     bin_centers = collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2 
-    legend := :topright
+    if x_label == "A/E"
+        legend := :bottomleft
+    else
+        legend := :topright
+    end
     foreground_color_legend := :silver
     background_color_legend := :white
     ylim_max = max(3*value(report.f_fit(report.v.μ)), 3*maximum(report.h.weights))
@@ -174,7 +178,11 @@ end
         label --> ifelse(show_label, "Data", "")
         yscale --> :log10
         bins --> :sqrt
-        xlabel --> "Energy (keV)"
+        if x_label == "A/E"
+            xlabel --> L"A/E\ (\sigma_{A/E}))"
+        else
+            xlabel --> "Energy (keV)"
+        end 
         subplot --> _subplot
         bin_centers, LinearAlgebra.normalize(report.h, mode = :density).weights#LinearAlgebra.normalize(report.h, mode = :density)
     end
@@ -195,11 +203,19 @@ end
                 xlabel := ""
                 xticks --> ([])
             else
-                xlabel --> "Energy (keV)"
+                if x_label == "A/E"
+                    xlabel --> L"A/E\ (\sigma_{A/E}))"
+                else
+                    xlabel --> "Energy (keV)"
+                end 
             end
             ylims --> (ylim_min, ylim_max)
             xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
-            ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+            if x_label == "A/E"
+                ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2))"
+            else
+                ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+            end
             subplot --> _subplot
             minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), value.(report.f_fit.(minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1])))
         end
@@ -218,11 +234,19 @@ end
                             xlabel := ""
                             xticks --> ([])
                         else
-                            xlabel --> "Energy (keV)"
+                            if x_label == "A/E"
+                                xlabel --> L"A/E\ (\sigma_{A/E}))"
+                            else
+                                xlabel --> "Energy (keV)"
+                            end 
                         end
                         ylims --> (ylim_min, ylim_max)
                         xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
-                        ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+                        if x_label == "A/E"
+                            ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2))"
+                        else
+                            ylabel := "Counts / $(round(step(report.h.edges[1]), digits=2)) keV"
+                        end
                     end
                     subplot --> _subplot
                     minimum(report.h.edges[1]):f_fit_x_step:maximum(report.h.edges[1]), report.f_components.funcs[component]
@@ -266,12 +290,17 @@ end
                 title := ""
                 markercolor --> :black
                 ylabel --> "Residuals (σ)"
-                xlabel --> "Energy (keV)"
+                if x_label == "A/E"
+                    xlabel --> L"A/E\ (\sigma_{A/E}))"
+                else
+                    xlabel --> "Energy (keV)"
+                end 
                 link --> :x
                 top_margin --> (0, :mm)
                 ylims := (ylims_res_min, ylims_res_max)
                 xlims := (minimum(report.h.edges[1]), maximum(report.h.edges[1]))
                 yscale --> :identity
+                markersize --> 3 #can be changed manually in the code
                 if ylims_res_max == 5
                     yticks := ([-3, 0, 3])
                 end

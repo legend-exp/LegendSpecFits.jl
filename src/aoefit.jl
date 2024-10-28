@@ -117,8 +117,7 @@ Fit the A/E Compton bands using the `f_aoe_compton` function consisting of a gau
     * `result`: Dict of NamedTuples of the fit results containing values and errors for each compton band
     * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
-function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
-
+function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; uncertainty::Bool=false, fit_func::Symbol=:aoe_one_bck) where T<:Unitful.Energy{<:Real}    
     # create return and result dicts
     v_result = Vector{NamedTuple}(undef, length(compton_bands))
     v_report = Vector{NamedTuple}(undef, length(compton_bands))
@@ -132,7 +131,7 @@ function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray,
         # fit peak
         result_band, report_band = nothing, nothing
         try
-            result_band, report_band = fit_single_aoe_compton(h, ps, ; uncertainty=uncertainty)
+            result_band, report_band = fit_single_aoe_compton(h, ps, ; uncertainty=uncertainty, fit_func=fit_func)
         catch e
             @warn "Error fitting band $band: $e"
             continue
@@ -160,7 +159,7 @@ Perform a fit of the peakshape to the data in `h` using the initial values in `p
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
 """
-function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:f_fit, background_center::Union{Real,Nothing} = ps.peak_pos, fixed_position::Bool=false)
+function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:aoe_one_bck, background_center::Union{Real,Nothing} = ps.peak_pos, fixed_position::Bool=false)
     # create pseudo priors
     pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func; pseudo_prior = pseudo_prior, fixed_position = fixed_position)
         
