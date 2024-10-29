@@ -31,12 +31,13 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
                                 kwargs...)
     
     h_uncal, peakpos = if expect_noise_peak
-            find_peaks_noise_peak_exists(pe_uncal; kwargs...)
+        find_peaks_noise_peak_exists(pe_uncal; kwargs...)
     else
-            find_peaks(pe_uncal; kwargs...)
+        find_peaks(pe_uncal; kwargs...)
     end
 
     # simple calibration
+    sort!(peakpos)
     gain = peakpos[2] - peakpos[1]
     c = 1/gain
     offset = - (peakpos[1] * c - 1) 
@@ -45,11 +46,15 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     pe_simple_cal = pe_uncal .* c .+ offset
     peakpos_cal = peakpos .* c .+ offset
 
-    h_calsimple = histogram(pe_simple_cal, bins=0.5:.01:4.5)
+    bin_width_cal = get_friedman_diaconis_bin_width(filter(in(0.5..1.5), pe_simple_cal))
+    bin_width_uncal = get_friedman_diaconis_bin_width(filter(in( (0.5 - offset) / c .. (1.5 - offset) / c), pe_simple_cal))
+
+    h_calsimple = fit(Histogram, pe_simple_cal, 0.0:bin_width_cal:6.0)
+    h_uncal = fit(Histogram, pe_uncal, 0.0:bin_width_uncal:(6.0 - offset) / c)
 
     result = (
         pe_simple_cal = pe_simple_cal,
-        func = f_simple_calib, 
+        peakpos = peakpos,
         c = c,
         offset = offset
     )
@@ -102,19 +107,19 @@ function find_peaks_noise_peak_exists(
 
         h_uncal = fit(Histogram, amps, min_amp:bin_width:max_amp)
         h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
-        println("Current peak positions: ", peakpos)
+        @debug("Current peak positions: ", peakpos)
 
         num_peaks = length(peakpos)
 
         # Safety check to avoid infinite loops
         if min_amp >= 50
-            error("Unable to exclude noise peak within reasonable min_amp range.")
+            @error("Unable to exclude noise peak within reasonable min_amp range.")
         end
     end
 
     # If more than two peaks are found, reduce max_quantile to find exactly two peaks
     if num_peaks > 2
-        println("Found more than 2 peaks. Reducing max range. Currently: quantile $max_quantile")
+        @debug("Found more than 2 peaks. Reducing max range. Currently: quantile $max_quantile")
 
         while num_peaks != 2
             max_quantile -= 0.01
@@ -127,7 +132,7 @@ function find_peaks_noise_peak_exists(
 
             # Safety check to avoid infinite loops
             if max_quantile <= 0.5
-                error("Unable to find exactly two peaks within reasonable quantile range.")
+                @error("Unable to find exactly two peaks within reasonable quantile range.")
             end
         end
     end
@@ -179,7 +184,7 @@ function find_peaks(
             
             # Safety check to avoid threshold becoming too low
             if peakfinder_threshold < 3.0
-                error("Unable to find more than one peak within reasonable quantile range.")
+                @error("Unable to find more than one peak within reasonable quantile range.")
             end
 
             # Reset σ to its initial value after adjusting threshold
@@ -188,7 +193,7 @@ function find_peaks(
 
         # Safety check to avoid infinite loops
         if peakfinder_σ >= 5.0 && peakfinder_threshold < 3.0
-            error("Unable to find more than one peak within reasonable quantile range.")
+            @error("Unable to find more than one peak within reasonable quantile range.")
         end
     end
 
@@ -204,7 +209,7 @@ function find_peaks(
 
     # If more than two peaks are found, reduce max_quantile to find exactly two peaks
     if num_peaks > 2
-        println("Found more than 2 peaks. Reducing max range. Currently: quantile $max_quantile")
+        @debug("Found more than 2 peaks. Reducing max range. Currently: quantile $max_quantile")
 
         while num_peaks != 2
             max_quantile -= 0.01
@@ -217,7 +222,7 @@ function find_peaks(
 
             # Safety check to avoid infinite loops
             if max_quantile <= 0.5
-                error("Unable to find exactly two peaks within reasonable quantile range.")
+                @error("Unable to find exactly two peaks within reasonable quantile range.")
             end
         end
     end
