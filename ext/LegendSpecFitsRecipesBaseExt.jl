@@ -490,6 +490,48 @@ end
     end
 end
 
+@recipe function f(report::NamedTuple{(:peakpos, :peakpos_cal, :h_uncal, :h_calsimple)}; cal=true)
+    legend := :topright
+    # yscale := :log10
+    size := (1000, 600)
+    thickness_scaling := 1.5
+    framestyle := :box
+    yformatter := :plain
+    if cal
+        h = LinearAlgebra.normalize(report.h_calsimple, mode = :density)
+        xlabel := "Peak Amplitudes (P.E.)"
+        ylabel := "Counts / $(round_wo_units(step(first(h.edges)), digits=2)) P.E."
+        xticks := (0:0.5:last(first(h.edges)))
+        pps = report.peakpos_cal
+    else
+        h = LinearAlgebra.normalize(report.h_uncal, mode = :density)
+        xlabel := "Peak Amplitudes (ADC)"
+        ylabel := "Counts / $(round_wo_units(step(first(h.edges)), digits=2)) ADC"
+        pps = report.peakpos
+    end
+    xlims := (0, last(first(h.edges)))
+    ylims := (0.0, maximum(h.weights)*1.1)
+    @series begin
+        seriestype := :stepbins
+        label := "amps"
+        h
+    end
+    y_vline = 0.2:1:maximum(h.weights)*1.1
+    for (i, p) in enumerate(pps)
+        @series begin
+            seriestype := :line
+            if i == 1
+                label := "Peak Pos. Guess"
+            else
+                label := ""
+            end
+            color := :red
+            linewidth := 1.5
+            fill(p, length(y_vline)), y_vline
+        end
+    end
+end
+
 @recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after, :fwhm_before, :fwhm_after, :report_before, :report_after)})
     if !("StatsPlots" in string.(Base.loaded_modules_array()))
         throw(ErrorException("StatsPlots not loaded. Please load StatsPlots before using this recipe."))
