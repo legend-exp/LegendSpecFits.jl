@@ -31,6 +31,7 @@ using OptimizationNLopt
 using OptimizationOptimJL
 using PropDicts
 using RadiationSpectra
+using RadiationSpectra: peakfinder
 using Roots
 using SpecialFunctions
 using StatsBase
