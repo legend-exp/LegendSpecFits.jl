@@ -141,7 +141,7 @@ Return the bin width for the given data `x` using the Friedman-Diaconis rule.
 # Arguments
     * 'x': Given data
 """
-function get_friedman_diaconis_bin_width end # DELETE?
+function get_friedman_diaconis_bin_width end
 
 function get_friedman_diaconis_bin_width(x::Vector{<:Real})
     2 * (quantile(x, 0.75) - quantile(x, 0.25)) / ∛(length(x))
