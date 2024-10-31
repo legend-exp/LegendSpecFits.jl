@@ -55,7 +55,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Real}, qdrift_all::
         # calculate drift time corrected aoe
         aoe_ctc = aoe .+ PolCalFunc(0.0, (fct ./ ecal)...).(qdrift) ### added division by energy
         # fit peak
-        h = fit(Histogram, aoe_ctc, minimum(aoe_ctc):bin_width:maximum(aoe_ctc)) ### this is also just a part of the histogram so it might not work with the aoe_two_bck fit function (or use hist_start and hist_end instead)
+        h = fit(Histogram, aoe_ctc, minimum(aoe_ctc):bin_width:maximum(aoe_ctc)) ### check if fit function still works with this changed interval (but it should just be a shift, right?)
         ps = estimate_single_peak_stats(h)
         result_peak, report_peak = LegendSpecFits.fit_single_aoe_compton(h, ps, fit_func=:aoe_two_bck, uncertainty=false) ### in ctc.jl uncertainty false is used (but I don't know why)
         # get σ and peak height
@@ -100,7 +100,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Real}, qdrift_all::
     
     # get σ after correction
     # fit peak
-    h_after = fit(Histogram, aoe_ctc, minimum(aoe_ctc):bin_width:maximum(aoe_ctc)) ### this is also just a part of the histogram so it might not work with the aoe_two_bck fit function (or use hist_start and hist_end instead)
+    h_after = fit(Histogram, aoe_ctc, minimum(aoe_ctc):bin_width:maximum(aoe_ctc)) ### check if fit function still works with this changed interval (but it should just be a shift, right?)
     ps_after = estimate_single_peak_stats(h_after)
     result_after, report_after = LegendSpecFits.fit_single_aoe_compton(h_after, ps_after, fit_func=:aoe_two_bck, uncertainty=true)
 
@@ -141,6 +141,7 @@ export ctc_aoe
 ### divide fct by energy for aoe correction (should be complete now)
 ### check if the 'peak only' part is needed -> if so, another fit function has to be used
 ### check if the bin width should be fixed or calculated
-### same holds for the histogram interval: I used something like [-20, 3] with bin width 0.05 most of the times and if these values get changed another fit function might be needed!
+### same holds for the histogram interval: I used something like [-20, 3] with bin width 0.05 most of the times and if these values get changed another fit function might be needed
 ### check if it works :-)
 ### also: the peak might be shifted after ctc so we might calibrate the classifier again to get a µ of 0
+### and check if the right energy is used (pre-ctc or ctc)
