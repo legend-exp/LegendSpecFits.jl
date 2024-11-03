@@ -155,6 +155,10 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
 		e_ft = e_ft[e_peak_cut]
         
         # create histogram from it
+        if isempty(e_ft)
+            @debug "Invalid energy vector, skipping"
+            continue
+        end
         bin_width = 2 * (quantile(e_ft, 0.75) - quantile(e_ft, 0.25)) / ∛(length(e_ft))
         h = fit(Histogram, e_ft, minimum(e_ft):bin_width:maximum(e_ft))
 

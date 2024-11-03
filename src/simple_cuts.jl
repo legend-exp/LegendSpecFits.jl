@@ -10,13 +10,14 @@ The relative cut is the fraction of the maximum counts to use for the cut.
     * `low`: lower edge of the cut peak
     * `high`: upper edge of the cut peak
 """
-function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T,; n_bins::Int=-1, relative_cut::Float64=0.5) where T<:Unitful.RealOrRealQuantity
+function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T,; n_bins::Int=-1, relative_cut::Float64=0.5, n_tries::Int=5) where T<:Unitful.RealOrRealQuantity
     @assert unit(min_x) == unit(max_x) == unit(x[1]) "Units of min_x, max_x and x must be the same"
     x_unit = unit(x[1])
     x, min_x, max_x = ustrip.(x), ustrip(min_x), ustrip(max_x)
 
     # cut out window of interest
     x = x[(x .> min_x) .&& (x .< max_x)]
+
     # fit histogram
     if n_bins < 0
         bin_width = get_friedman_diaconis_bin_width(x)
@@ -24,15 +25,32 @@ function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_
     else
         h = fit(Histogram, x, nbins=n_bins)
     end
-    # find peak
-    cts_argmax = mapslices(argmax, h.weights, dims=1)[1]
-    cts_max    = h.weights[cts_argmax]
 
-    # find left and right edge of peak
-    cut_low_arg  = findfirst(w -> w >= relative_cut*cts_max, h.weights[1:cts_argmax])
-    cut_high_arg = findfirst(w -> w <= relative_cut*cts_max, h.weights[cts_argmax:end]) + cts_argmax - 1
-    cut_low, cut_high, cut_max = Array(h.edges[1])[cut_low_arg] * x_unit, Array(h.edges[1])[cut_high_arg] * x_unit, Array(h.edges[1])[cts_argmax] * x_unit
-    @debug "Cut window: [$cut_low, $cut_high]"
+    # initialize cut window
+    cut_low, cut_high, cut_max = Array(h.edges[1])[1] * x_unit, Array(h.edges[1])[1] * x_unit, Array(h.edges[1])[1] * x_unit
+    for i in 1:n_tries
+        # fit histogram
+        if n_bins < 0
+            h = fit(Histogram, x, minimum(x):bin_width/i:maximum(x))
+        else
+            h = fit(Histogram, x, nbins=n_bins*i)
+        end
+        # determine cut
+        if !(cut_low < cut_max < cut_high)
+            @warn "Cut window not found, trying again"
+            
+            # find peak
+            cts_argmax = mapslices(argmax, h.weights, dims=1)[1]
+            cts_max    = h.weights[cts_argmax]
+
+            # find left and right edge of peak
+            cut_low_arg  = findfirst(w -> w >= relative_cut*cts_max, h.weights[1:cts_argmax])
+            cut_high_arg = findfirst(w -> w <= relative_cut*cts_max, h.weights[cts_argmax:end]) + cts_argmax - 1
+            cut_low, cut_high, cut_max = Array(h.edges[1])[cut_low_arg] * x_unit, Array(h.edges[1])[cut_high_arg] * x_unit, Array(h.edges[1])[cts_argmax] * x_unit
+        else
+            @debug "Cut window: [$cut_low, $cut_high]"
+        end
+    end
     return (low = cut_low, high = cut_high, max = cut_max)
 end
 export cut_single_peak
