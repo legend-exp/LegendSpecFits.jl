@@ -98,7 +98,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, v_init, [])
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000) #, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
@@ -302,7 +302,7 @@ function fit_subpeaks_th228(
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, v_init, [])
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000) #, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
