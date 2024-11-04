@@ -2,7 +2,7 @@ using Test
 using LegendSpecFits
 using Unitful
 using Distributions
-using Plots
+# using Plots
 
 # Define the test function
 @testset "LQ_cut Test" begin
@@ -31,16 +31,14 @@ using Plots
     # Call the LQ_cut function
     result, report = LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier_combined)
 
-    plot(report.temp_hists.hist_DEP, label="LQ SEP")
-    plot!(report.temp_hists.hist_sb1, label="LQ SB1")
-    plot!(report.temp_hists.hist_sb2, label="LQ SB2")
-    plot!(report.temp_hists.hist_subtracted, label="DEP Subtracted")
-    plot(report.temp_hists.hist_corrected, label="original histogram")
-    plot!(report.fit_report.f_fit, label="Fit function")
+    # plot(report.temp_hists.hist_DEP, label="LQ SEP")
+    # plot!(report.temp_hists.hist_sb1, label="LQ SB1")
+    # plot!(report.temp_hists.hist_sb2, label="LQ SB2")
+    # plot!(report.temp_hists.hist_subtracted, label="DEP Subtracted")
+    # plot(report.temp_hists.hist_corrected, label="original histogram")
+    # plot!(report.fit_report.f_fit, label="Fit function")
 
     # Extract the cutoff value
-    report.fit_result.μ
-    report.fit_result.σ
     cut_3σ = result.cut
   
     # Calculate the expected mean, sigma and cutoff value
