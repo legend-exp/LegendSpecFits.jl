@@ -1,10 +1,50 @@
 
 """
-    ctc_energy(e::Array{T}, qdrift::Array{T}, peak::T, window::T) where T<:Real
+    f_optimize_ctc(fct, e, qdrift, bin_width)
+
+Calculate the ratio of the FWHM and the peak height of the peak around `peak` in
+`e` with a cut window of `window`. The drift time dependence is given by
+`e_ctc` = `e` + `fct` * `qdrift`.
+
+# Arguments
+    * 'fct': Correction factor
+    * 'e': Calibrated energies
+    * 'qdrift': Charge drift
+    * 'bin_width': Width of histogram bins
+
+# Returns 
+    * `fwhm / p_height`: FWHM of the peak divided by peak height
+"""
+function f_optimize_ctc(fct, e, qdrift, bin_width)
+    # calculate drift time corrected energy
+    e_ctc = e .+ fct .* qdrift
+    # fit peak
+    h = fit(Histogram, e_ctc, minimum(e_ctc):bin_width:maximum(e_ctc))
+    ps = estimate_single_peak_stats(h)
+    result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=false)
+    # get fwhm and peak height
+    fwhm = mvalue(result_peak.fwhm)
+    p_height = maximum(report_peak.f_fit.(mvalue(result_peak.μ-0.2*result_peak.σ):0.01:mvalue(result_peak.μ+0.2*result_peak.σ)))
+    # use ratio of fwhm and peak height as optimization functional
+    return log(fwhm/p_height)
+end
+
+"""
+    ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real}, peak::Unitful.Energy{<:Real}, window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}, m_cal_simple::Unitful.Energy{<:Real}=1.0u"keV"; e_expression::Union{Symbol, String}="e")
 
 Correct for the drift time dependence of the energy by minimizing the ratio of
 the FWHM and the peak height of the peak around `peak` in `e` with a cut window
 of `window`. The drift time dependence is given by `qdrift`.
+
+# Arguments
+    * 'e': Calibrated energies
+    * 'qdrift': Drift time dependence 
+    * 'peak': Energy at the peak
+    * 'window': Data window in energy
+    * 'm_cal_simple': 
+
+# Keywords
+    * 'e_expression': Calibrated energy expression
 
 # Returns 
     * `peak`: peak position
@@ -14,6 +54,7 @@ of `window`. The drift time dependence is given by `qdrift`.
     * `fwhm_after`: FWHM after correction
     * `func`: function to correct energy
     * `func_generic`: generic function to correct energy
+
 """
 function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real}, peak::Unitful.Energy{<:Real}, window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}, m_cal_simple::Unitful.Energy{<:Real}=1.0u"keV"; e_expression::Union{Symbol, String}="e", pol_order::Int=1)
     # create cut window around peak

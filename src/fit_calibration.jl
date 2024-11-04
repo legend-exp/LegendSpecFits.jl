@@ -1,13 +1,26 @@
 """
-    fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Real,Measurement{<:Real}}}, peaks::AbstractVector{<:Union{Real,Measurement{<:Real}}}; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), pol_order+1), v_init::Vector = [], uncertainty::Bool=true )
+    fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e", m_cal_simple::Union{MaybeWithEnergyUnits, Nothing} = nothing, uncertainty::Bool=true)
+
 Fit the calibration lines with polynomial function of pol_order order
     pol_order == 1 -> linear function
     pol_order == 2 -> quadratic function
+    
+# Arguments
+    * 'n_poly': Polynomial function order
+    * 'µ': Mean values 
+    * 'peaks': Data peaks
+
+# Keywords
+    * 'e_expression': Energy expression
+    * 'uncertainty': Fit uncertainty
+
 # Returns
     * `result`: NamedTuple with the following fields
         * `par`: best-fit parameters
-        * `gof`: godness of fit
+        * `gof`: goodness of fit
     * `report`: 
+
+TO DO: add description for 'report' return and arguments. 
 """
 function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e", m_cal_simple::Union{MaybeWithEnergyUnits, Nothing} = nothing, uncertainty::Bool=true)
     @assert length(peaks) == length(μ) "Number of calibration points does not match the number of energies"

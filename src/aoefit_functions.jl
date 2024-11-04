@@ -5,6 +5,13 @@ f_aoe_bkg(x, v)     = aoe_compton_background_peakshape(x, v.μ, v.σ, v.B, v.δ)
 
 MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
 
+"""
+    get_aoe_fit_functions(; background_center::Union{Real,Nothing} = nothing)
+This function gives the A/E fit functions. 
+
+# Keywords
+    * 'background_center': Center of background fit curve
+"""
 
 function get_aoe_fit_functions(; background_center::Union{Real,Nothing} = nothing)
     merge( 
@@ -20,9 +27,20 @@ function get_aoe_fit_functions(; background_center::Union{Real,Nothing} = nothin
 end
 
 """
-    aoe_compton_peakshape_components(fit_func::Symbol; background_center::Real) 
+    aoe_compton_peakshape_components(fit_func::Symbol; background_center::Union{Real,Nothing} = nothing)
 This function defines the components (signal, low/high-energy tail, backgrounds) of the fit function used in gamma specfits. 
 These component functions are used in the fit-report and in plot receipes 
+
+# Arguments
+    * 'fit_func': Fit function of the A/E compton peakshape
+
+# Keywords
+    * 'background_center': Center of background fit curve
+
+# Returns
+    * 'out': 
+
+TO DO: explain the return value 'out'. 
 """
 function aoe_compton_peakshape_components(fit_func::Symbol; background_center::Union{Real,Nothing} = nothing)
     if fit_func == :aoe_one_bck

@@ -3,8 +3,11 @@ const optim_max_mem=10.0 # in GB for the whole current process ignoring if thing
 const optim_time_limit=20.0 # in seconds a single Optim.jl optimization step
 
 """
-    set_memlimit(gig::Float64)
-    Set memory limit in GB for the whole current process ignoring if things could run in parallel
+    set_memlimit(gig::Real)
+Set memory limit in GB for the whole current process ignoring if things could run in parallel
+
+# Arguments
+    * 'gig': Gigabyte
 """
 function set_memlimit(gig::Real)
     @info "Setting `Optimization.jl` memory limit to $gig GB"
@@ -12,8 +15,8 @@ function set_memlimit(gig::Real)
 end
 
 """
-    set_timelimit(sec::Float64)
-    Set time limit in seconds a single Optim.jl optimization step
+    set_timelimit(sec::Real)
+Set time limit in seconds a single Optim.jl optimization step
 """
 function set_timelimit(sec::Real)
     @info "Setting `Optimization.jl` time limit to $sec seconds"
@@ -21,18 +24,20 @@ function set_timelimit(sec::Real)
 end
 
 """
-    advanced_time_and_memory_control(x::Optim.OptimizationState, start_time::Float64, time_to_setup::Float64; time_limit::Float64=60.0, mem_limit::Float64=30.0)
+    advanced_time_and_memory_control( ; start_time::Float64=time(), start_mem::Float64=Sys.maxrss()/2^30, time_to_setup::Vector{<:Real}=zeros(1), time_limit::Real=-1, mem_limit::Real=-1)
 
-    Control function to stop optimization based on time and memory usage.
-# Arguments
-- `x::Optim.OptimizationState`: optimization state
-- `start_time::Float64`: start time
-- `time_to_setup::Float64`: time to setup
-- `time_limit::Float64`: time limit
-- `mem_limit::Float64`: memory limit
+Control function to stop optimization based on time and memory usage.
+
+# Keyword Arguments
+    * `start_time`: start time
+    * 'start_mem': starting memory storage
+    * `time_to_setup`: time to setup
+    * `time_limit`: time limit
+    * `mem_limit`: memory limit
 
 # Return
 - `Bool`: true if optimization should stop
+
 """
 function advanced_time_and_memory_control( ; start_time::Float64=time(), start_mem::Float64=Sys.maxrss()/2^30, time_to_setup::Vector{<:Real}=zeros(1), time_limit::Real=-1, mem_limit::Real=-1)
     if time_limit < 0

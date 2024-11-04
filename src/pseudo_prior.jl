@@ -1,3 +1,22 @@
+
+"""
+    get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; low_e_tail::Bool=true, fixed_position::Bool=false) where T<:Real
+
+Gets standard pseudo prior of given histogram.
+
+# Arguments
+    * 'h': Histogram data
+    * 'ps': Peak statistics
+
+# Keywords
+    * 'low_e_tail': Low energy tail
+    * 'fixed_position': 
+
+# Returns
+    * 'pprior_base': 
+
+TO DO: function description and arguments. 
+"""
 function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; low_e_tail::Bool=true, fixed_position::Bool=false) where T<:Real
     # base priors common with all functions
     window_left = ps.peak_pos - minimum(h.edges[1])
@@ -37,6 +56,25 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
         throw(ArgumentError("Unknown fit function: $fit_func"))
     end
 end
+
+"""
+    get_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), kwargs...) where T<:Real
+
+Gets the pseudo prior of the histogram, which is 
+
+# Arguments
+    * 'h': histogram data
+    * 'ps': histogram parameters
+    * 'fit_func': Fit function
+    
+# Keywords
+    * 'pseudo_prior': Pseudo prior
+
+# Returns
+    * 'pseudo_prior': Pseudo prior of histogram
+
+TO DO: check argument descriptions and returns.
+"""
 
 function get_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), kwargs...) where T<:Real
     standard_pseudo_prior = get_standard_pseudo_prior(h, ps, fit_func; kwargs...)

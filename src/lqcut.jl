@@ -1,5 +1,5 @@
 """
-    lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal; DEP_left=1589u"keV", det_icpc = false, DEP_right=1596u"keV", lower_exclusion=0.005, upper_exclusion=0.98, drift_cutoff_sgima=2.0)
+    lq_drift_time_correction(lq_norm::Vector{Float64}, tdrift, e_cal, detectortype; DEP_left=1589u"keV", DEP_right=1596u"keV", lower_exclusion=0.005, upper_exclusion=0.98, drift_cutoff_sgima=2.0)
 
 Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a linear fit on the remaining data. The data is Corrected by subtracting the linear fit from the lq data.
 # Returns
@@ -109,7 +109,7 @@ end
 export lq_drift_time_correction
 
 """
-    LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier)
+    LQ_cut(DEP_µ, DEP_σ, e_cal, lq_classifier; lower_exclusion=0.005, upper_exclusion=0.95, cut_sigma=3.0)
 
 Evaluates the cutoff value for the LQ cut. The function performs a binned gaussian fit on the sidebandsubtracted LQ histogram and evaluates the cutoff value difined at 3σ of the fit.
 # Returns

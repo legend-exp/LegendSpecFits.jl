@@ -1,11 +1,24 @@
 """
-    fitFWHM(fit_fwhm(peaks::Vector{T}, fwhm::Vector{T}) where T<:Real
+    fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; pol_order::Int=1, e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true, use_pull_t::Bool=false)
 Fit the FWHM of the peaks to a quadratic function.
+
+# Arguments
+    * 'peaks': Energies that correspond to the peaks
+    * 'fwhm': Full width at half max of peaks
+
+# Keywords
+    * 'pol_order': Polynomial order of function
+    * 'e_type_cal': 
+    * 'e_expression: Energy expression
+    * 'uncertainty': Fit uncertainty
+
 # Returns
     * `qbb`: the FWHM at 2039 keV
     * `err`: the uncertainties of the fit parameters
     * `v`: the fit result parameters
     * `f_fit`: the fitted function
+
+TO DO: keyword descriptions.
 """
 function fit_fwhm end
 export fit_fwhm

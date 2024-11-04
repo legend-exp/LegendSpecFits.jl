@@ -4,8 +4,14 @@
     generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton_bands::Vector{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
 
 Generate histograms for the A/E Compton bands and estimate peak parameters. 
-The compton bands are cutted out of the A/E spectrum and then binned using the Freedman-Diaconis Rule. For better performance
+The compton bands are cut out of the A/E spectrum and then binned using the Freedman-Diaconis Rule. For better performance
 the binning is only done in the area around the peak. The peak parameters are estimated using the `estimate_single_peak_stats_psd` function.
+
+# Arguments
+    * 'aoe': A/E
+    * 'e': Calibrated energies
+    * 'compton_bands': Compton band
+    * 'compton_window': Data window with Compton Scattering events 
 
 # Returns
     * `peakhists`: Array of histograms for each compton band
@@ -109,13 +115,22 @@ export generate_aoe_compton_bands
 
 
 """
-    fit_aoe_compton(peakhists::Array, peakstats::StructArray, compton_bands::Array{T}) where T<:Real
+    fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
 
 Fit the A/E Compton bands using the `f_aoe_compton` function consisting of a gaussian SSE peak and a step like background for MSE events.
+
+# Arguments
+    * 'peakhists': Data range of the histogram peaks
+    * 'peakstats': Peak statistics
+    * 'compton_bands': Array of Compton bands
+    
+# Keywords
+    * 'uncertainty': Fit uncertainty
 
 # Returns
     * `result`: Dict of NamedTuples of the fit results containing values and errors for each compton band
     * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
+
 """
 function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; uncertainty::Bool=false, fit_func::Symbol=:aoe_one_bck) where T<:Unitful.Energy{<:Real}    
     # create return and result dicts
@@ -151,13 +166,25 @@ export fit_aoe_compton
 
 
 """
-    fit_single_aoe_compton(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
+    fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:f_fit, background_center::Union{Real,Nothing} = ps.peak_pos, fixed_position::Bool=false)
 
 Perform a fit of the peakshape to the data in `h` using the initial values in `ps` while using the `f_aoe_compton` function consisting of a gaussian SSE peak and a step like background for MSE events.
+
+# Arguments
+    * 'h': Histogram data
+    * 'ps': peak statistics 
+
+# Keywords
+    * 'uncertainty': Fit uncertainty
+    * 'pseudo_prior': Initial guess for histogram parameters 
+    * 'fit_func': Fit function name
+    * 'background_center': Center of background fit curve
+    * 'fixed_position': 
 
 # Returns
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
+
 """
 function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:aoe_one_bck, background_center::Union{Real,Nothing} = ps.peak_pos, fixed_position::Bool=false)
     # create pseudo priors
