@@ -1,31 +1,5 @@
 
 """
-    prepare_dep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
-
-Prepare an array of uncalibrated DEP energies for parameter extraction and calibration.
-# Returns
-- `result`: Result of the initial fit
-- `report`: Report of the initial fit
-"""
-function prepare_dep_peakhist(e::Array{T}, dep::Quantity{T},; relative_cut::T=0.5, n_bins_cut::Int=500, uncertainty::Bool=true) where T<:Real
-    # get cut window around peak
-    cuts = cut_single_peak(e, minimum(e), maximum(e); n_bins=n_bins_cut, relative_cut=relative_cut)
-    # estimate bin width
-    bin_width = get_friedman_diaconis_bin_width(e[e .> cuts.low .&& e .< cuts.high])
-    # create histogram
-    dephist = fit(Histogram, e, minimum(e):bin_width:maximum(e))
-    # get peakstats
-    depstats = estimate_single_peak_stats(dephist)
-    # initial fit for calibration and parameter extraction
-    result, report = fit_single_peak_th228(dephist, depstats,; uncertainty=uncertainty, low_e_tail=false)
-    # get calibration estimate from peak postion
-    result = merge(result, (m_calib = dep / result.μ, ))
-    return result, report
-end
-export prepare_dep_peakhist
-
-
-"""
     get_sf_after_aoe_cut(aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple; uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
 
 Get the survival fraction after a AoE cut value `aoe_cut` for a given `peak` and `window` size from a combined fit to the survived and cut histograms.
