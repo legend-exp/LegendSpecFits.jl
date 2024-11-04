@@ -87,7 +87,7 @@ function get_low_aoe_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:
     sf = get_sf_after_aoe_cut(aoe_cut, aoe_dep, e_dep, dep, window, bin_width, mvalue(result_before); uncertainty=uncertainty, fit_func=fit_func)
     result = (
         lowcut = measurement(aoe_cut, aoe_cut * rtol), 
-        highcut = sigma_high_sided, 
+        highcut = sigma_high_sided * unit(aoe_cut), 
         n0 = result_before.n, 
         nsf = result_before.n * sf, 
         sf = sf * 100*u"percent"
