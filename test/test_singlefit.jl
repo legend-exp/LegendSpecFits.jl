@@ -13,7 +13,7 @@ include("test_utils.jl")
 @testset "singlefit" begin
     # compose dummy data 
     dist = Normal(0.0, 1.0)
-    x = rand(dist, 100000)
+    x = rand(dist, 1000000)
     x_cut = cut_single_peak(x, -3.0, 3.0)
     
     # fit the data
