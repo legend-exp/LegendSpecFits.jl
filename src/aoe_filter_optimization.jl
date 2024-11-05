@@ -1,28 +1,28 @@
 
 
 """
-    prepare_dep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
+    prepare_sep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
 
-Prepare an array of uncalibrated DEP energies for parameter extraction and calibration.
+Prepare an array of uncalibrated SEP energies for parameter extraction and calibration.
 # Returns
 - `result`: Result of the initial fit
 - `report`: Report of the initial fit
 """
-function prepare_dep_peakhist(e::Vector{<:T}; dep::Unitful.Energy{<:Real}=1592.53u"keV", window::Vector{<:Unitful.Energy{<:Real}}=[12.0, 10.0]u"keV", relative_cut::T=0.5, n_bins_cut::Int=-1, fit_func::Symbol=:gamma_def, uncertainty::Bool=true) where T<:Real
+function prepare_sep_peakhist(e::Vector{<:T}; sep::Unitful.Energy{<:Real}=2103.53u"keV", window::Vector{<:Unitful.Energy{<:Real}}=[25.0, 25.0]u"keV", relative_cut::T=0.5, n_bins_cut::Int=-1, fit_func::Symbol=:gamma_def, uncertainty::Bool=true) where T<:Real
     # get cut window around peak
     cuts = cut_single_peak(e, minimum(e), maximum(e); n_bins=n_bins_cut, relative_cut=relative_cut)
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> cuts.low .&& e .< cuts.high])
     # get simple calib constant to reject outliers
-    m_cal_simple = dep / cuts.max
+    m_cal_simple = sep / cuts.max
     # create histogram
-    dephist = fit(Histogram, e, (dep - first(window))/m_cal_simple:bin_width:(dep + last(window))/m_cal_simple)
+    sephist = fit(Histogram, e, (sep - first(window))/m_cal_simple:bin_width:(sep + last(window))/m_cal_simple)
     # get peakstats
-    depstats = estimate_single_peak_stats(dephist)
+    sepstats = estimate_single_peak_stats(sephist)
     # initial fit for calibration and parameter extraction
-    result, report = fit_single_peak_th228(dephist, depstats,; uncertainty=uncertainty, fit_func=fit_func)
+    result, report = fit_single_peak_th228(sephist, sepstats,; uncertainty=uncertainty, fit_func=fit_func)
     # get calibration estimate from peak postion
-    result = merge(result, (m_calib = dep / result.centroid, ))
+    result = merge(result, (m_calib = sep / result.centroid, ))
     return result, report
 end
 
@@ -41,21 +41,21 @@ Fit a A/E filter window length for the SEP data and return the optimal window le
 - `report`: report with all window lengths and survival fractions
 """
 function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real}, e_sep::Vector{<:Real}, aoe_sep::ArrayOfSimilarArrays{<:Real}, a_grid_wl_sg::StepRangeLen; 
-                    dep::T=1592.53u"keV", dep_window::Vector{<:T}=[12.0, 10.0]u"keV", dep_rel_cut::Real=0.5,
-                    sep::T=2103.53u"keV", sep_window::Vector{<:T}=[25.0, 25.0]u"keV",
+                    dep::T=1592.53u"keV", dep_window::Vector{<:T}=[12.0, 10.0]u"keV", 
+                    sep::T=2103.53u"keV", sep_window::Vector{<:T}=[25.0, 25.0]u"keV", sep_rel_cut::Real=0.5,
                     min_aoe_quantile::Real=0.1, max_aoe_quantile::Real=0.99, 
                     min_aoe_offset::Quantity{<:Real}=0.0u"keV^-1", max_aoe_offset::Quantity{<:Real}=0.05u"keV^-1",
                     dep_cut_search_fit_func::Symbol=:gamma_def, sep_cut_search_fit_func::Symbol=:gamma_def,
                     uncertainty::Bool = false) where T<:Unitful.Energy{<:Real}
     
     # prepare peakhist
-    result_dep, _ = prepare_dep_peakhist(e_dep; dep=dep, window=dep_window, relative_cut=dep_rel_cut, fit_func=dep_cut_search_fit_func, uncertainty=uncertainty)
+    result_sep, _ = prepare_sep_peakhist(e_sep; sep=sep, window=sep_window, relative_cut=sep_rel_cut, fit_func=sep_cut_search_fit_func, uncertainty=uncertainty)
     
     yield()
     
     # get calib constant from fit on DEP peak
-    e_dep_calib = e_dep .* mvalue(result_dep.m_calib)
-    e_sep_calib = e_sep .* mvalue(result_dep.m_calib)
+    e_dep_calib = e_dep .* mvalue(result_sep.m_calib)
+    e_sep_calib = e_sep .* mvalue(result_sep.m_calib)
 
     # create empty arrays for sf and sf_err
     fts_success = Bool.(zeros(length(a_grid_wl_sg)))
@@ -78,14 +78,14 @@ function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
         max_aoe_dep_i = first(aoe_dep_i_hist.edges)[min(end, argmax(aoe_dep_i_hist.weights)+1)] * unit(max_aoe_dep_i)
 
         try
-            psd_cut, _ = get_low_aoe_cut(aoe_dep_i, e_dep_i; window=dep_window, cut_search_interval=(min_aoe_dep_i, max_aoe_dep_i), uncertainty=uncertainty, fit_func=dep_cut_search_fit_func)
+            psd_cut, _ = get_low_aoe_cut(aoe_dep_i, e_dep_i; dep=dep, window=dep_window, cut_search_interval=(min_aoe_dep_i, max_aoe_dep_i), uncertainty=uncertainty, fit_func=dep_cut_search_fit_func)
 
-            aoe_sep_i = flatview(aoe_sep)[i_aoe, :][isfinite.(flatview(aoe_sep)[i_aoe, :])] ./ result_dep.m_calib
+            aoe_sep_i = flatview(aoe_sep)[i_aoe, :][isfinite.(flatview(aoe_sep)[i_aoe, :])] ./ result_sep.m_calib
             e_sep_i   = e_sep_calib[isfinite.(flatview(aoe_sep)[i_aoe, :])]
 
-            result_sep, _ = get_peak_surrival_fraction(aoe_sep_i, e_sep_i, sep, sep_window, psd_cut.lowcut; uncertainty=uncertainty, fit_func=sep_cut_search_fit_func)
+            result_sep_sf, _ = get_peak_surrival_fraction(aoe_sep_i, e_sep_i, sep, sep_window, psd_cut.lowcut; uncertainty=uncertainty, fit_func=sep_cut_search_fit_func)
 
-            sep_sfs[i_aoe] = result_sep.sf
+            sep_sfs[i_aoe] = result_sep_sf.sf
             wls[i_aoe] = wl
             fts_success[i_aoe] = true
         catch e
