@@ -22,7 +22,7 @@ function prepare_sep_peakhist(e::Vector{<:T}; sep::Unitful.Energy{<:Real}=2103.5
     # initial fit for calibration and parameter extraction
     result, report = fit_single_peak_th228(sephist, sepstats,; uncertainty=uncertainty, fit_func=fit_func)
     # get calibration estimate from peak postion
-    result = merge(result, (m_calib = sep / result.centroid, ))
+    result = merge(result, (m_calib = sep / result.μ, ))
     return result, report
 end
 
