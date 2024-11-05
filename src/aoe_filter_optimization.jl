@@ -67,7 +67,7 @@ function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
         # get window length
         wl = a_grid_wl_sg[i_aoe]
         # get AoE for DEP
-        aoe_dep_i = flatview(aoe_dep)[i_aoe, :][isfinite.(flatview(aoe_dep)[i_aoe, :])] ./ mvalue(result_dep.m_calib)
+        aoe_dep_i = flatview(aoe_dep)[i_aoe, :][isfinite.(flatview(aoe_dep)[i_aoe, :])] ./ mvalue(result_sep.m_calib)
         e_dep_i   = e_dep_calib[isfinite.(flatview(aoe_dep)[i_aoe, :])]
 
         # prepare AoE
