@@ -42,7 +42,8 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     c = 1/gain
     offset = - (peakpos[1] * c - 1) 
 
-    f_simple_calib = Base.Fix1(*, c)
+    f_simple_calib = x -> x .* c .+ offset
+    f_simple_uncal = x -> (x .- offset) ./ c
     pe_simple_cal = pe_uncal .* c .+ offset
     peakpos_cal = peakpos .* c .+ offset
 
@@ -55,6 +56,8 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     result = (
         pe_simple_cal = pe_simple_cal,
         peakpos = peakpos,
+        f_simple_calib = f_simple_calib,
+        f_simple_uncal = f_simple_uncal,
         c = c,
         offset = offset
     )
