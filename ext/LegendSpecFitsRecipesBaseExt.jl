@@ -492,7 +492,6 @@ end
 
 @recipe function f(report::NamedTuple{(:peakpos, :peakpos_cal, :h_uncal, :h_calsimple)}; cal=true)
     legend := :topright
-    # yscale := :log10
     size := (1000, 600)
     thickness_scaling := 1.5
     framestyle := :box
@@ -510,13 +509,14 @@ end
         pps = report.peakpos
     end
     xlims := (0, last(first(h.edges)))
-    ylims := (0.0, maximum(h.weights)*1.1)
+    min_y = minimum(h.weights) == 0.0 ? 1e-3*maximum(h.weights) : 0.8*minimum(h.weights)
+    ylims --> (min_y, maximum(h.weights)*1.1)
     @series begin
         seriestype := :stepbins
         label := "amps"
         h
     end
-    y_vline = 0.2:1:maximum(h.weights)*1.1
+    y_vline = min_y:1:maximum(h.weights)*1.1
     for (i, p) in enumerate(pps)
         @series begin
             seriestype := :line
@@ -526,6 +526,43 @@ end
                 label := ""
             end
             color := :red
+            linewidth := 1.5
+            fill(p, length(y_vline)), y_vline
+        end
+    end
+end
+
+@recipe function f(report_sipm::NamedTuple{(:h_cal, :f_fit, :min_pe, :max_pe, :bin_width, :n_mixtures, :peaks, :positions)})
+    legend := :topright
+    yscale --> :log10
+    size := (1000, 600)
+    thickness_scaling := 1.5
+    framestyle := :box
+    xlabel := "Peak Amplitudes (P.E.)"
+    yformatter := :plain
+    ylabel := "Counts / $(round_wo_units(report_sipm.bin_width * 1e3, digits=2))E-3 P.E."
+    xlims := (first(first(report_sipm.h_cal.edges)), last(first(report_sipm.h_cal.edges)))
+    xticks := (ceil(first(first(report_sipm.h_cal.edges)))-0.5:0.5:last(first(report_sipm.h_cal.edges)))
+    min_y = minimum(report_sipm.h_cal.weights) == 0.0 ? 1e-3*maximum(report_sipm.h_cal.weights) : 0.8*minimum(report_sipm.h_cal.weights)
+    ylims := (min_y, maximum(report_sipm.h_cal.weights)*1.1)
+    @series begin
+        seriestype := :stepbins
+        label := "Amps"
+        report_sipm.h_cal
+    end
+    @series begin
+        seriestype := :line
+        label := "Best Fit"
+        color := :red
+        linewidth := 3
+        report_sipm.min_pe:report_sipm.bin_width/100:report_sipm.max_pe, report_sipm.f_fit
+    end
+    y_vline = min_y:1:maximum(report_sipm.h_cal.weights)*1.1
+    for (i, p) in enumerate(report_sipm.positions)
+        @series begin
+            seriestype := :line
+            label := "$(report_sipm.peaks[i]) P.E."
+            # color := :orange
             linewidth := 1.5
             fill(p, length(y_vline)), y_vline
         end
