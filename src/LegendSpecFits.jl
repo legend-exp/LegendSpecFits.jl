@@ -18,6 +18,7 @@ using Distributions
 using FillArrays
 using Format
 using ForwardDiff
+using GaussianMixtures
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
@@ -75,6 +76,7 @@ include("pseudo_prior.jl")
 include("specfit_functions.jl")
 include("calfunc.jl")
 include("sipm_simple_calibration.jl")
+include("sipmfit.jl")
 abstract type UncertTag end
 ForwardDiff.:(≺)(::Type{<:ForwardDiff.Tag}, ::Type{UncertTag}) = true
 ForwardDiff.:(≺)(::Type{UncertTag}, ::Type{<:ForwardDiff.Tag}) = false
