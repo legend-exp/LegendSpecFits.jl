@@ -13,7 +13,7 @@ function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.Real
     @assert length(peaks) == length(μ) "Number of calibration points does not match the number of energies"
     @assert pol_order >= 1 "The polynomial order must be greater than 0"
 
-    e_unit = u"keV"
+    e_unit = unit(first(peaks))
     # make all inputs unitless with the dimension e_unit
     μ_nounit = if !Unitful.isunitless(unit(first(μ)))
         @warn "µ has a unit, it will be converted to $(e_unit) and stripped."
