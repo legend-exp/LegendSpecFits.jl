@@ -14,6 +14,7 @@ using Random
 using ArgCheck
 using ArraysOfArrays
 using BAT
+using DensityInterface
 using Distributions
 using FillArrays
 using Format
@@ -22,6 +23,7 @@ using GaussianMixtures
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
+using LogExpFunctions
 using LsqFit
 using Measurements
 using Measurements: value
