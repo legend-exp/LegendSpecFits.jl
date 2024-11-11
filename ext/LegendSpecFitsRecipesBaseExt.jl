@@ -800,9 +800,9 @@ end
     framestyle := :box
     xformatter := :plain
     yformatter := :plain
+    margins := (0, :mm)
     if !isempty(report.gof)
         layout --> @layout([a{0.8h}; b{0.2h}])
-        margins --> (-11.5, :mm)
         link --> :x
     end
     @series begin
@@ -835,6 +835,10 @@ end
             label := "Data (x-Error x$(xerrscaling), y-Error x$(yerrscaling))"
         end
         markercolor --> :black
+        if !isempty(report.gof)
+            xguide := ""
+            xticks := []
+        end
         xerror := uncertainty.(report.x) .* xerrscaling
         yerror := uncertainty.(report.y) .* yerrscaling
         value.(report.x), value.(report.y)
@@ -855,6 +859,10 @@ end
             ms --> 3
             markershape --> :circle
             markerstrokecolor --> :black
+            if !isempty(report.gof)
+                xguide := ""
+                xticks := []
+            end
             linewidth --> 0.5
             markercolor --> :silver
             xerror := uncertainty.(additional_pts.x) .* xerrscaling
@@ -901,7 +909,8 @@ end
             subplot --> 2
             label --> ""
             markercolor --> :black
-            ylabel --> "Residuals (σ)"
+            yguide := "Residuals (σ)"
+            top_margin --> (-4, :mm)
             ylims --> (-5, 5)
             yticks --> ([-3, 0, 3])
             value.(report.x), report.gof.residuals_norm
@@ -921,7 +930,6 @@ end
         else
             NamedTuple()
         end
-        xlabel := "Energy (keV)"
         legend := :topleft
         framestyle := :box
         xlims := (0, 3000)
@@ -929,6 +937,7 @@ end
         @series begin
             grid --> :all
             xerrscaling --> xerrscaling
+            xlabel := "Energy (keV)"
             yerrscaling --> yerrscaling
             additional_pts --> additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = get(report, :gof, NamedTuple()))
@@ -954,35 +963,21 @@ end
     if report.type == :cal
         additional_pts = if !isempty(additional_pts)
             μ_cal = report.f_fit.(additional_pts.μ) .* report.e_unit
-            (x = additional_pts.μ, y = additional_pts.peaks, 
-                residuals_norm = (value.(μ_cal) .- additional_pts.peaks)./ uncertainty.(μ_cal))
+            (x = additional_pts.μ, y = ustrip.(report.e_unit, additional_pts.peaks),
+                residuals_norm = (value.(μ_cal) .- additional_pts.peaks) ./ uncertainty.(μ_cal))
         else
             NamedTuple()
         end
-        xlabel := "Energy (ADC)"
-        legend := :bottomright
         framestyle := :box
-        xlims := (0, 168000)
-        xticks := (0:16000:176000)
+        xlims := (0, 1.1*maximum(value.(report.x)))
         @series begin
+            xlabel := "Energy (ADC)"
+            ylabel := "Energy ($(report.e_unit))"
             grid --> :all
             xerrscaling --> xerrscaling
             yerrscaling --> yerrscaling
             additional_pts := additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = report.gof)
-        end
-        @series begin
-            seriestype := :hline
-            label := L"Q_{\beta \beta}"
-            color := :green
-            fillalpha := 0.2
-            linewidth := 2.5
-            xticks := :none
-            ylabel := "Energy ($(report.e_unit))"
-            ylims := (0, 1.2*value(maximum(report.y)))
-            yticks := (500:500:3000)
-            subplot := 1
-            [2039]
         end
     end
 end
