@@ -532,40 +532,153 @@ end
     end
 end
 
-@recipe function f(report_sipm::NamedTuple{(:h_cal, :f_fit, :min_pe, :max_pe, :bin_width, :n_mixtures, :peaks, :positions)})
+@recipe function f(report_sipm::NamedTuple{(:h_cal, :f_fit, :f_fit_components, :min_pe, :max_pe, :bin_width, :n_mixtures, :n_pos_mixtures, :peaks, :positions, :μ , :gof)}; xerrscaling=1, show_residuals=true, show_peaks=true, show_components=false)
     legend := :topright
-    yscale --> :log10
     size := (1000, 600)
+    margins := (4, :mm)
     thickness_scaling := 1.5
     framestyle := :box
-    xlabel := "Peak Amplitudes (P.E.)"
     yformatter := :plain
+    foreground_color_legend := :silver
+    background_color_legend := :white
     ylabel := "Counts / $(round_wo_units(report_sipm.bin_width * 1e3, digits=2))E-3 P.E."
     xlims := (first(first(report_sipm.h_cal.edges)), last(first(report_sipm.h_cal.edges)))
     xticks := (ceil(first(first(report_sipm.h_cal.edges)))-0.5:0.5:last(first(report_sipm.h_cal.edges)))
     min_y = minimum(report_sipm.h_cal.weights) == 0.0 ? 1e-3*maximum(report_sipm.h_cal.weights) : 0.8*minimum(report_sipm.h_cal.weights)
     ylims := (min_y, maximum(report_sipm.h_cal.weights)*1.1)
+    bin_centers = collect(report_sipm.h_cal.edges[1])[1:end-1] .+ diff(collect(report_sipm.h_cal.edges[1]))[1]/2 
     @series begin
-        seriestype := :stepbins
-        label := "Amps"
-        report_sipm.h_cal
+        yscale --> :log10
+        label := "Amplitudes"
+        subplot --> 1
+        seriestype := :bar
+        alpha --> 1.0
+        fillalpha --> 0.85
+        fillcolor --> :lightgrey
+        linecolor --> :lightgrey
+        fillrange := 1e-1
+        bins --> :sqrt
+        bar_width := diff(report_sipm.h_cal.edges[1])[1]
+        bin_centers, report_sipm.h_cal.weights
     end
     @series begin
         seriestype := :line
-        label := "Best Fit"
-        color := :red
-        linewidth := 3
+        if !isempty(report_sipm.gof)
+            label := "Best Fit (p = $(round(report_sipm.gof.pvalue, digits=2)))"
+        else
+            label := "Best Fit"
+        end
+        if show_residuals && !isempty(report_sipm.gof)
+            xlabel := ""
+            xticks := []
+        else
+            xlabel := "Peak Amplitudes (P.E.)"
+        end
+        subplot --> 1
+        color := :black
+        linewidth := 1.5
         report_sipm.min_pe:report_sipm.bin_width/100:report_sipm.max_pe, report_sipm.f_fit
     end
-    y_vline = min_y:1:maximum(report_sipm.h_cal.weights)*1.1
-    for (i, p) in enumerate(report_sipm.positions)
-        @series begin
-            seriestype := :line
-            label := "$(report_sipm.peaks[i]) P.E."
-            # color := :orange
-            linewidth := 1.5
-            fill(p, length(y_vline)), y_vline
+    if show_components
+        for (i, μ) in enumerate(report_sipm.μ)
+            @series begin
+                seriestype := :line
+                if i == 1
+                    label := "Mixture Components"
+                else
+                    label := ""
+                end
+                if show_residuals && !isempty(report_sipm.gof)
+                    xlabel := ""
+                    xticks := []
+                else
+                    xlabel := "Peak Amplitudes (P.E.)"
+                end
+                subplot --> 1
+                color := i + 1 + length(report_sipm.positions)
+                linestyle := :dash
+                linewidth := 1.3
+                # fillalpha := 1
+                alpha := 0.4
+                xi = report_sipm.min_pe:report_sipm.bin_width/100:report_sipm.max_pe
+                yi = Base.Fix2(report_sipm.f_fit_components, i).(xi)
+                # ribbon := (yi .- 1, zeros(length(xi)))
+                xi, yi
+            end
         end
+    end
+    if show_peaks
+        y_vline = [min_y, maximum(report_sipm.h_cal.weights)*1.1]
+        for (i, p) in enumerate(report_sipm.positions)
+            @series begin
+                seriestype := :line
+                if xerrscaling == 1
+                    label := "$(report_sipm.peaks[i]) P.E. [$(report_sipm.n_pos_mixtures[i]) Mix.]"
+                else
+                    label := "$(report_sipm.peaks[i]) P.E. [$(report_sipm.n_pos_mixtures[i]) Mix.] (error x$xerrscaling)"
+                end
+                subplot --> 1
+                color := i + 1
+                linewidth := 1.5
+                fill(value(p), length(y_vline)), y_vline
+            end
+            @series begin
+                seriestype := :vspan
+                label := ""
+                fillalpha := 0.1
+                subplot --> 1
+                if show_residuals && !isempty(report_sipm.gof)
+                    xlabel := ""
+                    xticks := []
+                else
+                    xlabel := "Peak Amplitudes (P.E.)"
+                end
+                color := i + 1
+                [value(p) - xerrscaling * uncertainty(p), value(p) + xerrscaling * uncertainty(p)]
+            end
+        end
+    end
+    if show_residuals && !isempty(report_sipm.gof)
+        link --> :x
+        layout --> @layout([a{0.7h}; b{0.3h}])
+        @series begin
+            seriestype := :hline
+            ribbon := 3
+            subplot --> 2
+            fillalpha := 0.5
+            label := ""
+            fillcolor := :lightgrey
+            linecolor := :darkgrey
+            [0.0]
+        end
+        @series begin
+            seriestype := :hline
+            ribbon := 1
+            subplot --> 2
+            fillalpha := 0.5
+            label := ""
+            fillcolor := :grey
+            linecolor := :darkgrey
+            [0.0]
+        end
+        @series begin
+            seriestype := :scatter
+            subplot --> 2
+            label := ""
+            title := ""
+            markercolor --> :darkgrey
+            markersize --> 3.0
+            markerstrokewidth := 0.1
+            ylabel := "Residuals (σ)"
+            xlabel := "Peak Amplitudes (P.E.)"
+            link --> :x
+            top_margin --> (-8, :mm)
+            ylims := (-6, 6)
+            xlims := (first(first(report_sipm.h_cal.edges)), last(first(report_sipm.h_cal.edges)))
+            yscale --> :identity
+            yticks := ([-3, 0, 3])
+            report_sipm.gof.bin_centers, [ifelse(abs(r) < 1e-6, 0.0, r) for r in report_sipm.gof.residuals_norm]
+        end        
     end
 end
 
