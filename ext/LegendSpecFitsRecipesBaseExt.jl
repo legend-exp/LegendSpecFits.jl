@@ -962,18 +962,19 @@ end
     bottom_margin --> (0, :mm)
     if report.type == :cal
         additional_pts = if !isempty(additional_pts)
-            μ_cal = if unit(first(additional_pts.μ)) != NoUnits
-                report.f_fit.(ustrip.(report.e_unit, additional_pts.μ))
+            μ_strip = if unit(first(additional_pts.μ)) != NoUnits
+                ustrip.(report.e_unit, additional_pts.μ)
             else
-                report.f_fit.(additional_pts.μ)
+                additional_pts.μ
             end
-            p_cal = if unit(first(additional_pts.μ)) != NoUnits
+            p_strip = if unit(first(additional_pts.peaks)) != NoUnits
                 ustrip.(report.e_unit, additional_pts.peaks)
             else
                 additional_pts.peaks
             end
-            (x = μ_cal, y = p_cal,
-                residuals_norm = (value.(μ_cal) .- p_cal)./ uncertainty.(μ_cal))
+            μ_cal = report.f_fit.(μ_strip)
+            (x = μ_strip, y = p_strip,
+                residuals_norm = (value.(μ_cal) .- p_strip)./ uncertainty.(μ_cal))
         else
             NamedTuple()
         end
