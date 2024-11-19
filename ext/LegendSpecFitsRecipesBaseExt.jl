@@ -160,7 +160,7 @@ end
     if x_label == "A/E"
         legend := :bottomleft
     else
-        legend := :topright
+        legend := :topleft
     end
     foreground_color_legend := :silver
     background_color_legend := :white
