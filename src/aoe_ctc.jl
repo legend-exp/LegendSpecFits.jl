@@ -100,7 +100,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     _aoe_ctc = aoe_all .+ PolCalFunc(0.0, fct...).(qdrift_e_all)
     
     # normalize once again to μ = 0 and σ = 1
-    h_norm = fit(Histogram, _aoe_ctc, -50:bin_width:30) ### hard-coded values: should include some tolerance to higher values
+    h_norm = fit(Histogram, _aoe_ctc, -20:bin_width:3) ### hard-coded values: should include some tolerance to higher values
     ps_norm = estimate_single_peak_stats(h_norm)
     result_norm, report_norm = fit_single_aoe_compton(h_norm, ps_norm, fit_func=:aoe_two_bck, pseudo_prior = pseudo_prior_all, uncertainty=true)
     μ_norm = mvalue(result_norm.μ)
@@ -111,7 +111,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     aoe_ctc_func = "( $(aoe_expression) + " * join(["$(fct[i]) * ( qdrift / $(e_expression) )^$(i)" for i in eachindex(fct)], " + ") * " - $(μ_norm) ) / $(σ_norm) "
     
     # create final histograms
-    h_after = fit(Histogram, aoe_ctc, -50:bin_width:30) ### hard-coded values: should include some tolerance to higher values
+    h_after = fit(Histogram, aoe_ctc, -20:bin_width:3) ### hard-coded values: should include some tolerance to higher values
     ps_after = estimate_single_peak_stats(h_after)
     result_after, report_after = fit_single_aoe_compton(h_after, ps_after, fit_func=:aoe_two_bck, pseudo_prior = pseudo_prior, uncertainty=true)
 
