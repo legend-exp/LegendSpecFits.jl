@@ -8,11 +8,11 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
             σ = weibull_from_mx(ps.peak_sigma, 1.5*ps.peak_sigma),
             n = weibull_from_mx(ps.peak_counts, 1.5*ps.peak_counts),
             skew_fraction = ifelse(low_e_tail, truncated(weibull_from_mx(0.002, 0.008), 0.0, 0.5), ConstValueDist(0.0)),
-            skew_width = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
+            skew_width = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 1.2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
             background = weibull_from_mx(ps.mean_background, ps.mean_background + 5*ps.mean_background_std),
             step_amplitude = weibull_from_mx(ps.mean_background_step, ps.mean_background_step + 5*ps.mean_background_std),
             skew_fraction_highE = ifelse(low_e_tail, truncated(weibull_from_mx(0.002, 0.008), 0.0, 0.1), ConstValueDist(0.0)),
-            skew_width_highE = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
+            skew_width_highE = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 1.2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
             background_slope = ifelse(ps.mean_background < 5, ConstValueDist(0), truncated(Normal(0, 0.1*ps.mean_background_std / (window_left + window_right)), - ps.mean_background / window_right, 0)),
             background_exp = weibull_from_mx(3e-2, 5e-2)
         )
