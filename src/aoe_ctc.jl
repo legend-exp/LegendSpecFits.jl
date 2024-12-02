@@ -40,7 +40,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     
     # calculate optimal bin width (if needed for other purposes)
     bin_width_window = 5.0 ### this parameter might be modified since it's copied from the energy case
-    bin_width        = get_friedman_diaconis_bin_width(aoe[peak - bin_width_window .< aoe .< peak + bin_width_window]) ### or use 0.05
+    # bin_width        = get_friedman_diaconis_bin_width(aoe[peak - bin_width_window .< aoe .< peak + bin_width_window]) ### or use 0.05
     bin_width_qdrift = get_friedman_diaconis_bin_width(qdrift_e[peak - bin_width_window .< aoe .< peak + bin_width_window])
 
 
