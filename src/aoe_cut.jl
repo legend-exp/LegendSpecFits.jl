@@ -88,14 +88,14 @@ export get_low_aoe_cut
 
 
 """
-    get_peaks_surrival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
+    get_peaks_surrival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
 
 Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size while performing a peak fit with fixed position.
 # Return 
 - `result`: Dict of results for each peak
 - `report`: Dict of reports for each peak
 """
-function get_peaks_surrival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
+function get_peaks_surrival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
     @assert length(peaks) == length(peak_names) == length(windows) "Length of peaks, peak_names and windows must be equal"
     # create return and result vectors
     v_result = Vector{NamedTuple}(undef, length(peak_names))
@@ -106,7 +106,7 @@ function get_peaks_surrival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity},
         # extract peak, name and window
         peak, name, window, fit_func = peaks[i], peak_names[i], windows[i], fit_funcs[i]
         # fit peak
-        result_peak, report_peak = get_peak_surrival_fraction(aoe, e, peak, collect(window), aoe_cut; uncertainty=uncertainty, bin_width_window=bin_width_window, sigma_high_sided=sigma_high_sided, fit_func=fit_func)
+        result_peak, report_peak = get_peak_surrival_fraction(aoe, e, peak, collect(window), aoe_cut; uncertainty=uncertainty, inverted_mode=inverted_mode, bin_width_window=bin_width_window, sigma_high_sided=sigma_high_sided, fit_func=fit_func)
         # save results
         v_result[i] = result_peak
         v_report[i] = report_peak
@@ -123,7 +123,8 @@ get_peaks_surrival_fractions(aoe, e, peaks, peak_names, left_window_sizes::Vecto
 
 
 """
-    get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, inverted_mode::Bool=false, low_e_tail::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
+    get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; 
+    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
 
 Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size while performing a peak fit with fixed position.
     
@@ -134,7 +135,8 @@ Get the surrival fraction of a peak after a AoE cut value `aoe_cut` for a given 
 - `sf`: Surrival fraction
 - `err`: Uncertainties
 """
-function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, inverted_mode::Bool=false, low_e_tail::Bool=true, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
+function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; 
+    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}  
     # estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     # get energy before cut and create histogram
@@ -144,21 +146,13 @@ function get_peak_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e
     # fit peak and return number of signal counts
     result_before, report_before = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, fit_func=fit_func)
 
-    # get e after cut
-    if !isnan(sigma_high_sided)
-        # TODO: decide how to deal with the high sided cut!
-        e = e[aoe .< sigma_high_sided]
-        aoe = aoe[aoe .< sigma_high_sided]
-    end
-
-    if inverted_mode == false
-        #normal aoe mode
-        e_survived = e[aoe_cut .<= aoe]
-        e_cut = e[aoe_cut .> aoe]
+    # get energy after cuts
+    e_survived, e_cut = if !inverted_mode
+        #normal aoe version
+        e[aoe_cut .< aoe .< sigma_high_sided], e[aoe .<= aoe_cut .|| aoe .>= sigma_high_sided]
     else
-        #inverted mode for lq cut
-        e_survived = e[aoe_cut .>= aoe]
-        e_cut = e[aoe_cut .< aoe]
+        #lq version
+        e[aoe .< aoe_cut .|| aoe .> sigma_high_sided], e[aoe_cut .<= aoe .<= sigma_high_sided]
     end
     
     # estimate bin width
@@ -192,8 +186,7 @@ export get_peak_surrival_fraction
 
 
 """
-    get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
-
+    get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
 Get the surrival fraction of a continuum after a AoE cut value `aoe_cut` for a given `center` and `window` size.
 
 # Returns
@@ -203,18 +196,25 @@ Get the surrival fraction of a continuum after a AoE cut value `aoe_cut` for a g
 - `n_after`: Number of counts after the cut
 - `sf`: Surrival fraction
 """
-function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=NaN) where T<:Unitful.Energy{<:Real}
+function get_continuum_surrival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
+    # scale unit
+    e_unit = u"keV"
+    # get energy around center
+    aoe = aoe[center - window .< e .< center + window]
+    e = e[center - window .< e .< center + window]
+    # get bin width
+    bin_width = get_friedman_diaconis_bin_width(e)
     # get number of events in window before cut
-    n_before = length(e[center - window .< e .< center + window])
-    # get number of events after cut
-    n_after = length(e[aoe .> aoe_cut .&& center - window .< e .< center + window])
-    if !isnan(sigma_high_sided)
-        n_after = length(e[aoe_cut .< aoe .< sigma_high_sided .&& center - window .< e .< center + window])
+    n_before = length(e)
+    # get energy after cuts
+    e_survived, e_cut = if !inverted_mode
+        #normal aoe version
+        e[aoe_cut .< aoe .< sigma_high_sided], e[aoe .<= aoe_cut .|| aoe .>= sigma_high_sided]
+    else
+        #lq version
+        e[aoe .< aoe_cut .|| aoe .> sigma_high_sided], e[aoe_cut .<= aoe .<= sigma_high_sided]
     end
-    #inverted mode for lq cut
-    if inverted_mode == true
-        n_after = length(e[aoe .< aoe_cut .&& center - window .< e .< center + window])
-    end
+    n_after = length(e_survived)
 
     # calculate surrival fraction
     sf = n_after / n_before
