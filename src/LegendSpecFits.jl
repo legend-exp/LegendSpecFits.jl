@@ -14,13 +14,16 @@ using Random
 using ArgCheck
 using ArraysOfArrays
 using BAT
+using DensityInterface
 using Distributions
 using FillArrays
 using Format
 using ForwardDiff
+using GaussianMixtures
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
+using LogExpFunctions
 using LsqFit
 using Measurements
 using Measurements: value
@@ -31,6 +34,7 @@ using OptimizationNLopt
 using OptimizationOptimJL
 using PropDicts
 using RadiationSpectra
+using RadiationSpectra: peakfinder
 using Roots
 using SpecialFunctions
 using StatsBase
@@ -63,6 +67,7 @@ include("aoefit.jl")
 include("aoe_fit_calibration.jl")
 include("aoefit_combined.jl")
 include("aoe_cut.jl")
+include("aoe_filter_optimization.jl")
 include("specfit_combined.jl")
 include("ctc.jl")
 include("qc.jl")
@@ -74,6 +79,7 @@ include("pseudo_prior.jl")
 include("specfit_functions.jl")
 include("calfunc.jl")
 include("sipm_simple_calibration.jl")
+include("sipmfit.jl")
 abstract type UncertTag end
 ForwardDiff.:(≺)(::Type{<:ForwardDiff.Tag}, ::Type{UncertTag}) = true
 ForwardDiff.:(≺)(::Type{UncertTag}, ::Type{<:ForwardDiff.Tag}) = false

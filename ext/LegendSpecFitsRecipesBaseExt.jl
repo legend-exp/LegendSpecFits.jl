@@ -160,7 +160,7 @@ end
     if x_label == "A/E"
         legend := :bottomleft
     else
-        legend := :topright
+        legend := :topleft
     end
     foreground_color_legend := :silver
     background_color_legend := :white
@@ -490,6 +490,198 @@ end
     end
 end
 
+@recipe function f(report::NamedTuple{(:peakpos, :peakpos_cal, :h_uncal, :h_calsimple)}; cal=true)
+    legend := :topright
+    size := (1000, 600)
+    thickness_scaling := 1.5
+    framestyle := :box
+    yformatter := :plain
+    if cal
+        h = LinearAlgebra.normalize(report.h_calsimple, mode = :density)
+        xlabel := "Peak Amplitudes (P.E.)"
+        ylabel := "Counts / $(round_wo_units(step(first(h.edges)), digits=2)) P.E."
+        xticks := (0:0.5:last(first(h.edges)))
+        pps = report.peakpos_cal
+    else
+        h = LinearAlgebra.normalize(report.h_uncal, mode = :density)
+        xlabel := "Peak Amplitudes (ADC)"
+        ylabel := "Counts / $(round_wo_units(step(first(h.edges)), digits=2)) ADC"
+        pps = report.peakpos
+    end
+    xlims := (0, last(first(h.edges)))
+    min_y = minimum(h.weights) == 0.0 ? 1e-3*maximum(h.weights) : 0.8*minimum(h.weights)
+    ylims --> (min_y, maximum(h.weights)*1.1)
+    @series begin
+        seriestype := :stepbins
+        label := "amps"
+        h
+    end
+    y_vline = min_y:1:maximum(h.weights)*1.1
+    for (i, p) in enumerate(pps)
+        @series begin
+            seriestype := :line
+            if i == 1
+                label := "Peak Pos. Guess"
+            else
+                label := ""
+            end
+            color := :red
+            linewidth := 1.5
+            fill(p, length(y_vline)), y_vline
+        end
+    end
+end
+
+@recipe function f(report_sipm::NamedTuple{(:h_cal, :f_fit, :f_fit_components, :min_pe, :max_pe, :bin_width, :n_mixtures, :n_pos_mixtures, :peaks, :positions, :μ , :gof)}; xerrscaling=1, show_residuals=true, show_peaks=true, show_components=false)
+    legend := :topright
+    size := (1000, 600)
+    margins := (4, :mm)
+    thickness_scaling := 1.5
+    framestyle := :box
+    yformatter := :plain
+    foreground_color_legend := :silver
+    background_color_legend := :white
+    ylabel := "Counts / $(round_wo_units(report_sipm.bin_width * 1e3, digits=2))E-3 P.E."
+    xlims := (first(first(report_sipm.h_cal.edges)), last(first(report_sipm.h_cal.edges)))
+    xticks := (ceil(first(first(report_sipm.h_cal.edges)))-0.5:0.5:last(first(report_sipm.h_cal.edges)))
+    min_y = minimum(report_sipm.h_cal.weights) == 0.0 ? 1e-3*maximum(report_sipm.h_cal.weights) : 0.8*minimum(report_sipm.h_cal.weights)
+    ylims := (min_y, maximum(report_sipm.h_cal.weights)*1.1)
+    bin_centers = collect(report_sipm.h_cal.edges[1])[1:end-1] .+ diff(collect(report_sipm.h_cal.edges[1]))[1]/2 
+    @series begin
+        yscale --> :log10
+        label := "Amplitudes"
+        subplot --> 1
+        seriestype := :bar
+        alpha --> 1.0
+        fillalpha --> 0.85
+        fillcolor --> :lightgrey
+        linecolor --> :lightgrey
+        fillrange := 1e-1
+        bins --> :sqrt
+        bar_width := diff(report_sipm.h_cal.edges[1])[1]
+        bin_centers, report_sipm.h_cal.weights
+    end
+    @series begin
+        seriestype := :line
+        if !isempty(report_sipm.gof)
+            label := "Best Fit (p = $(round(report_sipm.gof.pvalue, digits=2)))"
+        else
+            label := "Best Fit"
+        end
+        if show_residuals && !isempty(report_sipm.gof)
+            xlabel := ""
+            xticks := []
+        else
+            xlabel := "Peak Amplitudes (P.E.)"
+        end
+        subplot --> 1
+        color := :black
+        linewidth := 1.5
+        report_sipm.min_pe:report_sipm.bin_width/100:report_sipm.max_pe, report_sipm.f_fit
+    end
+    if show_components
+        for (i, μ) in enumerate(report_sipm.μ)
+            @series begin
+                seriestype := :line
+                if i == 1
+                    label := "Mixture Components"
+                else
+                    label := ""
+                end
+                if show_residuals && !isempty(report_sipm.gof)
+                    xlabel := ""
+                    xticks := []
+                else
+                    xlabel := "Peak Amplitudes (P.E.)"
+                end
+                subplot --> 1
+                color := i + 1 + length(report_sipm.positions)
+                linestyle := :dash
+                linewidth := 1.3
+                # fillalpha := 1
+                alpha := 0.4
+                xi = report_sipm.min_pe:report_sipm.bin_width/100:report_sipm.max_pe
+                yi = Base.Fix2(report_sipm.f_fit_components, i).(xi)
+                # ribbon := (yi .- 1, zeros(length(xi)))
+                xi, yi
+            end
+        end
+    end
+    if show_peaks
+        y_vline = [min_y, maximum(report_sipm.h_cal.weights)*1.1]
+        for (i, p) in enumerate(report_sipm.positions)
+            @series begin
+                seriestype := :line
+                if xerrscaling == 1
+                    label := "$(report_sipm.peaks[i]) P.E. [$(report_sipm.n_pos_mixtures[i]) Mix.]"
+                else
+                    label := "$(report_sipm.peaks[i]) P.E. [$(report_sipm.n_pos_mixtures[i]) Mix.] (error x$xerrscaling)"
+                end
+                subplot --> 1
+                color := i + 1
+                linewidth := 1.5
+                fill(value(p), length(y_vline)), y_vline
+            end
+            @series begin
+                seriestype := :vspan
+                label := ""
+                fillalpha := 0.1
+                subplot --> 1
+                if show_residuals && !isempty(report_sipm.gof)
+                    xlabel := ""
+                    xticks := []
+                else
+                    xlabel := "Peak Amplitudes (P.E.)"
+                end
+                color := i + 1
+                [value(p) - xerrscaling * uncertainty(p), value(p) + xerrscaling * uncertainty(p)]
+            end
+        end
+    end
+    if show_residuals && !isempty(report_sipm.gof)
+        link --> :x
+        layout --> @layout([a{0.7h}; b{0.3h}])
+        @series begin
+            seriestype := :hline
+            ribbon := 3
+            subplot --> 2
+            fillalpha := 0.5
+            label := ""
+            fillcolor := :lightgrey
+            linecolor := :darkgrey
+            [0.0]
+        end
+        @series begin
+            seriestype := :hline
+            ribbon := 1
+            subplot --> 2
+            fillalpha := 0.5
+            label := ""
+            fillcolor := :grey
+            linecolor := :darkgrey
+            [0.0]
+        end
+        @series begin
+            seriestype := :scatter
+            subplot --> 2
+            label := ""
+            title := ""
+            markercolor --> :darkgrey
+            markersize --> 3.0
+            markerstrokewidth := 0.1
+            ylabel := "Residuals (σ)"
+            xlabel := "Peak Amplitudes (P.E.)"
+            link --> :x
+            top_margin --> (-8, :mm)
+            ylims := (-6, 6)
+            xlims := (first(first(report_sipm.h_cal.edges)), last(first(report_sipm.h_cal.edges)))
+            yscale --> :identity
+            yticks := ([-3, 0, 3])
+            report_sipm.gof.bin_centers, [ifelse(abs(r) < 1e-6, 0.0, r) for r in report_sipm.gof.residuals_norm]
+        end        
+    end
+end
+
 @recipe function f(report_ctc::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :e_peak, :e_ctc, :qdrift_peak, :h_before, :h_after, :fwhm_before, :fwhm_after, :report_before, :report_after)})
     if !("StatsPlots" in string.(Base.loaded_modules_array()))
         throw(ErrorException("StatsPlots not loaded. Please load StatsPlots before using this recipe."))
@@ -608,9 +800,9 @@ end
     framestyle := :box
     xformatter := :plain
     yformatter := :plain
+    margins := (0, :mm)
     if !isempty(report.gof)
         layout --> @layout([a{0.8h}; b{0.2h}])
-        margins --> (-11.5, :mm)
         link --> :x
     end
     @series begin
@@ -643,6 +835,10 @@ end
             label := "Data (x-Error x$(xerrscaling), y-Error x$(yerrscaling))"
         end
         markercolor --> :black
+        if !isempty(report.gof)
+            xguide := ""
+            xticks := []
+        end
         xerror := uncertainty.(report.x) .* xerrscaling
         yerror := uncertainty.(report.y) .* yerrscaling
         value.(report.x), value.(report.y)
@@ -663,6 +859,10 @@ end
             ms --> 3
             markershape --> :circle
             markerstrokecolor --> :black
+            if !isempty(report.gof)
+                xguide := ""
+                xticks := []
+            end
             linewidth --> 0.5
             markercolor --> :silver
             xerror := uncertainty.(additional_pts.x) .* xerrscaling
@@ -709,7 +909,8 @@ end
             subplot --> 2
             label --> ""
             markercolor --> :black
-            ylabel --> "Residuals (σ)"
+            yguide := "Residuals (σ)"
+            top_margin --> (-4, :mm)
             ylims --> (-5, 5)
             yticks --> ([-3, 0, 3])
             value.(report.x), report.gof.residuals_norm
@@ -729,7 +930,6 @@ end
         else
             NamedTuple()
         end
-        xlabel := "Energy (keV)"
         legend := :topleft
         framestyle := :box
         xlims := (0, 3000)
@@ -737,6 +937,7 @@ end
         @series begin
             grid --> :all
             xerrscaling --> xerrscaling
+            xlabel := "Energy (keV)"
             yerrscaling --> yerrscaling
             additional_pts --> additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = get(report, :gof, NamedTuple()))
@@ -761,36 +962,32 @@ end
     bottom_margin --> (0, :mm)
     if report.type == :cal
         additional_pts = if !isempty(additional_pts)
-            μ_cal = report.f_fit.(additional_pts.μ) .* report.e_unit
-            (x = additional_pts.μ, y = additional_pts.peaks, 
-                residuals_norm = (value.(μ_cal) .- additional_pts.peaks)./ uncertainty.(μ_cal))
+            μ_strip = if unit(first(additional_pts.μ)) != NoUnits
+                ustrip.(report.e_unit, additional_pts.μ)
+            else
+                additional_pts.μ
+            end
+            p_strip = if unit(first(additional_pts.peaks)) != NoUnits
+                ustrip.(report.e_unit, additional_pts.peaks)
+            else
+                additional_pts.peaks
+            end
+            μ_cal = report.f_fit.(μ_strip)
+            (x = μ_strip, y = p_strip,
+                residuals_norm = (value.(μ_cal) .- p_strip)./ uncertainty.(μ_cal))
         else
             NamedTuple()
         end
-        xlabel := "Energy (ADC)"
-        legend := :bottomright
         framestyle := :box
-        xlims := (0, 168000)
-        xticks := (0:16000:176000)
+        xlims := (0, 1.1*maximum(value.(report.x)))
         @series begin
+            xlabel := "Energy (ADC)"
+            ylabel := "Energy ($(report.e_unit))"
             grid --> :all
             xerrscaling --> xerrscaling
             yerrscaling --> yerrscaling
             additional_pts := additional_pts
             (par = report.par, f_fit = report.f_fit, x = report.x, y = report.y, gof = report.gof)
-        end
-        @series begin
-            seriestype := :hline
-            label := L"Q_{\beta \beta}"
-            color := :green
-            fillalpha := 0.2
-            linewidth := 2.5
-            xticks := :none
-            ylabel := "Energy ($(report.e_unit))"
-            ylims := (0, 1.2*value(maximum(report.y)))
-            yticks := (500:500:3000)
-            subplot := 1
-            [2039]
         end
     end
 end
@@ -1072,5 +1269,188 @@ end
         report.h_after_ds
     end
 end
+
+
+### lq recipe functions
+
+# recipe for the lq_drift_time_correction report
+
+@recipe function f(report::NamedTuple{(:lq_prehist, :lq_report, :drift_prehist, :drift_report, :lq_box, :drift_time_func, :DEP_left, :DEP_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
+
+    # Extract data from the report
+    DEP_left = report.DEP_left
+    DEP_right = report.DEP_right
+    box = report.lq_box
+
+    #cut data to DEP
+    dt_DEP = dt_eff[DEP_left .< e_cal .< DEP_right]
+    lq_DEP = lq_e_corr[DEP_left .< e_cal .< DEP_right]
+
+    # Plot configuration: 2D histogram
+    xlabel := "Drift Time"
+    ylabel := "LQ (A.U.)"
+    framestyle := :box
+    left_margin := -2Plots.mm
+    bottom_margin := -4Plots.mm
+    top_margin := -3Plots.mm
+    color := :viridis
+    formatter := :plain
+    thickness_scaling := 1.6
+    size := (1200, 900)
+
+
+    if plot_type == :DEP
+        # Create 2D histogram with filtered data based on DEP_left and DEP_right
+        
+        # dynamic bin size dependant on fit constraint box
+        t_diff = box.t_upper - box.t_lower
+        lq_diff = box.lq_upper - box.lq_lower
+        xmin = box.t_lower - 1*t_diff
+        xmax = box.t_upper + 1*t_diff
+        xstep = (xmax - xmin) / 100 
+        ymin = box.lq_lower - 1*lq_diff
+        ymax = box.lq_upper + 4*lq_diff
+        ystep = (ymax - ymin) / 100
+        nbins := (xmin:xstep:xmax, ymin:ystep:ymax)
+
+        @series begin
+            seriestype := :histogram2d
+            dt_DEP, lq_DEP
+        end
+    elseif plot_type == :whole
+        # Create 2D histogram with all data
+        colorbar_scale := :log10
+
+        # dynamic bin size
+        xmin = ustrip.(quantile(dt_eff, 0.001))
+        xmax = ustrip.(quantile(dt_eff, 0.999))
+        xstep = (xmax - xmin) / 200
+        ymin = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.005)) #filters NaNs for quantile
+        ymax = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.94)) #filters NaNs for quantile
+        ystep = (ymax - ymin) / 200
+        nbins := (xmin:xstep:xmax, ymin:ystep:ymax)
+
+        @series begin
+            seriestype := :histogram2d
+            dt_eff, lq_e_corr
+        end
+    end
+    
+    # Add vertical and horizontal lines for the fit box limits
+    @series begin
+        seriestype := :vline
+        label := ""
+        linewidth := 1.5
+        color := :red
+        [box.t_lower, box.t_upper]
+    end
+
+    @series begin
+        seriestype := :hline
+        label := ""
+        linewidth := 1.5
+        color := :red
+        [box.lq_lower, box.lq_upper]
+    end
+
+    # Add linear fit plot
+    @series begin
+        label := "Linear Fit"
+        linewidth := 1.5
+        color := :blue
+
+        # Evaluate drift_time_func over the full range of drift time (x-axis)
+        dt_range = range(xmin, xmax, length=100)  # 100 points across the x-axis
+        lq_fit = report.drift_time_func.(dt_range)  # Apply the linear function to the full dt range
+
+        dt_range, lq_fit
+
+    end
+end
+
+
+# recipe for the lq_cut report
+
+@recipe function f(report::NamedTuple{(:cut, :fit_result, :temp_hists, :fit_report)}, lq_class::Vector{Float64}, e_cal, plot_type::Symbol)
+
+    # Extract cutvalue from the report
+    cut_value = Measurements.value.(report.cut)
+
+    # Plot configuration for all types
+    left_margin := -2Plots.mm
+    bottom_margin := -4Plots.mm
+    top_margin := -3Plots.mm
+    thickness_scaling := 1.6
+    size := (1200, 900)
+    framestyle := :box
+    formatter := :plain
+
+    # Plot configuration for each specific type
+    if plot_type == :lq_cut
+        # 2D histogram for LQ Cut
+        xlabel := "Energy"
+        ylabel := "LQ (A.U.)"
+        nbins := (0:6:3000, -2.0:0.012:4.0)
+        colorbar_scale := :log10
+        color := :viridis
+        legend := :bottomright
+        
+        @series begin
+            seriestype := :histogram2d
+            e_cal, lq_class
+        end
+
+        @series begin
+            seriestype := :hline
+            label := "3σ exclusion"
+            linewidth := 2
+            color := :red
+            [cut_value]
+        end
+
+    elseif plot_type == :energy_hist
+        # Energy histogram before/after LQ cut
+        xlabel := "Energy"
+        ylabel := "Counts"
+        nbins := 0:1:3000
+        yscale := :log10
+
+        @series begin
+            seriestype := :stephist
+            label := "Data before LQ Cut"
+            e_cal
+        end
+
+        @series begin
+            seriestype := :stephist
+            label := "Surviving LQ Cut"
+            e_cal[lq_class .< cut_value]
+        end
+
+        @series begin
+            seriestype := :stephist
+            label := "Cut by LQ Cut"
+            e_cal[lq_class .> cut_value]
+        end
+
+    elseif plot_type == :cut_fraction
+        # Percentual cut plot
+        xlabel := "Energy"
+        ylabel := "Fraction"
+        legend := :topleft
+
+        # Calculate fraction of events cut by LQ cut
+        h1 = fit(Histogram, ustrip.(e_cal), 0:3:3000)
+        h2 = fit(Histogram, ustrip.(e_cal[lq_class .> cut_value]), 0:3:3000)
+        h_diff = h2.weights ./ h1.weights
+
+        @series begin
+            label := "Cut Fraction"
+            0:3:3000, h_diff
+        end
+    end
+end
+
+
 
 end # module LegendSpecFitsRecipesBaseExt

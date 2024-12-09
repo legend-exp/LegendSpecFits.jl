@@ -16,10 +16,10 @@ end
 
 
 """
-    _get_model_counts(f_fit::Base.Callable,v_ml::NamedTuple,bin_centers::StepRangeLen,bin_widths::StepRangeLen)
+    _get_model_counts(f_fit::Base.Callable,v_ml::Union{NamedTuple, AbstractVector},bin_centers::StepRangeLen,bin_widths::StepRangeLen)
 aux. function to get modelled peakshape based on  histogram binning and best-fit parameter
 """
-function _get_model_counts(f_fit::Base.Callable, v_ml::NamedTuple, bin_centers::Union{StepRangeLen, Vector{<:Real}}, bin_widths::Union{StepRangeLen, Vector{<:Real}})
+function _get_model_counts(f_fit::Base.Callable, v_ml::Union{NamedTuple, AbstractVector}, bin_centers::Union{StepRangeLen, Vector{<:Real}}, bin_widths::Union{StepRangeLen, Vector{<:Real}})
     model_func = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
     model_counts = bin_widths .* map(energy -> model_func(energy), bin_centers) # evaluate model at bin center (= binned measured energies)
     return model_counts
@@ -28,7 +28,7 @@ end
 
 
 """ 
-    p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::NamedTuple) 
+    p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector}) 
 calculate p-value based on least-squares, assuming gaussian uncertainty
 baseline method to get goodness-of-fit (gof)
 # input:
@@ -40,7 +40,7 @@ baseline method to get goodness-of-fit (gof)
  * `chi2` chi2 value
  * `dof` degrees of freedom
 """
-function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::NamedTuple)
+function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     # prepare data
     counts, bin_widths, bin_centers = _prepare_data(h)
 
@@ -67,10 +67,10 @@ export p_value
 
 
 """ 
-    p_value_poissonll(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::NamedTuple)
+    p_value_poissonll(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector})
 p-value via poisson likelihood ratio: baseline for ML fits using Poisson statistics and bins with low number of counts
 """
-function p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::NamedTuple)
+function p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     counts, bin_widths, bin_centers = _prepare_data(h) # prepare data
     model_func = Base.Fix2(fit_func, v_ml) # fix the fit parameters to ML best-estimate
 
@@ -155,7 +155,7 @@ end
 export p_value_MC
 
 """ 
-    residuals(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::NamedTuple)
+    residuals(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector})
 Calculate bin-wise residuals and normalized residuals. 
 Calcualte bin-wise p-value based on poisson distribution for each bin.
 
@@ -169,7 +169,7 @@ Calcualte bin-wise p-value based on poisson distribution for each bin.
  * `residuals_norm` normalized residuals: model - data / sqrt(model)
  * `p_value_binwise` p-value for each bin based on poisson distribution
 """
-function get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::NamedTuple)
+function get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     # prepare data
     counts, bin_widths, bin_centers = _prepare_data(h)
 

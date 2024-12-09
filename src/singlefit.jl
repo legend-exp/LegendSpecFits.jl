@@ -52,7 +52,7 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, v_init, [])
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
@@ -169,7 +169,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, v_init, [])
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
@@ -288,7 +288,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, v_init, [])
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
@@ -376,23 +376,24 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
     x_min, x_max, bin_width = first(h_nocut.edges[1]), last(h_nocut.edges[1]), step(h_nocut.edges[1])
     cut_low, cut_high = ifelse(isnan(cut_low), x_min, cut_low), ifelse(isnan(cut_high), x_max, cut_high)
 
-
     # get peak stats
     ps = estimate_single_peak_stats_simple(h_nocut)
     @debug "Peak stats: $ps"
 
-    # create cutted histogram
-    h = h_nocut
-    cut_idxs = collect(sort(findall(x -> x in Interval(cut_low, cut_high), h.edges[1])))
-    if length(cut_idxs) != length(h.edges[1])
-        weights = h.weights[cut_idxs]
-        edges = if first(cut_idxs)-1 == 0
-            h.edges[1][sort(push!(cut_idxs, last(cut_idxs)-1))]
-        else
-            h.edges[1][sort(push!(cut_idxs, first(cut_idxs)-1))]
-        end
-        h = Histogram(edges, weights)
-    end
+    # get edges and weights
+    edges = h_nocut.edges[1]
+    weights = h_nocut.weights
+
+    # truncate edges to specified range
+    low_idx = findfirst(x -> x >= cut_low, edges)
+    high_idx = findlast(x -> x <= cut_high, edges)
+    
+    # Extract the edges and weights within the range
+    filtered_edges = edges[low_idx:high_idx]  
+    filtered_counts = weights[low_idx:high_idx-1] # Since edge vector is one longer than weights vector, we need to remove the last element
+    
+    # create truncated histogram
+    h = Histogram(filtered_edges, filtered_counts)
 
     # create fit function
     f_fit(x, v) = v.n * gauss_pdf(x, v.μ, v.σ) * heaviside(x - cut_low) * heaviside(cut_high - x)
@@ -418,7 +419,7 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, v_init, [])
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
@@ -524,7 +525,7 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, v_init, [])
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end

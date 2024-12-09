@@ -32,19 +32,27 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     h_uncal, peakpos = find_peaks(pe_uncal; kwargs...)
 
     # simple calibration
+    sort!(peakpos)
     gain = peakpos[2] - peakpos[1]
     c = 1/gain
     offset = - (peakpos[1] * c - 1) 
 
-    f_simple_calib = Base.Fix1(*, c)
+    f_simple_calib = x -> x .* c .+ offset
+    f_simple_uncal = x -> (x .- offset) ./ c
     pe_simple_cal = pe_uncal .* c .+ offset
     peakpos_cal = peakpos .* c .+ offset
 
-    h_calsimple = histogram(pe_simple_cal, bins=0.5:.01:4.5)
+    bin_width_cal = get_friedman_diaconis_bin_width(filter(in(0.5..1.5), pe_simple_cal))
+    bin_width_uncal = get_friedman_diaconis_bin_width(filter(in( (0.5 - offset) / c .. (1.5 - offset) / c), pe_simple_cal))
+
+    h_calsimple = fit(Histogram, pe_simple_cal, 0.0:bin_width_cal:6.0)
+    h_uncal = fit(Histogram, pe_uncal, 0.0:bin_width_uncal:(6.0 - offset) / c)
 
     result = (
         pe_simple_cal = pe_simple_cal,
-        func = f_simple_calib, 
+        peakpos = peakpos,
+        f_simple_calib = f_simple_calib,
+        f_simple_uncal = f_simple_uncal,
         c = c,
         offset = offset
     )
@@ -56,7 +64,6 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     )
     return result, report
 end
-
 
 
 function find_peaks(
