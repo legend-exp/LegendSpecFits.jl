@@ -34,7 +34,7 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
     dmat = reshape(amps_fit, length(amps_fit), 1)
 
     # set up mixture model with given number of mixtures
-    gmm = GMM(n_mixtures, dmat; method=method, nInit=nInit, nIter=nIter, kind=kind)
+    gmm = GMM(n_mixtures, dmat; method=method, nInit=nInit, nIter=nIter, kind=kind, parallel=false)
     
     # get mixture model out of EM best fit estimate
     gmm_dist = MixtureModel(gmm)
