@@ -103,8 +103,12 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
     end
 
     # get pe_pos
-    get_pe_pos = pe -> dot(μ[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)], w[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)] ) / sum(w[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)])
-    get_pe_res = pe -> dot(σ[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)], w[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)] ) / sum(w[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)])
+    get_pe_pos = pe -> let sel = in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)
+        dot(view(μ,sel), view(w,sel)) / sum(view(w,sel))
+    end
+    get_pe_res = pe -> let sel = in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)
+        dot(view(σ,sel), view(w,sel)) / sum(view(w,sel))
+    end 
     n_pos_mixtures = [count(in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)) for pe in pes]
 
     pe_pos = get_pe_pos.(pes)
