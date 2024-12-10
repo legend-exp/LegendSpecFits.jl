@@ -104,9 +104,11 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
 
     # get pe_pos
     get_pe_pos = pe -> dot(μ[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)], w[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)] ) / sum(w[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)])
+    get_pe_res = pe -> dot(σ[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)], w[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)] ) / sum(w[in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)])
     n_pos_mixtures = [count(in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)) for pe in pes]
 
     pe_pos = get_pe_pos.(pes)
+    pe_res = get_pe_res.(pes)
 
     # create return histogram for report
     h_cal = fit(Histogram, pe_cal, ifelse(min_pe >= 0.5, min_pe-0.5, min_pe):bin_width:max_pe+0.5)
@@ -120,6 +122,8 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
         peaks = pes,
         positions_cal = pe_pos,
         positions = f_uncal.(pe_pos),
+        resolutions_cal = pe_res,
+        resolutions = f_uncal.(pe_res) .- f_uncal(0.0),
         gof = gof
     )
     report = (
