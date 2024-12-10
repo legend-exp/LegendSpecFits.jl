@@ -106,7 +106,7 @@ export fit_fwhm_ft
 
 
 """
-    _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int64}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int64, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs") where {T <:Real}
+    _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int64}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int64, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs", ft_fwhm_tol::Unitful.AbstractQuantity = 0.1u"keV") where {T <:Real}
 
 Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshape and return the optimal FT and the corresponding FWHM value. The cut values cut for each flat-top time a window for better histogramming.
 
@@ -118,12 +118,12 @@ Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshap
 - `max_e`: maximum energy value to consider for the fit
 - `nbins`: number of bins to use for the histogram of energy values
 - `rel_cut_fit`: relative cut value to use for the fit
-
+- `ft_fwhm_tol`: search for lowest "optimal" ft within `minimum(fwhm) + ft_fwhm_tol` to avoid artificially large ft 
 # Returns
 - `ft`: optimal FT value
 - `min_fwhm`: corresponding FWHM value
 """
-function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T; n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV")) where {T <:Real}
+function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T; n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.AbstractQuantity = 0.1u"keV") where {T <:Real}
     @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"
     
     # create empty array for results
@@ -192,8 +192,9 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
         c = peak ./ mean(modes)
         fwhm = fwhm .* c
         # get minimal fwhm and ft
-        min_fwhm    = minimum(fwhm)
-        ft_min_fwhm = e_grid_ft[findmin(fwhm)[2]]
+        sel = findall(mvalue.(fwhm .- minimum(fwhm)) .< ft_fwhm_tol)
+        ft_min_fwhm, min_i = findmin(e_grid_ft[sel])
+        min_fwhm = fwhm[sel][min_i]
     end
     # generate result and report
     result = (
@@ -212,7 +213,7 @@ end
 
 
 """
-    _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int64, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs", peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV")) where {T <:Real}
+    _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int64, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs", peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.AbstractQuantity = 0.1u"keV") where {T <:Real}
 
 Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshape and return the optimal FT and the corresponding FWHM value. The cut values cut for each flat-top time a window for better histogramming.
 
@@ -225,13 +226,13 @@ Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshap
 - `max_e`: maximum energy value to consider for the fit
 - `nbins`: number of bins to use for the histogram of energy values
 - `rel_cut_fit`: relative cut value to use for the fit
-
+- `ft_fwhm_tol`: search for lowest "optimal" ft within `minimum(fwhm) + ft_fwhm_tol` to avoid artificially large ft 
 
 # Returns
 - `ft`: optimal FT value
 - `min_fwhm`: corresponding FWHM value
 """
-function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T; n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV")) where {T <:Real}
+function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T; n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.AbstractQuantity = 0.1u"keV") where {T <:Real}
     @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"
     
     # create empty array for results
@@ -301,8 +302,9 @@ function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vecto
         c = peak ./ mean(modes)
         fwhm = fwhm .* c
         # get minimal fwhm and ft
-        min_fwhm    = minimum(fwhm)
-        ft_min_fwhm = e_grid_ft[findmin(fwhm)[2]]
+        sel = findall(mvalue.(fwhm .- minimum(fwhm)) .< ft_fwhm_tol)
+        ft_min_fwhm, min_i = findmin(e_grid_ft[sel])
+        min_fwhm = fwhm[sel][min_i]
     end
     # generate result and report
     result = (
