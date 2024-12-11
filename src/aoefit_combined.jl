@@ -203,7 +203,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, v_init, [])
-    res = solve(optpro, NLopt.LN_BOBYQA(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optpro, NLopt.LN_BOBYQA(), maxiters = 5000, maxtime=5*optim_time_limit)
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
 
@@ -302,8 +302,8 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         pval = ccdf(Chisq(dof), chi2)
 
         # concatenate the normalized residuals of all individual fits
-        residuals      = vcat(getproperty.(values(report_bands), :gof), :residuals)
-        residuals_norm = vcat(getproperty.(values(report_bands), :gof), :residuals_norm)
+        residuals      = vcat(getproperty.(getproperty.(values(report_bands), :gof), :residuals)...)
+        residuals_norm = vcat(getproperty.(getproperty.(values(report_bands), :gof), :residuals_norm)...)
 
         @debug "Best Fit values"
         @debug "μA: $(v_ml.μA) ± $(v_ml_err.μA)"
@@ -312,8 +312,14 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         @debug "σB: $(v_ml.σB) ± $(v_ml_err.σB)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (gof = (converged = converged, pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
-                residuals = residuals, residuals_norm = residuals_norm),) #, bin_centers = bin_centers),)
+                (gof = (pvalue = pval,
+                    chi2 = chi2, 
+                    dof = dof, 
+                    covmat = param_covariance, 
+                    mean_residuals = mean(residuals_norm),
+                    median_residuals = median(residuals_norm),
+                    std_residuals = std(residuals_norm),
+                    converged = converged),)
                 )
     else
         @debug "Best Fit values"
