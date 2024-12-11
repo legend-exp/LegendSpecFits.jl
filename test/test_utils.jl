@@ -10,7 +10,7 @@ Sample Legend200 calibration data based on "Inverse Transform Sampling" method
 * find the value x such that  F(x) = u  by solving for  x . done by interpolation of the inverse cdf
 * repeat for many u : energy samples 
 """
-function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpecFits.th228_fit_functions.f_fit)
+function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpecFits.get_th228_fit_functions().gamma_def)
 
     th228_lines =  [583.191,  727.330,  860.564,  1592.53,    1620.50,    2103.53,    2614.51]
 
@@ -31,9 +31,9 @@ function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpe
     PeakMax             = zeros(length(th228_lines))#u"keV"
 
     for i=1:length(th228_lines)  # get fine binned model function to estimate pdf 
-        n_step = 5000 # fine binning 
-        bin_centers_all[i] = range(v[i].µ, stop=v[i].µ+30, length=n_step)
-        bw = bin_centers_all[i][2]-bin_centers_all[i][1]
+        n_step = 10000 # fine binning 
+        bin_centers_all[i] = range(v[i].µ-30, stop=v[i].µ+30, length=n_step)
+        bw = Float64(bin_centers_all[i].step)
         bin_widths = range(bw,bw, length=n_step) 
 
         # save as intermediate result 
@@ -53,7 +53,7 @@ function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpe
     for i=1:length(th228_lines)
         bandwidth = maximum(model_cdf_all[i])-minimum(model_cdf_all[i])
         rand_i = minimum(model_cdf_all[i]).+bandwidth.*rand(n_i[i]); # make sure sample is within model range 
-        interp_cdf_inv = linear_interpolation(model_cdf_all[i],bin_centers_all[i]) # inverse cdf
+        interp_cdf_inv = linear_interpolation(model_cdf_all[i], bin_centers_all[i]) # inverse cdf
         energy_mc_all[i] = interp_cdf_inv.(rand_i) 
     end
 

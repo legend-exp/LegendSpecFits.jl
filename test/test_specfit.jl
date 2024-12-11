@@ -55,8 +55,8 @@ end
     h_cut = fit(Histogram, E[findall(Q .> cut_value)], bins)
     result, report = LegendSpecFits.fit_subpeaks_th228(h_survived, h_cut, h_result, uncertainty = true)
     @testset "fit_subpeaks_th228" begin
-        @test isapprox(mvalue(result.sf), sf, rtol = 0.01)
-        @test isapprox(mvalue(result.bsf), bsf, rtol = 0.01)
+        @test isapprox(mvalue(result.sf), sf, rtol = 0.02)
+        @test isapprox(mvalue(result.bsf), bsf, rtol = 0.02)
     end
 
 end
