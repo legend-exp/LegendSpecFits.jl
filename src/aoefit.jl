@@ -222,7 +222,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, converged = converged),))
+                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, residuals = residuals, residuals_norm = residuals_norm, converged = converged),))
         report = (
             v = v_ml,
             h = h,
