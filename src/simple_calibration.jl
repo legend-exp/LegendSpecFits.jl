@@ -100,8 +100,7 @@ function get_peakhists_th228(e::Vector{<:Unitful.Energy{<:Real}}, th228_lines::V
     # get histograms around calibration lines and peakstats
     peakenergies = [ustrip.(e_unit, filter(in(peak - first(window)..peak + last(window)), e)) for (peak, window) in zip(th228_lines, window_sizes)]
     peakstats = StructArray(estimate_single_peak_stats.(peakenergies, ustrip.(e_unit, bin_widths)))
-    peakhists = [fit(Histogram, ustrip.(e_unit, e), ustrip(e_unit, peak - first(window)):ps.bin_width:ustrip(e_unit, peak + last(window))) for (peak, window, ps) in zip(th228_lines, window_sizes, peakstats)]
-
+    peakhists = [fit(Histogram, ustrip.(e_unit, e), ustrip(e_unit, peak - first(window)):ps.bin_width:ustrip(e_unit, peak + last(window))) for (peak, window, ps) in zip(Measurements.value.(th228_lines), window_sizes, peakstats)]
     peakhists, peakstats, h, peakstats.bin_width .* e_unit
 end
 export get_peakhists_th228
