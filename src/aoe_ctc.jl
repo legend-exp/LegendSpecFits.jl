@@ -108,7 +108,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     aoe_ctc = (_aoe_ctc .- μ_norm) ./ σ_norm
 
     # get cal PropertyFunctions
-    aoe_ctc_func = "( $(aoe_expression) + " * join(["$(fct[i]) * ( $(qdrift_expression) )^$(i)" for i in eachindex(fct)], " + ") * " - $(μ_norm) ) / $(σ_norm) "
+    aoe_ctc_func = "( ( $(aoe_expression) ) + " * join(["$(fct[i]) * ( $(qdrift_expression) )^$(i)" for i in eachindex(fct)], " + ") * " - $(μ_norm) ) / $(σ_norm) "
     
     # create final histograms
     h_after = fit(Histogram, aoe_ctc, -20:bin_width:3) ### hard-coded values: should include some tolerance to higher values
