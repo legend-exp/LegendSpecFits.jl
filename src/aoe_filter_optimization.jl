@@ -83,7 +83,7 @@ function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
             aoe_sep_i = flatview(aoe_sep)[i_aoe, :][isfinite.(flatview(aoe_sep)[i_aoe, :])] ./ result_sep.m_calib
             e_sep_i   = e_sep_calib[isfinite.(flatview(aoe_sep)[i_aoe, :])]
 
-            result_sep_sf, _ = get_peak_surrival_fraction(aoe_sep_i, e_sep_i, sep, sep_window, psd_cut.lowcut; uncertainty=uncertainty, fit_func=sep_cut_search_fit_func)
+            result_sep_sf, _ = get_peak_survival_fraction(aoe_sep_i, e_sep_i, sep, sep_window, psd_cut.lowcut; uncertainty=uncertainty, fit_func=sep_cut_search_fit_func)
 
             sep_sfs[i_aoe] = result_sep_sf.sf
             wls[i_aoe] = wl
@@ -98,7 +98,7 @@ function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
     sep_sfs = sep_sfs[fts_success]
     wls = wls[fts_success]
 
-    # get minimal surrival fraction and window length
+    # get minimal survival fraction and window length
     sep_sfs_cut = 1.0u"percent" .< sep_sfs .< 100u"percent"
     if isempty(sep_sfs[sep_sfs_cut])
         @error "No valid SEP SF found"

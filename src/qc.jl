@@ -10,15 +10,15 @@ function baseline_qc(data::Q, qc_config::PropDict) where Q<:Table
     # get bl mean cut
     result_blmean, report_blmean = get_centered_gaussian_window_cut(data.blmean, qc_config.blmean.min, qc_config.blmean.max, qc_config.blmean.sigma, ; n_bins_cut=convert(Int64, round(length(data) * qc_config.blmean.n_bins_fraction)), relative_cut=qc_config.blmean.relative_cut, fixed_center=false, left=true)
     blmean_qc = result_blmean.low_cut .< data.blmean .< result_blmean.high_cut
-    @debug format("Baseline Mean cut surrival fraction {:.2f}%", count(blmean_qc) / length(data) * 100)
+    @debug format("Baseline Mean cut survival fraction {:.2f}%", count(blmean_qc) / length(data) * 100)
     # get bl slope cut
     result_blslope, report_blslope = get_centered_gaussian_window_cut(data.blslope, qc_config.blslope.min, qc_config.blslope.max, qc_config.blslope.sigma, ; n_bins_cut=convert(Int64, round(length(data) * qc_config.blslope.n_bins_fraction)), relative_cut=qc_config.blslope.relative_cut, fixed_center=true, left=false, center=zero(data.blslope[1]))
     blslope_qc = result_blslope.low_cut .< data.blslope .< result_blslope.high_cut
-    @debug format("Baseline Slope cut surrival fraction {:.2f}%", count(blslope_qc) / length(data) * 100)
+    @debug format("Baseline Slope cut survival fraction {:.2f}%", count(blslope_qc) / length(data) * 100)
     # get blsigma cut
     result_blsigma, report_blsigma = get_centered_gaussian_window_cut(data.blsigma, qc_config.blsigma.min, qc_config.blsigma.max, qc_config.blsigma.sigma, ; n_bins_cut=convert(Int64, round(length(data) * qc_config.blsigma.n_bins_fraction)), relative_cut=qc_config.blsigma.relative_cut, fixed_center=false, left=true)
     blsigma_qc = result_blsigma.low_cut .< data.blsigma .< result_blsigma.high_cut
-    @debug format("Baseline Sigma cut surrival fraction {:.2f}%", count(blsigma_qc) / length(data) * 100)
+    @debug format("Baseline Sigma cut survival fraction {:.2f}%", count(blsigma_qc) / length(data) * 100)
     
     result = (blmean = result_blmean, blslope = result_blslope, blsigma = result_blsigma)
     report = (blmean = report_blmean, blslope = report_blslope, blsigma = report_blsigma)
