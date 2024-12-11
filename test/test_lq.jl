@@ -9,8 +9,8 @@ using Distributions
     # Define energy peak parameters
     DEP_µ = 1000.0u"keV"
     DEP_σ = 1.0u"keV"
-    n_peak = 5000  # Peak events
-    n_bg = n_peak ÷ 10  # Background events
+    n_peak = 50000  # Peak events
+    n_bg = div(n_peak, 10)  # Background events
 
     # Energy calibration (fixed at DEP_µ for all events)
     e_cal = vcat(fill(DEP_µ, n_peak + n_bg), fill(DEP_µ - 5* DEP_σ, n_bg ÷ 2), fill(DEP_µ + 5* DEP_σ, n_bg ÷ 2) )  # Fixed energy value for peak and background
