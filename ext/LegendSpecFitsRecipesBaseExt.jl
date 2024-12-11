@@ -127,7 +127,7 @@ end
 
 @recipe function f(report:: NamedTuple{(:wl, :min_sf, :a_grid_wl_sg, :sfs)})
     xlabel := "Window Length ($(unit(first(report.a_grid_wl_sg))))"
-    ylabel := "SEP Surrival Fraction ($(unit(first(report.sfs))))"
+    ylabel := "SEP Survival Fraction ($(unit(first(report.sfs))))"
     grid := :true
     gridcolor := :black
     gridalpha := 0.2
