@@ -19,7 +19,7 @@ Correct for the drift time dependence of A/E parameter
     * `func_generic`: generic function to correct aoe
 """
 
-function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQuantity}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.RealOrRealQuantity}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; aoe_expression::Union{Symbol, String}="aoe", e_expression::Union{Symbol, String} = "e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), pol_order::Int=1) # deleted m_cal since no calibration
+function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQuantity}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.RealOrRealQuantity}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; aoe_expression::Union{Symbol, String}="aoe", qdrift_expression::Union{Symbol, String} = "qdrift / e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), pol_order::Int=1) # deleted m_cal since no calibration
 
     # distribution compton band entries
     compton_start = ustrip.(compton_bands)
@@ -108,7 +108,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     aoe_ctc = (_aoe_ctc .- μ_norm) ./ σ_norm
 
     # get cal PropertyFunctions
-    aoe_ctc_func = "( $(aoe_expression) + " * join(["$(fct[i]) * ( qdrift / $(e_expression) )^$(i)" for i in eachindex(fct)], " + ") * " - $(μ_norm) ) / $(σ_norm) "
+    aoe_ctc_func = "( $(aoe_expression) + " * join(["$(fct[i]) * ( $(qdrift_expression) )^$(i)" for i in eachindex(fct)], " + ") * " - $(μ_norm) ) / $(σ_norm) "
     
     # create final histograms
     h_after = fit(Histogram, aoe_ctc, -20:bin_width:3) ### hard-coded values: should include some tolerance to higher values
