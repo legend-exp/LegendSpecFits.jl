@@ -18,7 +18,7 @@ Returns
 function simple_calibration end
 export simple_calibration
 
-function simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; kwargs...)
+function simple_calibration(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; kwargs...)
     # remove calib type from kwargs
     @assert haskey(kwargs, :calib_type) "Calibration type not specified"
     calib_type = kwargs[:calib_type]
@@ -26,12 +26,14 @@ function simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitf
     kwargs = pairs(NamedTuple(filter(k -> !(:calib_type in k), kwargs)))
     if calib_type == :th228
         @debug "Use simple calibration for Th228 lines"
-        return simple_calibration_th228(e_uncal, th228_lines, window_sizes,; kwargs...)
+        return simple_calibration_th228(e_uncal, gamma_lines, window_sizes,; kwargs...)
+    elseif calib_type == :gamma
+        return simple_calibration_gamma(e_uncal, gamma_lines, window_sizes,; kwargs...)
     else
         error("Calibration type not supported")
     end
 end
-simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = simple_calibration(e_uncal, th228_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
+simple_calibration(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = simple_calibration(e_uncal, gamma_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
 
 
 function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
@@ -81,7 +83,61 @@ function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<
     return result, report
 end
 
-
+"""
+    simple_calibration_gamma(e_uncal::Array, gamma_lines::Array, window_size::Float64=25.0, n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Float64=10.0, peak_quantile::ClosedInterval{<:Real} = 0.5..1.0)
+Perform a simple calibration for the uncalibrated energy array `e_uncal`
+* Find peaks within peak_quantile::ClosedInterval{<:Real} = 0.5..1.0 of the data
+* Estimate the calibration constant `c` by dividing the maximum gamma line energy by the peak guess
+* Return peakstats and peakhists of gamma lines for further calibration 
+"""
+function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV", peak_quantile::ClosedInterval{<:Real} = 0.5..1.0)
+    e_min = quantile(e_uncal, leftendpoint(peak_quantile))
+    e_max = quantile(e_uncal, rightendpoint(peak_quantile))
+    # initial binning
+    bin_width = get_friedman_diaconis_bin_width(filter(in(e_min..e_max), e_uncal))
+    # create initial peak search histogram
+    h_uncal = fit(Histogram, e_uncal, 0:bin_width:maximum(e_uncal))
+    peak_guess = if isnan(quantile_perc)
+        h_peaksearch = fit(Histogram, e_uncal, e_min:bin_width:e_max)
+        # search all possible peak candidates
+        h_decon, peakpos = RadiationSpectra.peakfinder(h_peaksearch, σ=2.0, backgroundRemove=true, threshold=10)
+        # the FEP is the most prominent peak in the deconvoluted histogram
+        peakpos_idxs = StatsBase.binindex.(Ref(h_decon), peakpos)
+        # cts_peakpos = h_decon.weights[peakpos_idxs]
+        # @info "cts_peakpos: $cts_peakpos, peakpos $peakpos, peak_guess $(peakpos[argmax(cts_peakpos)]) "
+        # peakpos[argmax(cts_peakpos)]
+        maximum(peakpos)
+    else
+        quantile(e_uncal, quantile_perc)
+    end
+    # get calibration constant for simple calibration
+    c = maximum(gamma_lines) / peak_guess
+    e_simple = e_uncal .* c
+    e_unit = u"keV"
+    # get peakhists and peakstats
+    peakhists, peakstats, h_calsimple, bin_widths = get_peakhists_th228(e_simple, gamma_lines, window_sizes; binning_peak_window=binning_peak_window, e_unit=e_unit)
+    
+    result = (
+        h_calsimple = h_calsimple, 
+        h_uncal = h_uncal, 
+        c = c,
+        unit = e_unit,
+        bin_width = median(bin_widths),
+        peak_guess = peak_guess,
+        peakbinwidths = bin_widths,
+        peakhists = peakhists,
+        peakstats = peakstats
+        )
+    report = (
+        h_calsimple = result.h_calsimple,
+        h_uncal = result.h_uncal,
+        c = result.c,
+        peak_guess = result.peak_guess,
+        peakhists = result.peakhists,
+        peakstats = result.peakstats
+    )
+    return result, report
+end
 """
     get_peakhists_th228(e::Array, th228_lines::Array, window_sizes::Array, e_unit::String="keV", proxy_binning_peak::Float64=2103.5, proxy_binning_peak_window::Float64=10.0)
 
