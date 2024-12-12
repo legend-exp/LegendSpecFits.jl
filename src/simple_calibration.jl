@@ -97,21 +97,20 @@ function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<
     bin_width = get_friedman_diaconis_bin_width(filter(in(e_min..e_max), e_uncal))
     # create initial peak search histogram
     h_uncal = fit(Histogram, e_uncal, 0:bin_width:maximum(e_uncal))
-    peak_guess = if isnan(quantile_perc)
+    peak_guess, peak_idx = if isnan(quantile_perc)
         h_peaksearch = fit(Histogram, e_uncal, e_min:bin_width:e_max)
         # search all possible peak candidates
         h_decon, peakpos = RadiationSpectra.peakfinder(h_peaksearch, σ=2.0, backgroundRemove=true, threshold=10)
-        # the FEP is the most prominent peak in the deconvoluted histogram
+        # find the most prominent peak in the deconvoluted histogram
         peakpos_idxs = StatsBase.binindex.(Ref(h_decon), peakpos)
-        # cts_peakpos = h_decon.weights[peakpos_idxs]
-        # @info "cts_peakpos: $cts_peakpos, peakpos $peakpos, peak_guess $(peakpos[argmax(cts_peakpos)]) "
-        # peakpos[argmax(cts_peakpos)]
-        maximum(peakpos)
+        cts_peakpos = h_decon.weights[peakpos_idxs]
+        peakpos[argmax(cts_peakpos)], argmax(cts_peakpos)
     else
-        quantile(e_uncal, quantile_perc)
+        quantile(e_uncal, quantile_perc), length(gamma_lines)
     end
+    @info "Identified most prominent peak (peak $(peak_idx), $(gamma_lines[peak_idx])). Peak guess: $peak_guess"
     # get calibration constant for simple calibration
-    c = maximum(gamma_lines) / peak_guess
+    c = gamma_lines[peak_idx] / peak_guess
     e_simple = e_uncal .* c
     e_unit = u"keV"
     # get peakhists and peakstats
