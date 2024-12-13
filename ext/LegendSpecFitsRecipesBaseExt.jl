@@ -1275,7 +1275,7 @@ end
 
 # recipe for the lq_drift_time_correction report
 
-@recipe function f(report::NamedTuple{(:lq_prehist, :lq_report, :drift_prehist, :drift_report, :lq_box, :drift_time_func, :DEP_left, :DEP_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
+@recipe function f(report::NamedTuple{(:lq_report, :drift_prehist, :drift_report, :lq_box, :drift_time_func, :DEP_left, :DEP_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
 
     # Extract data from the report
     DEP_left = report.DEP_left
@@ -1390,7 +1390,7 @@ end
         # 2D histogram for LQ Cut
         xlabel := "Energy"
         ylabel := "LQ (A.U.)"
-        nbins := (0:6:3000, -2.0:0.012:4.0)
+        nbins := (0:6:3000, -0.1:0.0006:0.2)
         colorbar_scale := :log10
         color := :viridis
         legend := :bottomright

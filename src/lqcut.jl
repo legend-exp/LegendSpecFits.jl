@@ -1,54 +1,46 @@
 """
-    lq_norm::Vector{Float64}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
-    DEP_edgesigma::Float64=3.0 , mode::Symbol=:percentile, drift_cutoff_sigma::Float64 = 2.0, prehist_sigma::Float64=2.5, e_expression::Union{String,Symbol}="e", dt_eff_low_quantile::Float64=0.15, dt_eff_high_quantile::Float64=0.95)
+    lq_norm::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
+    ctc_dep_edgesigma::Float64=3.0 , ctc_driftime_cutoff_method::Symbol=:percentile, lq_outlier_sigma::Float64 = 2.0, drift_time_outlier_sigma::Float64 = 2.0, prehist_sigma::Float64=2.5, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) 
 
 Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a linear fit on the remaining data. The data is Corrected by subtracting the linear fit from the lq data.
 # Returns
     * `result`: NamedTuple of the function used for lq classifier construction
     * `report`: NamedTuple of the histograms used for the fit, the cutoff values and the DEP edges
 """
-function lq_drift_time_correction(
+function lq_ctc_correction(
     lq_norm::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
-    DEP_edgesigma::Float64=3.0 , mode::Symbol=:percentile, drift_cutoff_sigma::Float64 = 2.0, prehist_sigma::Float64=2.5, e_expression::Union{String,Symbol}="e", dt_eff_low_quantile::Float64=0.15, dt_eff_high_quantile::Float64=0.95)
-
-    # get energy units to remve later
-    e_unit = unit(first(e_cal))
+    ctc_dep_edgesigma::Float64=3.0 , ctc_driftime_cutoff_method::Symbol=:percentile, lq_outlier_sigma::Float64 = 2.0, drift_time_outlier_sigma::Float64 = 2.0, prehist_sigma::Float64=2.5, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) 
 
     # calculate DEP edges
-    DEP_left = DEP_µ - DEP_edgesigma * DEP_σ
-    DEP_right = DEP_µ + DEP_edgesigma * DEP_σ
+    DEP_left = DEP_µ - ctc_dep_edgesigma * DEP_σ
+    DEP_right = DEP_µ + ctc_dep_edgesigma * DEP_σ
 
     # cut data to DEP peak
     lq_DEP = lq_norm[DEP_left .< e_cal .< DEP_right]
     dt_eff_DEP = ustrip.(dt_eff[DEP_left .< e_cal .< DEP_right])
 
-    # Calculate range to truncate lq data for outlier removal
-    ideal_bin_width = get_friedman_diaconis_bin_width(lq_DEP)
-    lq_prehist = fit(Histogram, lq_DEP, range(minimum(lq_DEP), maximum(lq_DEP), step=ideal_bin_width))
-    lq_prestats = estimate_single_peak_stats(lq_prehist)
-    lq_start = lq_prestats.peak_pos - prehist_sigma * lq_prestats.peak_sigma
-    lq_stop = lq_prestats.peak_pos + prehist_sigma * lq_prestats.peak_sigma
+    lq_precut = cut_single_peak(lq_DEP, minimum(lq_DEP), maximum(lq_DEP))
 
     # truncated gaussian fit
-    lq_result, lq_report = fit_single_trunc_gauss(lq_DEP, (low=lq_start, high=lq_stop, max=NaN))
+    lq_result, lq_report = fit_single_trunc_gauss(lq_DEP, lq_precut)
     µ_lq = mvalue(lq_result.μ)
     σ_lq = mvalue(lq_result.σ)
 
     #set cutoff in lq dimension for later fit
-    lq_lower = µ_lq - drift_cutoff_sigma * σ_lq 
-    lq_upper = µ_lq + drift_cutoff_sigma * σ_lq 
+    lq_lower = µ_lq - lq_outlier_sigma * σ_lq 
+    lq_upper = µ_lq + lq_outlier_sigma * σ_lq 
 
 
     # dt_eff_DEP cutoff; method dependant on detector type
     
-    if mode == :percentile # standard method; can be used for all detectors
+    if ctc_driftime_cutoff_method == :percentile # standard method; can be used for all detectors
         #set cutoff; default at the 15% and 95% percentile
-        t_lower = quantile(dt_eff_DEP, dt_eff_low_quantile)
-        t_upper = quantile(dt_eff_DEP, dt_eff_high_quantile)
+        t_lower = quantile(dt_eff_DEP, ctc_dt_eff_low_quantile)
+        t_upper = quantile(dt_eff_DEP, ctc_dt_eff_high_quantile)
         drift_prehist = nothing
         drift_report = nothing
 
-    elseif mode == :gaussian # can't be used for detectors with double peaks
+    elseif ctc_driftime_cutoff_method == :gaussian # can't be used for detectors with double peaks
         
         ideal_bin_width = get_friedman_diaconis_bin_width(dt_eff_DEP)
 
@@ -65,10 +57,10 @@ function lq_drift_time_correction(
         σ_t = mvalue(drift_result.σ)
 
         #set cutoff in drift time dimension for later fit
-        t_lower = µ_t - drift_cutoff_sigma * σ_t
-        t_upper = µ_t + drift_cutoff_sigma * σ_t
+        t_lower = µ_t - drift_time_outlier_sigma * σ_t
+        t_upper = µ_t + drift_time_outlier_sigma * σ_t
 
-    elseif mode == :double_gaussian # can be used for detectors with double peaks; not optimized yet
+    elseif ctc_driftime_cutoff_method == :double_gaussian # can be used for detectors with double peaks; not optimized yet
         #create histogram for drift time
         ideal_length = get_number_of_bins(dt_eff_DEP)
         drift_prehist = fit(Histogram, dt_eff_DEP, range(minimum(dt_eff_DEP), stop=maximum(dt_eff_DEP), length=ideal_length))
@@ -88,7 +80,7 @@ function lq_drift_time_correction(
         t_lower = minimum(x_at_threshold)
         t_upper = maximum(x_at_threshold)
     else
-        error("Mode $mode not supported")
+        error("Driftime cutoff method $ctc_driftime_cutoff_method not supported")
     end
 
     #store cutoff values in box to return later    
@@ -98,13 +90,13 @@ function lq_drift_time_correction(
     lq_cut = lq_DEP[lq_lower .< lq_DEP .< lq_upper .&& t_lower .< dt_eff_DEP .< t_upper]
     t_cut = dt_eff_DEP[lq_lower .< lq_DEP .< lq_upper .&& t_lower .< dt_eff_DEP .< t_upper]
 
-    #linear fit
-    result_µ, report_µ = chi2fit(1, t_cut, lq_cut; uncertainty=true)
-    parameters = mvalue(result_µ.par)
-    drift_time_func(x) = parameters[1] .+ parameters[2] .* x
+    #polynomial fit
+    result_µ, report_µ = chi2fit(pol_fit_order, t_cut, lq_cut; uncertainty=true)
+    par = mvalue(result_µ.par)
+    drift_time_func(x) =  sum((mvalue(par[i])) * x^(i-1) for i in eachindex(par))
 
     #property function for drift time correction
-    lq_class_func = "(lq / ($(e_expression))$(e_unit)^-1) - ($(parameters[2]) * (qdrift / ($(e_expression))$(e_unit)^-1) + $(parameters[1]))"  # removes the units to get unitless lq classifier
+    lq_class_func = "$lq_e_corr_expression - " * join(["$(mvalue(par[i])) * $dt_eff_expression^$(i-1)" for i in eachindex(par)], " - ")
     lq_class_func_generic = "lq / e  - (slope * qdrift / e + y_inter)"
 
     #create result and report
@@ -114,7 +106,6 @@ function lq_drift_time_correction(
     )
 
     report = (
-    lq_prehist = lq_prehist, 
     lq_report = lq_report, 
     drift_prehist = drift_prehist, 
     drift_report = drift_report,
@@ -127,23 +118,23 @@ function lq_drift_time_correction(
 
     return result, report
 end
-export lq_drift_time_correction
+export lq_ctc_correction
 
 """
-    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{Float64}; cut_sigma::Float64=3.0, truncation_sigma::Float64=2.0)
+    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=2.0)
 
 Evaluates the cutoff value for the LQ cut. The function performs a binned gaussian fit on the sidebandsubtracted LQ histogram and evaluates the cutoff value difined at 3σ of the fit.
 # Returns
     * `result`: NamedTuple of the cutoff value
     * `report`: NamedTuple of the fit result, fit report and temporary histograms
 """
-function LQ_cut(
-    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, truncation_sigma::Float64=2.0)
+function lq_cut(
+    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=2.0)
 
     # Define sidebands
-    lq_DEP = lq_classifier[DEP_µ - 4.5 * DEP_σ .< e_cal .< DEP_µ + 4.5 * DEP_σ]
-    lq_sb1 = lq_classifier[DEP_µ -  2 * 4.5 * DEP_σ .< e_cal .< DEP_µ - 4.5 * DEP_σ]
-    lq_sb2 = lq_classifier[DEP_µ + 4.5 * DEP_σ .< e_cal .< DEP_µ + 2 * 4.5 * DEP_σ]
+    lq_DEP = lq_classifier[DEP_µ - dep_sideband_sigma * DEP_σ .< e_cal .< DEP_µ + dep_sideband_sigma * DEP_σ]
+    lq_sb1 = lq_classifier[DEP_µ -  2 * dep_sideband_sigma * DEP_σ .< e_cal .< DEP_µ - dep_sideband_sigma * DEP_σ]
+    lq_sb2 = lq_classifier[DEP_µ + dep_sideband_sigma * DEP_σ .< e_cal .< DEP_µ + 2 * dep_sideband_sigma * DEP_σ]
     
     # Generate values for histogram edges
     combined = [lq_DEP; lq_sb1; lq_sb2]
@@ -168,8 +159,10 @@ function LQ_cut(
 
     #get truncate values for fit; needed if outliers are present after in sideband subtracted histogram
     lq_prestats = estimate_single_peak_stats(hist_corrected)
-    lq_start = lq_prestats.peak_pos - truncation_sigma * lq_prestats.peak_sigma
-    lq_stop = lq_prestats.peak_pos + truncation_sigma * lq_prestats.peak_sigma
+    lq_start = lq_prestats.peak_pos - cut_truncation_sigma * lq_prestats.peak_sigma
+    lq_stop = lq_prestats.peak_pos + cut_truncation_sigma * lq_prestats.peak_sigma
+
+    #simplecuts benutzen
 
     # Fit the sideband subtracted histogram
     fit_result, fit_report = fit_binned_trunc_gauss(hist_corrected, (low=lq_start, high=lq_stop, max=NaN))
@@ -190,4 +183,4 @@ function LQ_cut(
 
     return result, report
 end
-export LQ_cut
+export lq_cut
