@@ -194,7 +194,11 @@ export fit_single_peak_th228
 calculate centroid of gamma peak from fit parameters
 """
 function peak_centroid(v::NamedTuple)
-    centroid = v.μ - v.skew_fraction * (v.µ * v.skew_width)
+    if haskey(v, :skew_fraction)
+        centroid = v.μ - v.skew_fraction * (v.µ * v.skew_width)
+    else
+        centroid = v.μ
+    end
     if haskey(v, :skew_fraction_highE)
         centroid += v.skew_fraction_highE * (v.µ * v.skew_width_highE)
     end
@@ -208,31 +212,34 @@ Get the FWHM of a peak from the fit parameters.
 # Returns
     * `fwhm`: the FWHM of the peak
 """
-function estimate_fwhm(v::NamedTuple)
-    
-    f_sigWithTail = Base.Fix2(get_th228_fit_functions().gamma_sigWithTail,v)
-    try
-        e_low, e_high = v.skew_fraction <= 0.5 ? (v.μ - v.σ, v.μ + v.σ) : (v.μ * (1 - v.skew_width), v.μ * (1 + v.skew_width))
-        
-        max_sig = -Inf
-        for e in e_low:0.001:e_high
-            fe = f_sigWithTail(e)
-            if fe > max_sig
-                max_sig = fe
-            else
-                # if the maximum is reached,
-                # no need to further continue
-                break
+function estimate_fwhm(v::NamedTuple) 
+    if haskey(v, :skew_fraction)
+        f_sigWithTail = Base.Fix2(get_th228_fit_functions().gamma_sigWithTail,v)
+        try
+            e_low, e_high = v.skew_fraction <= 0.5 ? (v.μ - v.σ, v.μ + v.σ) : (v.μ * (1 - v.skew_width), v.μ * (1 + v.skew_width))
+            
+            max_sig = -Inf
+            for e in e_low:0.001:e_high
+                fe = f_sigWithTail(e)
+                if fe > max_sig
+                    max_sig = fe
+                else
+                    # if the maximum is reached,
+                    # no need to further continue
+                    break
+                end
             end
+            half_max_sig = max_sig/2
+            
+            tmp = x -> f_sigWithTail(x) - half_max_sig
+            roots_low = find_zero(tmp, e_low, maxiter=100)
+            roots_high = find_zero(tmp, e_high, maxiter=100)
+            return roots_high - roots_low
+        catch
+            return NaN
         end
-        half_max_sig = max_sig/2
-        
-        tmp = x -> f_sigWithTail(x) - half_max_sig
-        roots_low = find_zero(tmp, e_low, maxiter=100)
-        roots_high = find_zero(tmp, e_high, maxiter=100)
-        return roots_high - roots_low
-    catch
-        return NaN
+    else
+        return 2 * sqrt(2 * log(2)) * v.σ
     end
 end
 """

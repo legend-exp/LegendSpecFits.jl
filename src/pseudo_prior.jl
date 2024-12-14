@@ -33,6 +33,8 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
         NamedTupleDist(; μ, σ, n, skew_fraction, skew_width, background, step_amplitude, background_slope)
     elseif fit_func == :gamma_bckExp
         NamedTupleDist(; μ, σ, n, skew_fraction, skew_width, background, step_amplitude, background_exp)
+    elseif fit_func == :gamma_minimal
+        NamedTupleDist(; μ, σ, n, background)
     else
         throw(ArgumentError("Unknown fit function: $fit_func"))
     end
