@@ -490,6 +490,41 @@ end
     end
 end
 
+@recipe function f(report::NamedTuple{(:h_calsimple, :h_uncal, :c, :peak_guess, :peakhists, :peakstats)}; cal=true)
+    ylabel := "Counts"
+    legend := :topright
+    yscale := :log10
+    fill := false
+    if cal
+        h = LinearAlgebra.normalize(report.h_calsimple, mode = :density)
+        xlabel := "Energy (keV)"
+        xlims := (0, 3000)
+        xticks := (0:500:3000, ["$i" for i in 0:500:3000])
+        ylims := (0.2, maximum(h.weights)*1.1)
+        peak_guess = ustrip(report.c * report.peak_guess)
+    else
+        h = LinearAlgebra.normalize(report.h_uncal, mode = :density)
+        xlabel := "Energy (ADC)"
+        xlims := (0, 1.2*report.peak_guess)
+        xticks := (0:3000:1.2*report.peak_guess, ["$i" for i in 0:3000:1.2*report.peak_guess])
+        ylims := (0.2, maximum(h.weights)*1.1)
+        peak_guess = report.peak_guess
+    end
+    @series begin
+        seriestype := :stepbins
+        label := "Energy"
+        h
+    end
+    y_vline = 0.2:1:maximum(h.weights)*1.1
+    @series begin
+        seriestype := :line
+        label := "Peak guess"#: $(round(peak_guess, digits = 1))"
+        color := :red2
+        linewidth := 1.5
+        fill(peak_guess, length(y_vline)), y_vline
+    end
+end
+
 @recipe function f(report::NamedTuple{(:peakpos, :peakpos_cal, :h_uncal, :h_calsimple)}; cal=true)
     legend := :topright
     size := (1000, 600)
@@ -820,7 +855,8 @@ end
         if plot_ribbon
             ribbon := uncertainty.(report.f_fit.(0:1:1.2*value(maximum(report.x))))
         end
-        0:1:1.2*value(maximum(report.x)), value.(report.f_fit.(0:1:1.2*value(maximum(report.x))))
+        xstep = value(maximum(report.x))/100
+        0:xstep:1.2*value(maximum(report.x)), value.(report.f_fit.(0:xstep:1.2*value(maximum(report.x))))
     end
     @series begin
         seriestype := :scatter
