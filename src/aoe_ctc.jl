@@ -5,18 +5,37 @@
 """
 ## TO DO: Still needs to be updated once finalized
 
-    ctc_aoe(aoe_all::Array{T}, ecal_all::Array{T}, qdrift_e_all::Array{T}, compton_bands::Array{T}, peak::T, window::T) where T<:Real
+    ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQuantity}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.RealOrRealQuantity}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; aoe_expression::Union{Symbol, String}="aoe", qdrift_expression::Union{Symbol, String} = "qdrift / e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), pol_order::Int=1)
 
 Correct for the drift time dependence of A/E parameter
 
-# Returns (but may change):
+
+# Arguments 
+    * `aoe_all`: All A/E values
+    * `ecal_all`: All calibrated energies
+    * `qdrift_e_all`: All charge drift energy
+    * `compton_bands`: Compton bands
+    * `peak`: Peak position
+    * `window`: Window size
+    * `hist_start`: Histogram start position
+    * `hist_end`: Histogram end position
+    * `bin_width`: Bin width
+
+# Keywords
+    * `aoe_expression`: A/E expression
+    * `qdrift_expression`: Charge drift expression
+    * `pseudo_prior`: Pseudo prior
+    * `peudo_prior_all`: All pseudo priors
+    * `pol_order`: Polynomial order
+
+# Returns 
     * `peak`: peak position
     * `window`: window size
+    * `func`: function to correct aoe
     * `fct`: correction factor
     * `σ_before`: σ before correction
     * `σ_after`: σ after correction
-    * `func`: function to correct aoe
-    * `func_generic`: generic function to correct aoe
+    * `converged`: Convergence status of the fit
 """
 
 function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQuantity}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.RealOrRealQuantity}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; aoe_expression::Union{Symbol, String}="aoe", qdrift_expression::Union{Symbol, String} = "qdrift / e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), pol_order::Int=1) # deleted m_cal since no calibration

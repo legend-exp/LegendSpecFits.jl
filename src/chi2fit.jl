@@ -1,18 +1,32 @@
 
 """
-    fit_chisq(x::AbstractVector{<:Real},y::AbstractVector{<:Real},yerr::AbstractVector{<:Real}, f_fit::Function;pull_t::Vector{<:NamedTuple} = fill(NamedTuple(), first(methods(f_fit)).nargs - 2), v_init::Vector = [])
-Least square fit with chi2 minimization
-# Input:
-- x : x-values
-- y : y-values
-- yerr : 1 sigma uncertainty on y
-- f_fit : fit/model function. e.g. for a linear function: f_lin(x,p1,p2)  = p1 .* x .+ p2   
-The numer of fit parameter is determined with `first(methods(f_fit)).nargs - 2`. That's why it's important that f_fit has the synthax f(x,arg1,arg2,arg3,...)
-pull_t : pull term, a vector of NamedTuple with fields `mean` and `std`. A Gaussian pull term is added to the chi2 function to account for systematic uncertainties. If left blank, no pull term is used.
-v_init : initial value for fit parameter optimization. If left blank, the initial value is set to 1 or guessed roughly for all fit parameters
-# Return:
-- result : NamedTuple with the optimized fit parameter and the fit function
-- report: 
+    chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}}; 
+                    pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), first(methods(f_fit)).nargs - 2), 
+                    v_init::Vector{<:Real} = ones(length(pull_t)),
+                    lower_bound::Vector{<:Real}=fill(-Inf, length(pull_t)),
+                    upper_bound::Vector{<:Real}=fill(Inf, length(pull_t)),
+                    pseudo_prior::Union{ContinuousMultivariateDistribution, Nothing}=nothing,
+                    uncertainty::Bool=true)
+
+Least square fit with chi2 minimization.
+
+
+# Arguments
+    * `f_fit`:
+    * `x`: x-values
+    * `y`: y-values
+    * `yerr`: 1 sigma uncertainty on y
+
+# Keywords
+    * `pull_t`: pull term, a vector of NamedTuple with fields `mean` and `std`. A Gaussian pull term is added to the chi2 function to account for systematic uncertainties. If left blank, no pull term is used.
+    * `v_init`: initial value for fit parameter optimization. If left blank, the initial value is set to 1 or guessed roughly for all fit parameters
+    * `lower_bound`: lower bound of fit
+    * `upper_bound`: upper bound of fit
+    * `pseudo_prior`: Pseudo priors
+    * `uncertainty`: Chi2 uncertainty
+
+# Returns
+    * `result`: NamedTuple with the optimized fit parameter and the fit function
 
 """ 
 function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}}; 

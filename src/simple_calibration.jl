@@ -1,5 +1,5 @@
 """
-    simple_calibration(e_uncal::Array, th228_lines::Array, window_size::Float64=25.0, n_bins::Int=15000, calib_type::String="th228")
+    simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; kwargs...)
 
 
 Perform a simple calibration for the uncalibrated energy array `e_uncal` 
@@ -7,13 +7,14 @@ using the calibration type `calib_type` and the calibration lines `th228_lines`.
 The window size is the size of the window around the calibration line to use for the calibration. 
 The number of bins is the number of bins to use for the histogram.
 
-Returns 
-    * `h_calsimple`: histogram of the calibrated energy array
-    * `h_uncal`: histogram of the uncalibrated energy array
-    * `c`: calibration factor
-    * `fep_guess`: estimated full energy peak (FEP)
-    * `peakhists`: array of histograms around the calibration lines
-    * `peakstats`: array of statistics for the calibration line fits
+# Arguments
+    * `e_uncal`: Uncalibrated energy
+    * `th228_lines`: Calibration lines
+    * `window_sizes`: size of the window around the calibration line to use for the calibration
+
+# Returns 
+    * `simple_calibration_th228` function
+
 """
 function simple_calibration end
 export simple_calibration
@@ -33,6 +34,36 @@ function simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitf
 end
 simple_calibration(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = simple_calibration(e_uncal, th228_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
 
+"""
+    simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
+
+Perform a simple calibration for the uncalibrated energy array `e_uncal` 
+using the calibration lines `th228_lines`. 
+The window size is the size of the window around the calibration line to use for the calibration. 
+The number of bins is the number of bins to use for the histogram.
+
+# Arguments
+    * `e_uncal`: Uncalibrated energy
+    * `th228_lines`: Calibration lines
+    * `window_sizes`: Size of the window around the calibration line to use for the calibration
+    
+# Keywords
+    * `n_bins`: number of histogram bins
+    * `quantile_perc`: Quantile percentage
+    * `binning_peak_window`: Binning peak window
+
+# Returns
+    * `h_calsimple`: histogram of the calibrated energy array
+    * `h_uncal`: histogram of the uncalibrated energy array
+    * `c`: Calibration factor
+    * `fep_guess`: estimated full energy peak (FEP)
+    * `peakhists`: array of histograms around the calibration lines
+    * `peakstats`: array of statistics for the calibration line fits
+    * `peakbinwidths`: Bin widths
+    * `unit`: Energy units 
+    * `bin_width`: Median of bin widths
+
+"""
 
 function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
     # initial binning
@@ -83,12 +114,24 @@ end
 
 
 """
-    get_peakhists_th228(e::Array, th228_lines::Array, window_sizes::Array, e_unit::String="keV", proxy_binning_peak::Float64=2103.5, proxy_binning_peak_window::Float64=10.0)
+    get_peakhists_th228(e::Vector{<:Unitful.Energy{<:Real}}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; e_unit::Unitful.EnergyUnits=u"keV", binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
 
 Create histograms around the calibration lines and return the histograms and the peak statistics.
+
+# Arguments
+    * `e`: Calibrated energy
+    * `th228_lines`: Calibration lines
+    * `window_sizes`: Histogram window sizes
+
+# Keywords
+    * `e_unit`: Energy units
+    * `binning_peak_window`: Binning peak window
+
 # Returns
-    * `peakhists`: array of histograms around the calibration lines
+    * `peakhists`: Histograms around the calibration lines
     * `peakstats`: array of statistics for the calibration line fits
+    * `h`: Histogram
+
 """
 function get_peakhists_th228(e::Vector{<:Unitful.Energy{<:Real}}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; e_unit::Unitful.EnergyUnits=u"keV", binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
     # get optimal binning for simple calibration

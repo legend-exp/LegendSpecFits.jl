@@ -30,9 +30,22 @@ function get_th228_fit_functions(; background_center::Union{Real,Nothing} = noth
 end
 
 """
-    peakshape_components(fit_func::Symbol; background_center::Real) 
+    peakshape_components(fit_func::Symbol; background_center::Union{Real,Nothing} = nothing) 
 This function defines the components (signal, low/high-energy tail, backgrounds) of the fit function used in gamma specfits. 
 These component functions are used in the fit-report and in plot receipes 
+
+# Arguments
+    * `fit_func`: Fitted function
+
+# Keywords
+    * `background_center`: Center of background fit curve
+
+# Returns
+    * `funcs`: Functions
+    * `labels`: Function labels
+    * `colors`: Fit color
+    * `linestyles`: Fit linestyles
+
 """
 function peakshape_components(fit_func::Symbol; background_center::Union{Real,Nothing} = nothing)
     if fit_func == :gamma_def
@@ -68,6 +81,24 @@ function peakshape_components(fit_func::Symbol; background_center::Union{Real,No
     return (funcs = funcs, labels = labels, colors = colors, linestyles = linestyles) 
 end
 
+"""
+    peakshape_components(fit_func::Symbol, v::NamedTuple; background_center::Union{Real,Nothing} = v.μ)
+
+This function defines the components (signal, low/high-energy tail, backgrounds) of the fit function used in gamma specfits. 
+These component functions are used in the fit-report and in plot receipes.
+
+# Arguments
+    * `fit_func`: Fitted function
+    * `v`:  namedTuple of fit parameters
+
+# Keywords
+    *`background_center`: Center of background fit curve
+
+# Returns
+    * `out`: Peakshape components
+
+TO DO: argument descriptions
+"""
 function peakshape_components(fit_func::Symbol, v::NamedTuple; background_center::Union{Real,Nothing} = v.μ)
     components  = peakshape_components(fit_func; background_center = background_center)
     out = (; components..., funcs = merge([NamedTuple{Tuple([name])}(Tuple([x -> Base.Fix2(components.funcs[name], v)(x)]))  for name in  keys(components.funcs)]...))

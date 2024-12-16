@@ -1,3 +1,21 @@
+
+"""
+    get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; low_e_tail::Bool=true, fixed_position::Bool=false) where T<:Real
+
+Gets standard pseudo prior of given histogram.
+
+# Arguments
+    * `h`: Histogram data
+    * `ps`: Peak statistics
+
+# Keywords
+    * `low_e_tail`: Low energy tail
+    * `fixed_position`: Boolean that determines if histogram position is fixed or not
+
+# Returns
+    * `pprior_base`: Base pseudo prior
+
+"""
 function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; low_e_tail::Bool=true, fixed_position::Bool=false) where T<:Real
     # base priors common with all functions
     window_left = ps.peak_pos - minimum(h.edges[1])
@@ -38,6 +56,24 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
     end
 end
 
+"""
+    get_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), kwargs...) where T<:Real
+
+Gets the pseudo prior of the histogram.
+
+# Arguments
+    * `h`: histogram data
+    * `ps`: Peak statistics
+    * `fit_func`: Fit function
+    
+# Keywords
+    * `pseudo_prior`: Pseudo prior
+
+# Returns
+    * `pseudo_prior`: Pseudo prior of histogram
+
+"""
+
 function get_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}, fit_func::Symbol; pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), kwargs...) where T<:Real
     standard_pseudo_prior = get_standard_pseudo_prior(h, ps, fit_func; kwargs...)
     # use standard priors in case of no overwrites given
@@ -51,6 +87,29 @@ function get_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :
         standard_pseudo_prior
     end
 end
+
+"""
+    get_subpeaks_pseudo_prior(h_survived::Histogram, h_cut::Histogram, ps::NamedTuple, fit_func::Symbol; 
+                        pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), low_e_tail::Bool=true, 
+                        fix_σ::Bool=true, fix_skew_fraction::Bool=true, fix_skew_width::Bool=true)
+
+Gets the subpeak pseudo priors.
+
+# Arguments
+    * `h_survived`: Histogram that survived the cut
+    * `h_cut`: Cut histogram
+    * `ps`: Peak statistics
+    * `fit_func`: Fitted function
+
+# Keywords
+    * `pseudo_prior`: Pseudo priors
+    * `low_e_tail`: Low energy tail
+    * `fix_σ`: Boolean that determines if the standard deviation is fixed
+    * `fix_skew_fraction`: Boolean that determines if the skew fraction is fixed
+    * `fix_skew_width`: Boolean that determines if the skew width is fixed
+
+
+"""
 
 
 function get_subpeaks_pseudo_prior(h_survived::Histogram, h_cut::Histogram, ps::NamedTuple, fit_func::Symbol; 
@@ -139,6 +198,16 @@ function get_subpeaks_pseudo_prior(h_survived::Histogram, h_cut::Histogram, ps::
     end
 end
 
+"""
+    get_subpeaks_v_ml(v::NamedTuple, fit_func::Symbol)
+
+Gets the best fit parameters of subpeaks.
+
+# Arguments
+    * `v`: Fit parameters
+    * `fit_func`: Fit function
+
+"""
 
 function get_subpeaks_v_ml(v::NamedTuple, fit_func::Symbol)
     if fit_func == :gamma_def

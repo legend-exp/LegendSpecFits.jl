@@ -1,13 +1,23 @@
 """
-    fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Real,Measurement{<:Real}}}, peaks::AbstractVector{<:Union{Real,Measurement{<:Real}}}; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), pol_order+1), v_init::Vector = [], uncertainty::Bool=true )
+    fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e", m_cal_simple::Union{MaybeWithEnergyUnits, Nothing} = nothing, uncertainty::Bool=true)
+
 Fit the calibration lines with polynomial function of pol_order order
     pol_order == 1 -> linear function
     pol_order == 2 -> quadratic function
+    
+# Arguments
+    * `pol_order`: Polynomial function order
+    * `µ`: Mean values 
+    * `peaks`: Data peaks
+
+# Keywords
+    * `e_expression`: Energy expression
+    * `m_cal_simple`: Simple calibration factor
+    * `uncertainty`: Boolean that determines if uncertainty is included or not
+
 # Returns
-    * `result`: NamedTuple with the following fields
-        * `par`: best-fit parameters
-        * `gof`: godness of fit
-    * `report`: 
+    * Best fit results along with function, function error, mean values and data peaks. 
+
 """
 function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e", m_cal_simple::Union{MaybeWithEnergyUnits, Nothing} = nothing, uncertainty::Bool=true)
     @assert length(peaks) == length(μ) "Number of calibration points does not match the number of energies"
@@ -59,6 +69,17 @@ function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.Real
     return result, report
 end
 export fit_calibration
+
+"""
+    get_fit_calibration_pseudo_prior(pol_order::Int, m_cal_simple::Real)
+
+# Arguments
+    * `pol_order`: Polynomial order
+    * `m_cal_simple`: Simple calibration factor
+
+    TO DO: function description
+"""
+
 
 function get_fit_calibration_pseudo_prior(pol_order::Int, m_cal_simple::Real)
     unshaped(if pol_order == 0

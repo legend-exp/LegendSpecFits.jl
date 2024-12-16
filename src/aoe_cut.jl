@@ -4,8 +4,21 @@
 
 Get the survival fraction after a AoE cut value `aoe_cut` for a given `peak` and `window` size from a combined fit to the survived and cut histograms.
 
+# Arguments
+    * `aoe_cut`: A/E cut value
+    * `aoe`: A/E
+    * `e`: Calibrated energies
+    * `peak`: Peak position
+    * `window`: Data window in energy
+    * `bin_width`: Histogram bin widths
+    * `result_before`: Survival fraction before A/E cut
+
+# Keywords
+    * `uncertainty`: Uncertainty of survival fraction 
+    * `fit_func`: Fit function
+
 # Returns
-- `sf`: Survival fraction after the cut
+    * `result.sf`: Survival fraction after the cut
 """
 function get_sf_after_aoe_cut(aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple; uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
     # get energy after cut and create histogram
@@ -25,12 +38,35 @@ export get_sf_after_aoe_cut
             cut_search_interval::Tuple{<:Unitful.RealOrRealQuantity, <:Unitful.RealOrRealQuantity}=(-25.0*unit(first(aoe)), 1.0*unit(first(aoe))), 
             bin_width_window::T=3.0u"keV", max_e_plot::T=3000.0u"keV",  plot_window::Vector{<:T}=[12.0, 50.0]u"keV",
             fixed_position::Bool=true, fit_func::Symbol=:gamma_def, uncertainty::Bool=true) where T<:Unitful.Energy{<:Real}
+            
 Get the AoE cut value for a given `dep` and `window` size while performing a peak fit with fixed position. The AoE cut value is determined by finding the cut value for which the number of counts after the cut is equal to `dep_sf` times the number of counts before the cut.
 The algorhithm utilizes a root search algorithm to find the cut value with a relative tolerance of `rtol`.
+
+# Arguments
+    * `aoe`: A/E
+    * `e`: Calibrated energies
+
+# Keywords
+    * `dep`: DEP energies
+    * `window`: Data window in energy
+    * `dep_sf`: Survival fraction of DEP energies
+    * `rtol`: Relative tolerance
+    * `maxiters`: Maximum iterations
+    * `sigma_high_sided`: Fixed upper limit cut
+    * `cut_search_interval`: Data interval to search for a cut value
+    * `bin_width_window`: Specified window around the peak in which the bin algorithm is applied
+    * `max_e_plot`: Maximum energy plot
+    * `plot_window`: Plot window
+    * `fixed_position`: Fixed position of cut
+    * `fit_func`: Fitted function
+    * `uncertainty`: Uncertainty
+
 # Returns
-- `cut`: AoE cut value
-- `n0`: Number of counts before the cut
-- `nsf`: Number of counts after the cut
+    * `lowcut`: low AoE cut value
+    * `highcut`: high AoE cut value
+    * `n0`: Number of counts before the cut
+    * `nsf`: Number of counts after the cut
+    * `sf`: Survival fraction
 """
 function get_low_aoe_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; 
             dep::T=1592.53u"keV", window::Vector{<:T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, rtol::Float64=0.001, maxiters::Int=300, sigma_high_sided::Float64=Inf,
@@ -91,9 +127,25 @@ export get_low_aoe_cut
     get_peaks_survival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
 
 Get the survival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size while performing a peak fit with fixed position.
+
+# Arguments
+    * `aoe`: A/E
+    * `e`: Calibrated energies
+    * `peaks`: Data range of several peaks
+    * `peak_names`: Name of the peak
+    * `windows`: Energy data window 
+    * `aoe_cut`: A/E cut value
+
+# Keywords
+    * `uncertainty`: Uncertainty
+    * `inverted_mode`: If set to false: A/E analysis. If True: LQ analysis
+    * `bin_width_window`: Specified window around the peak where the binning algorithm is applied to
+    * `sigma_high_sided`: Fixed upper limit cut
+    * `fit_funcs`: Fitted functions
+
 # Return 
-- `result`: Dict of results for each peak
-- `report`: Dict of reports for each peak
+    * `result`: Dict of results for each peak
+    * `report`: Dict of reports for each peak
 """
 function get_peaks_survival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
     @assert length(peaks) == length(peak_names) == length(windows) "Length of peaks, peak_names and windows must be equal"
@@ -125,16 +177,31 @@ export get_peaks_survival_fractions, get_peaks_surrival_fractions
 
 """
     get_peak_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; 
-    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
+    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}  
 
 Get the survival fraction of a peak after a AoE cut value `aoe_cut` for a given `peak` and `window` size while performing a peak fit with fixed position.
     
+# Arguments
+    * `aoe`: A/E
+    * `e`: Calibrated energies
+    * `peak`: Peak position
+    * `window`: Data window in energy
+    * `aoe_cut`: A/E cut value
+
+# Keywords
+    * `Uncertainty`: Uncertainty 
+    * `lq_mode`: Inverts the cut logic
+    * `low_e_tail`: Low energy tail
+    * `bin_width_window`: Specified window around the peak to apply the binning algorithm
+    * `sigma_high_sided`: Fixed upper limit cut
+    
 # Returns
-- `peak`: Peak position
-- `n_before`: Number of counts before the cut
-- `n_after`: Number of counts after the cut
-- `sf`: Survival fraction
-- `err`: Uncertainties
+    * `peak`: Peak position
+    * `fit_func`: fitted function
+    * `n_before`: Number of counts before the cut
+    * `n_after`: Number of counts after the cut
+    * `sf`: Survival fraction
+    * `gof`: Goodness of fit 
 """
 function get_peak_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; 
     uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}  
@@ -189,17 +256,29 @@ export get_peak_survival_fraction, get_peak_surrival_fraction
 
 
 """
-    get_continuum_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
+    get_continuum_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity; inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
+
 Get the survival fraction of a continuum after a AoE cut value `aoe_cut` for a given `center` and `window` size.
 
+# Arguments
+    * `aoe`: A/E
+    * `e`: Calibrated energies
+    * `center`: Center of the fit
+    * `window`: Data window in energy
+    * `aoe_cut`: A/E cut value
+
+# Keywords
+    * `inverted_mode`: Inverted cut logic
+    * `sigma_high_sided`: Fixed upper limit cut 
+    
 # Returns
-- `center`: Center of the continuum
-- `window`: Window size
-- `n_before`: Number of counts before the cut
-- `n_after`: Number of counts after the cut
-- `sf`: Survival fraction
+    * `window`: Window size
+    * `n_before`: Number of counts before the cut
+    * `n_after`: Number of counts after the cut
+    * `sf`: Survival fraction
+
 """
-function get_continuum_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
+function get_continuum_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity; inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
     # scale unit
     e_unit = u"keV"
     # get energy around center

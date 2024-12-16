@@ -3,7 +3,16 @@
 
 """
     _prepare_data(h::Histogram{<:Real,1})
-aux. function to convert histogram data into bin edges, bin width and bin counts
+Aux. function to convert histogram data into bin edges, bin width and bin counts
+
+# Arguments
+    * `h`: Histogram data
+
+# Returns
+    * `counts`: Number of counts in each bin
+    * `bin_widths`: Histogram bin width
+    * `bin_centers`: Center position of bins
+
 """
 function _prepare_data(h::Histogram{<:Real,1})
     # get bin center, width and counts from histogrammed data
@@ -16,8 +25,18 @@ end
 
 
 """
-    _get_model_counts(f_fit::Base.Callable,v_ml::Union{NamedTuple, AbstractVector},bin_centers::StepRangeLen,bin_widths::StepRangeLen)
-aux. function to get modelled peakshape based on  histogram binning and best-fit parameter
+    _get_model_counts(f_fit::Base.Callable, v_ml::Union{NamedTuple, AbstractVector}, bin_centers::Union{StepRangeLen, Vector{<:Real}}, bin_widths::Union{StepRangeLen, Vector{<:Real}})
+
+Auxiliary function to get modelled peakshape based on  histogram binning and best-fit parameter
+
+# Arguments
+    * `f_fit`: Fit function
+    * `v_ml`: Best-fit parameters
+    * `bin_centers`: Center position of bins
+    * `bin_widths`: Widths of histogram bins
+
+# Returns
+    * `model_counts`: Modelled peakshape of histogram
 """
 function _get_model_counts(f_fit::Base.Callable, v_ml::Union{NamedTuple, AbstractVector}, bin_centers::Union{StepRangeLen, Vector{<:Real}}, bin_widths::Union{StepRangeLen, Vector{<:Real}})
     model_func = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
@@ -26,19 +45,21 @@ function _get_model_counts(f_fit::Base.Callable, v_ml::Union{NamedTuple, Abstrac
 end
 
 
-
 """ 
-    p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector}) 
-calculate p-value based on least-squares, assuming gaussian uncertainty
+    p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector}) 
+
+Calculate p-value based on least-squares, assuming gaussian uncertainty
 baseline method to get goodness-of-fit (gof)
-# input:
- * `f_fit`function handle of fit function (peakshape)
- * `h` histogram of data
- * `v_ml` best-fit parameters
-# returns:
- * `pval` p-value of chi2 test
- * `chi2` chi2 value
- * `dof` degrees of freedom
+
+# Arguments
+    * `fit_func`: function handle of fit function (peakshape)
+    * `h`: histogram of data
+    * `v_ml`: best-fit parameters
+
+# Returns 
+    * `pval`: p-value of chi-squared test
+    * `chi2`: chi2 value
+    * `dof`: Degrees of freedom
 """
 function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     # prepare data
@@ -67,8 +88,20 @@ export p_value
 
 
 """ 
-    p_value_poissonll(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector})
-p-value via poisson likelihood ratio: baseline for ML fits using Poisson statistics and bins with low number of counts
+    p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
+
+p-value via poisson likelihood ratio: baseline for ML fits using Poisson statistics and bins with low number of counts.
+
+# Arguments
+    * `fit_func`: function handle of fit function 
+    * `h`: Histogram data
+    * `v_ml`: Best-fit parameters
+
+# Returns
+    * `pval`: P-value
+    * `chi2`: Chi-squared value
+    * `dof`: Degrees of freedom
+
 """
 function p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     counts, bin_widths, bin_centers = _prepare_data(h) # prepare data
@@ -92,6 +125,16 @@ function p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml
 end
 export p_value_poissonll
 
+"""
+    likelihood_ratio(f_fit::Base.Callable, h::Histogram{<:Real,1})
+
+Calculates the likelihood ratio of the histogram fit function.
+
+# Arguments 
+    * `f_fit`: Function handle of fit function (peakshape)
+    * `h`: Histogram data
+
+"""
 
 function likelihood_ratio(f_fit::Base.Callable, h::Histogram{<:Real,1})
     bin_edges = first(h.edges)
@@ -104,24 +147,29 @@ function likelihood_ratio(f_fit::Base.Callable, h::Histogram{<:Real,1})
     -2*(loglikelihood_ml - loglikelihood)
 end
 export likelihood_ratio2
-"""
-    p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1},ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background)},v_ml::NamedTuple,;n_samples::Int64=1000) 
-alternative p-value calculation via Monte Carlo sampling. **Warning**: computational more expensive than p_vaule() and p_value_LogLikeRatio()
-# Input:
- * `f_fit`function handle of fit function (peakshape)
- * `h` histogram of data
- * `ps` best-fit parameters
- * `v_ml` best-fit parameters
- * `n_samples` number of samples
 
-# Performed Steps:
-* Create n_samples randomized histograms. For each bin, samples are drawn from a Poisson distribution with λ = model peak shape (best-fit parameter)
-* Each sample histogram is fit using the model function `f_fit`
-* For each sample fit, the max. loglikelihood fit is calculated 
+"""
+    p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}, v_ml::NamedTuple, ; n_samples::Int64=1000) where T<:Real
+Alternative p-value calculation via Monte Carlo sampling. **Warning**: computational more expensive than p_value() and p_value_LogLikeRatio()
+
+# Arguments
+    * `f_fit`: Function handle of fit function (peakshape)
+    * `h`: Histogram of data
+    * `ps`: Peak statistics
+    * `v_ml`: Best-fit parameters
+
+# Keywords
+    * `n_samples`: Number of samples
 
 # Returns
-* % p value --> comparison of sample max. loglikelihood and max. loglikelihood of best-fit
+    * `pval`: Comparison of sample max. loglikelihood and max. loglikelihood of best-fit
+
+# Performed Steps:
+    * Create n_samples randomized histograms. For each bin, samples are drawn from a Poisson distribution with λ = model peak shape (best-fit parameter)
+    * Each sample histogram is fit using the model function `f_fit`
+    * For each sample fit, the max. loglikelihood fit is calculated 
 """
+
 function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}, v_ml::NamedTuple, ; n_samples::Int64=1000) where T<:Real
     counts, bin_widths, bin_centers = _prepare_data(h) # get data 
     # get peakshape of best-fit and maximum likelihood value
@@ -155,19 +203,22 @@ end
 export p_value_MC
 
 """ 
-    residuals(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector})
+    get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
+
 Calculate bin-wise residuals and normalized residuals. 
 Calcualte bin-wise p-value based on poisson distribution for each bin.
 
-# Input:
- * `f_fit`function handle of fit function (peakshape)
- * `h` histogram of data
- * `v_ml` best-fit parameters
+# Arguments
+    * `f_fit`: function handle of fit function (peakshape)
+    * `h`: histogram of data
+    * `v_ml`: best-fit parameters (max. likelihood)
 
-# Returns:
- * `residuals` difference: model - data (histogram bin count)
- * `residuals_norm` normalized residuals: model - data / sqrt(model)
- * `p_value_binwise` p-value for each bin based on poisson distribution
+# Returns
+    * `residuals`: difference: model - data (histogram bin count)
+    * `residuals_norm`: normalized residuals: model - data / sqrt(model)
+    * `p_value_binwise`: p-value for each bin based on poisson distribution
+    * 'bin_centers': Center position of bin
+
 """
 function get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     # prepare data

@@ -1,8 +1,8 @@
 
 """
-    fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Real=3.5; 
-        n_mixtures::Int=ceil(Int, (max_pe - min_pe) * 4), nIter::Int=50, nInit::Int=50, 
-        method::Symbol=:kmeans, kind=:diag, Δpe_peak_assignment::Real=0.3, f_uncal::Function=identity, uncertainty::Bool=true)
+    fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Real=3.5;
+    n_mixtures::Int=ceil(Int, (max_pe - min_pe) * 4), nIter::Int=50, nInit::Int=50, 
+    method::Symbol=:kmeans, kind=:diag, Δpe_peak_assignment::Real=0.3, f_uncal::Function=identity, uncertainty::Bool=true)
 
 Fit a Gaussian Mixture Model to the given pe calibration data and return the fit parameters.
 
@@ -148,6 +148,20 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
 end
 export fit_sipm_spectrum
 
+"""
+    _gmm_calc_p_bin(
+        mix_μ::AbstractVector{<:Real}, mix_σ::AbstractVector{<:Real}, mix_w::AbstractVector{<:Real},
+        bin_edges::AbstractVector{<:Real}
+    )
+
+# Arguments
+    * `mix_μ`:
+    * `mix_σ`:
+    * `mix_w`:
+    * `bin_edges`:
+
+    TO DO: function description
+"""
 
 function _gmm_calc_p_bin(
     mix_μ::AbstractVector{<:Real}, mix_σ::AbstractVector{<:Real}, mix_w::AbstractVector{<:Real},
@@ -157,6 +171,24 @@ function _gmm_calc_p_bin(
     renorm_edge_cdf = (edge_cdf .- edge_cdf[begin]) .* inv(edge_cdf[end] - edge_cdf[begin])
     diff(renorm_edge_cdf)
 end
+
+"""
+    _gmm_binned_loglike_func(
+        mix_μ::AbstractVector{<:Real}, mix_σ::AbstractVector{<:Real},
+        mix_w::AbstractVector{<:Real}, bin_edges::AbstractVector{<:Real}
+    )
+
+# Arguments
+    * `mix_μ`:
+    * `mix_σ`:
+    * `mix_w`:
+    * `bin_edges`: Bin edges
+
+# Returns
+    * `f_loglike`: Loglike function
+
+TO DO: function description
+"""
 
 function _gmm_binned_loglike_func(
     mix_μ::AbstractVector{<:Real}, mix_σ::AbstractVector{<:Real},

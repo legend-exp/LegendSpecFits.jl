@@ -15,13 +15,23 @@ f_lq_σ(x, v::NamedTuple) = f_lq_σ(x, [v.σ_scs_amplitude, v.σ_scs_decay, v.σ
 
 
 """
-    fit_lq_compton(peakhists::Array, peakstats::StructArray, compton_bands::Array{T}) where T<:Real
+    fit_lq_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; pars_lq::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
 
 Fit the A/E Compton bands using the `f_lq_compton` function consisting of a gaussian SSE peak and a step like background for MSE events.
+
+# Arguments
+    * `peakhists`: Histogram of individual peaks
+    * `peakstats`: Peak statistics
+    * `compton_bands`: Compton bands
+    
+# Keywords
+    * `pars_lq`: NamedTuple of mean, mean errors, sigma and sigma errors
+    * `uncertainty`: Boolean determining if uncertainty is included
 
 # Returns
     * `result`: Dict of NamedTuples of the fit results containing values and errors for each compton band
     * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
+
 """
 function fit_lq_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; pars_lq::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
     # create return and result dicts
@@ -53,13 +63,21 @@ export fit_lq_compton
 
 
 """
-    fit_single_lq_compton(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
+    fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
 
 Perform a fit of the peakshape to the data in `h` using the initial values in `ps` while using the `f_lq_compton` function consisting of a gaussian SSE peak and a step like background for MSE events.
+
+# Arguments
+    * `h`: Histogram data
+    * `ps`: Peak statistics
+    
+# Keywords
+    * `uncertainty`: Uncertainty
 
 # Returns
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
+
 """
 function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
     # create pseudo priors

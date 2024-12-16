@@ -1,15 +1,25 @@
 """
-    fit_single_trunc_gauss(x::Array, cuts::NamedTuple{(:low, :high, :max), Tuple{Float64, Float64, Float64}})
+    fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::NamedTuple{(:low, :high, :max), Tuple{<:T, <:T, <:T}}=(low = zero(first(x))*NaN, high = zero(first(x))*NaN, max = zero(first(x))*NaN); uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
 
 Fit a single truncated Gaussian to the data `x` between `min_x` and `max_x`.
-Returns `report` and `result`` with:
-    * `f_fit`: fitted function
-    * `μ`: mean of the Gaussian
-    * `μ_err`: error of the mean
-    * `σ`: standard deviation of the Gaussian
-    * `σ_err`: error of the standard deviation
-    * `n`: number of counts in the peak
+
+# Arguments
+    * `x`: Data
+    * `cuts`: NamedTuple of low, high and max cuts
+    
+# Keywords
+    * `uncertainty`: Includes uncertainty of data if True
+
+# Returns `report` and `result` with:
+    * `v_ml`: Best-fit parameters
+    * `f_fit`: Fitted function
+    * `h`: Normalized nocut histogram to PDF of cut histogram
+    * `μ`: Mean of the best-fit parameters
+    * `σ`: Standard deviation of the best-fit parameters
+    * `gof`: Goodness of fit
+
 """
+
 function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::NamedTuple{(:low, :high, :max), Tuple{<:T, <:T, <:T}}=(low = zero(first(x))*NaN, high = zero(first(x))*NaN, max = zero(first(x))*NaN); uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
     @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) == unit(x[1]) "Units of min_x, max_x and x must be the same"
     x_unit = unit(x[1])
@@ -120,13 +130,28 @@ end
 export fit_single_trunc_gauss
 
 """
-    fit_half_centered_trunc_gauss(x::Array, cuts::NamedTuple{(:low, :high, :max), Tuple{Float64, Float64, Float64}})
+    fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, μ::T, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}; left::Bool=false, uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
 Fit a single truncated Gaussian to the data `x` between `cut.low` and `cut.high`. The peak center is fixed at `μ` and the peak is cut in half either in the left or right half.
-# Returns `report` and `result`` with:
-    * `f_fit`: fitted function
-    * `μ`: mean of the Gaussian
-    * `σ`: standard deviation of the Gaussian
+
+# Arguments
+    * `x`: Data to fit Gaussian to
+    * `μ`: Value where the peak is centered at
+    * `cuts`: NamedTuple of low, high and max cuts 
+    
+# Keywords
+    * `left`: Peak is cut in the left half if True
+    * `uncertainty`: Uncertainty is included if True
+
+# Returns `report` and `result` with:
+    * `v_ml`: Best-fit parameters
+    * `f_fit`: Fitted function
+    * `h`: Normalized nocut histogram to PDF of cut histogram
+    * `μ`: Mean of the Gaussian
+    * `σ`: Standard deviation of the Gaussian
+    * `gof`: Goodness of fit
+
 """
+
 function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, μ::T, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}; left::Bool=false, uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
     @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) == unit(x[1]) == unit(μ) "Units of min_x, max_x and x must be the same"
     x_unit = unit(x[1])
@@ -239,12 +264,25 @@ export fit_half_centered_trunc_gauss
 
 
 """
-    fit_half_trunc_gauss(x::Array, cuts::NamedTuple{(:low, :high, :max), Tuple{Float64, Float64, Float64}})
+    fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}; left::Bool=false, uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
 Fit a single truncated Gaussian to the data `x` between `cut.low` and `cut.high`. The peak center is fixed at `μ` and the peak is cut in half either in the left or right half.
+
+# Arguments 
+    * `x`: Dataset
+    * `cuts`: NamedTuple of low, high and max cuts
+
+# Keywords
+    * `left`: Left half of peak is cut if True
+    * `uncertainty`: Uncertainty
+
 # Returns `report` and `result` with:
-    * `f_fit`: fitted function
-    * `μ`: mean of the Gaussian
-    * `σ`: standard deviation of the Gaussian
+    * `v_ml`: Best-fit parameters
+    * `f_fit`: Fitted function
+    * `h`: Normalized histogram
+    * `μ`: Mean of the best-fit parameters
+    * `σ`: Standard deviation of best-fit parameters
+    * `gof`: Goodness of fit
+
 """
 function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}; left::Bool=false, uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
     @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) == unit(x[1]) "Units of min_x, max_x and x must be the same"
@@ -361,13 +399,21 @@ export fit_half_trunc_gauss
 #############
 
 """
-    fit_binned_trunc_gauss(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
+    fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :high, :max), Tuple{<:T, <:T, <:T}}=(low = NaN, high = NaN, max = NaN); uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
 
 Perform a binned fit of the peakshape to the data in `h` using the initial values in `ps` while using the `f_gauss` function consisting of a gaussian peak multiplied with an amplitude n.
+
+# Arguments
+    * `h_nocut`: Histogram data without cuts
+    * `cuts`: Cut parameters
+    
+# Keywords
+    * `uncertainty`: Uncertainty included if True
 
 # Returns
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
+
 """
 function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :high, :max), Tuple{<:T, <:T, <:T}}=(low = NaN, high = NaN, max = NaN); uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
     # get cut windows
@@ -483,18 +529,26 @@ export fit_binned_trunc_gauss
 
 
 """
-    fit_binned_double_gauss(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
+    fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
 
 Perform a binned fit of the peakshape to the data in `h` using the initial values in `ps` while using the `f_double_gauss` function consisting of a double gaussian peak.
 The priors for the first gaussian peak are given by the `ps` tuple. For the priors of the second gaussian peak a wide window around the first peak is used.
 
+# Arguments
+    * `h`: Histogram data
+    * `ps`: Peak statistics
+    
+# Keywords
+    * `uncertainty`: Uncertainty included if True
+
 # Returns
     * `result`: NamedTuple of the fit results containing values and errors
     * `report`: NamedTuple of the fit report which can be plotted
+
 """
 function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
 
-    # define double gaussina fit function
+    # define double gaussian fit function
     f_double_gauss(x,v) = double_gaussian(x, v.μ1, v.σ1, v.n1, v.μ2, v.σ2, v.n2)
 
     # create pseudo priors

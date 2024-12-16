@@ -17,6 +17,15 @@ th228_combined_fit_functions = (
     estimate_combined_peak_stats(peakstats::StructArray,; calib_type::Symbol=:th228)
 
 Estimate the peak position, FWHM, sigma, counts and background of a peak from a histogram.
+
+# Arguments
+    * `peakstats`: Peak statistics
+
+# Keywords
+    * `calib_type`: Calibration type
+
+# Returns
+    * `estimate_single_peak_stats_th228` function
 """
 function estimate_combined_peak_stats(peakstats::StructArray,; calib_type::Symbol=:th228)
     if calib_type == :th228
@@ -29,6 +38,23 @@ function estimate_combined_peak_stats(peakstats::StructArray,; calib_type::Symbo
 end
 export estimate_single_peak_stats
 
+
+"""
+    estimate_combined_peak_stats_th228(peakstats::StructArray)
+
+Estimate the peak position, FWHM, sigma, counts and background of a peak from a histogram.
+
+# Arguments
+    * `peakstats`: Peak statistics
+
+# Returns
+    * `peak_pos`: Peak position
+    * `peak_fwhm`: FWHM of peak 
+    * `peak_sigma`: Standard deviation of peak
+    * `peak_counts`: Counts of peak
+    * `mean_background`: Mean background of peak
+
+"""
 
 function estimate_combined_peak_stats_th228(peakstats::StructArray)
     W = h.weights
@@ -57,9 +83,23 @@ end
 
 
 """ 
-    fit_peaks_combined(peakhists::Array, peakstats::StructArray, th228_lines::Array{T},; calib_type::Symbol=:th228, uncertainty::Bool=true, fixed_position::Bool=false) where T<:Real
+    fit_peaks_combined(peakhists::Array, peakstats::StructArray, th228_lines::Array,; calib_type::Symbol=:th228, uncertainty::Bool=true, fixed_position::Bool=false)
 
-Fit the peaks of a histogram to a combined peakshape function while sharring parameters between peaks.
+Fit the peaks of a histogram to a combined peakshape function while sharing parameters between peaks.
+
+# Arguments
+    * `peakhists`: Histogram of individual peaks
+    * `peakstats`: Peak statistics
+    * `th228_lines`: Calibration lines
+    
+# Keywords
+    * `calib_type': Calibration type
+    * `uncertainty': Uncertainty
+    * `fixed_position': Histogram peaks are fixed if True
+
+# Returns 
+    * `fit_peaks_combined_th228` function
+
 """
 function fit_peaks_combined(peakhists::Array, peakstats::StructArray, th228_lines::Array,; calib_type::Symbol=:th228, uncertainty::Bool=true, fixed_position::Bool=false)
     if calib_type == :th228
@@ -71,6 +111,26 @@ end
 export fit_peaks_combined
 
 
+"""
+    fit_peaks_combined_th228(peakhists::Array, peakstats::StructArray, th228_lines::Array{T},; uncertainty::Bool=true, fixed_position::Bool=false) where T<:Real
+
+Fit the peaks of a histogram to a combined peakshape function using Th228 calibration lines. 
+
+# Arguments
+    * `peakhists`: Histogram of individual peaks
+    * `peakstats`: Peak statistics
+    * `th228_lines`: Calibration lines
+
+# Keywords
+    * `uncertainty`: Determines if uncertainty is included
+    * `fixed_position`: Determines if peaks are fixed 
+
+# Returns
+    * `v_ml`: best fit results
+    * `opt_r`: 
+
+TO DO: function description
+"""
 function fit_peaks_combined_th228(peakhists::Array, peakstats::StructArray, th228_lines::Array{T},; uncertainty::Bool=true, fixed_position::Bool=false) where T<:Real
     # create pseudo priors
     pseudo_prior = NamedTupleDist(

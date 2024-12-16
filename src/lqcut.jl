@@ -1,11 +1,38 @@
 """
-    lq_norm::Vector{Float64}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
+    lq_drift_time_correction(
+    lq_norm::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
     DEP_edgesigma::Float64=3.0 , mode::Symbol=:percentile, drift_cutoff_sigma::Float64 = 2.0, prehist_sigma::Float64=2.5, e_expression::Union{String,Symbol}="e", dt_eff_low_quantile::Float64=0.15, dt_eff_high_quantile::Float64=0.95)
 
-Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a linear fit on the remaining data. The data is Corrected by subtracting the linear fit from the lq data.
+Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a linear fit on the remaining data. The data is corrected by subtracting the linear fit from the lq data.
+
+# Arguments
+    * `lq_norm`: Normalized inverted cut logic 
+    * `dt_eff`: Effective drift time
+    * `e_cal`: Calibrated energies
+    * `DEP_µ`: Double escape peak mean
+    * `DEP_σ`: Double escape peak sigma
+
+# Keywords
+    * `DEP_edgesigma`: Double escape peak of the edge sigma
+    * `mode`: Mode symbol 
+    * `drift_cutoff_sigma`: Drift cutoff standard deviation
+    * `prehist_sigma`: Prehistogram standard deviation
+    * `e_expression`: Energy expression
+    * `dt_eff_low_quantile`: Effctive drift time low quantile
+    * `dt_eff_high_quantile`: Effective drift time high quantile
+
+
 # Returns
-    * `result`: NamedTuple of the function used for lq classifier construction
-    * `report`: NamedTuple of the histograms used for the fit, the cutoff values and the DEP edges
+    * `func`: Function
+    * `func_generic`: Generic function
+    * `lq_prehist`: Inverted cut logic prehistogram
+    * `lq_report`: Inverted cut logic report
+    * `drift_prehist`: Pre-histogram drift
+    * `drift_report`: Drift reprot
+    * `lq_box`: Cutoff values
+    * `drift_time_func`: Drift time function
+    * `DEP_left`: Left double escape peak edge
+    * `DEP_right`: Right double escape peak edge
 """
 function lq_drift_time_correction(
     lq_norm::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
@@ -130,9 +157,21 @@ end
 export lq_drift_time_correction
 
 """
-    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{Float64}; cut_sigma::Float64=3.0, truncation_sigma::Float64=2.0)
+    LQ_cut(
+    DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, truncation_sigma::Float64=2.0)
 
-Evaluates the cutoff value for the LQ cut. The function performs a binned gaussian fit on the sidebandsubtracted LQ histogram and evaluates the cutoff value difined at 3σ of the fit.
+Evaluates the cutoff value for the LQ cut. The function performs a binned gaussian fit on the sidebandsubtracted LQ histogram and evaluates the cutoff value defined at 3σ of the fit.
+
+# Arguments
+    * `DEP_µ`:Double escape peak mean
+    * `DEP_σ`: Double escape peak sigma
+    * `e_cal`: Calibrated energies
+    * `lq_classifier`: Inverted cut logic classifier
+    
+# Keywords
+    * `cut_sigma`: Cutoff value
+    * `truncation_sigma`: Truncated value
+
 # Returns
     * `result`: NamedTuple of the cutoff value
     * `report`: NamedTuple of the fit result, fit report and temporary histograms

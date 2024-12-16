@@ -4,7 +4,10 @@ optim_time_limit::Float64 = 20.0 # in seconds a single Optim.jl optimization ste
 
 """
     set_memlimit(gig::Float64)
-    Set memory limit in GB for the whole current process ignoring if things could run in parallel
+Set memory limit in GB for the whole current process ignoring if things could run in parallel
+
+# Arguments
+    * 'gig': Gigabyte
 """
 function set_memlimit(gig::Float64)
     @info "Setting `Optimization.jl` memory limit to $gig GB"
@@ -13,7 +16,10 @@ end
 
 """
     set_timelimit(sec::Float64)
-    Set time limit in seconds a single Optim.jl optimization step
+Set time limit in seconds a single Optim.jl optimization step
+
+# Arguments
+    * `sec`: Time limit in seconds
 """
 function set_timelimit(sec::Float64)
     @info "Setting `Optimization.jl` time limit to $sec seconds"
@@ -21,18 +27,20 @@ function set_timelimit(sec::Float64)
 end
 
 """
-    advanced_time_and_memory_control(x::Optim.OptimizationState, start_time::Float64, time_to_setup::Float64; time_limit::Float64=60.0, mem_limit::Float64=30.0)
+    advanced_time_and_memory_control( ; start_time::Float64=time(), start_mem::Float64=Sys.maxrss()/2^30, time_to_setup::Vector{<:Real}=zeros(1), time_limit::Real=-1, mem_limit::Real=-1)
 
-    Control function to stop optimization based on time and memory usage.
-# Arguments
-- `x::Optim.OptimizationState`: optimization state
-- `start_time::Float64`: start time
-- `time_to_setup::Float64`: time to setup
-- `time_limit::Float64`: time limit
-- `mem_limit::Float64`: memory limit
+Control function to stop optimization based on time and memory usage.
+
+# Keyword Arguments
+    * `start_time`: Start time
+    * `start_mem`: Starting memory storage
+    * `time_to_setup`: Time to setup
+    * `time_limit`: Time limit
+    * `mem_limit`: Memory limit
 
 # Return
 - `Bool`: true if optimization should stop
+
 """
 function advanced_time_and_memory_control( ; start_time::Float64=time(), start_mem::Float64=Sys.maxrss()/2^30, time_to_setup::Vector{<:Real}=zeros(1), time_limit::Real=-1, mem_limit::Real=-1)
     if time_limit < 0

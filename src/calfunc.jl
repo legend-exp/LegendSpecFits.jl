@@ -3,6 +3,19 @@
 
 export PolCalFunc
 
+""" 
+This struct creates a polynomial function when given a set of numbers. The order of the function is the number of inputs - 1. The first term is the constant, then the linear term, then the quadratic term and so on.
+
+Example: third order polynomial function.
+    
+f = PolCalFunc{1, 2, 0, 1}
+
+    This will give:
+     1+ 2x + x^3 
+    as your polynomial function. 
+ 
+"""
+
 struct PolCalFunc{N,T<:Number} <:Function
     params::NTuple{N,T}
 
