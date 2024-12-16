@@ -1,12 +1,24 @@
 
 
 """
-    prepare_sep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
+    prepare_sep_peakhist(e::Vector{<:T}; sep::Unitful.Energy{<:Real}=2103.53u"keV", window::Vector{<:Unitful.Energy{<:Real}}=[25.0, 25.0]u"keV", relative_cut::T=0.5, n_bins_cut::Int=-1, fit_func::Symbol=:gamma_def, uncertainty::Bool=true) where T<:Real
 
 Prepare an array of uncalibrated SEP energies for parameter extraction and calibration.
+
+# Arguments
+    * `e`: Uncalibrated energies
+
+# Keywords
+    * `sep`: Single escape peak
+    * `window`: Energy window
+    * `relative_cut`: Relative cut
+    * `n_bins_cut`: Number of cut bins
+    * `fit_func`: fitted function
+    * `uncertainty`: Uncertainty
+:
 # Returns
-- `result`: Result of the initial fit
-- `report`: Report of the initial fit
+    * `result`: Result of the initial fit
+    * `report`: Report of the initial fit
 """
 function prepare_sep_peakhist(e::Vector{<:T}; sep::Unitful.Energy{<:Real}=2103.53u"keV", window::Vector{<:Unitful.Energy{<:Real}}=[25.0, 25.0]u"keV", relative_cut::T=0.5, n_bins_cut::Int=-1, fit_func::Symbol=:gamma_def, uncertainty::Bool=true) where T<:Real
     # get cut window around peak
@@ -27,18 +39,44 @@ function prepare_sep_peakhist(e::Vector{<:T}; sep::Unitful.Energy{<:Real}=2103.5
 end
 
 """
-    fit_sf_wl(dep_sep_data, a_grid_wl_sg, optimization_config)
+    fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real}, e_sep::Vector{<:Real}, aoe_sep::ArrayOfSimilarArrays{<:Real}, a_grid_wl_sg::StepRangeLen; 
+                    dep::T=1592.53u"keV", dep_window::Vector{<:T}=[12.0, 10.0]u"keV", 
+                    sep::T=2103.53u"keV", sep_window::Vector{<:T}=[25.0, 25.0]u"keV", sep_rel_cut::Real=0.5,
+                    min_aoe_quantile::Real=0.1, max_aoe_quantile::Real=0.99, 
+                    min_aoe_offset::Quantity{<:Real}=0.0u"keV^-1", max_aoe_offset::Quantity{<:Real}=0.05u"keV^-1",
+                    dep_cut_search_fit_func::Symbol=:gamma_def, sep_cut_search_fit_func::Symbol=:gamma_def,
+                    uncertainty::Bool = false) where T<:Unitful.Energy{<:Real}
 
 Fit a A/E filter window length for the SEP data and return the optimal window length and the corresponding survival fraction.
 
 # Arguments
-- `dep_sep_data`: NamedTuple with the DEP and SEP data
-- `a_grid_wl_sg`: range of window lengths to sweep through
-- `optimization_config`: configuration dictionary
+    * `e_dep`: DEP energy
+    * `aoe_dep`: Double escape peak A/E
+    * `e_sep`: SEP energy
+    * `aoe_sep`: Single escape peak A/E
+    * `a_grid_wl_sg`: Range of window lengths to sweep through
+
+# Keywords
+    * `dep`: Double escape peak
+    * `dep_window`: DEP window
+    * `sep`: Single escape peak
+    * `sep_window`: SEP window
+    * `sep_rel_cut`: SEP relative cut
+    * `min_aoe_quantile`: Minimum A/E quantile
+    * `max_aoe_quantile`: Maximum A/E quantile
+    * `min_aoe_offset`: Minimum A/E offset
+    * `max_aoe_offset`: Maximum A/E offset
+    * `dep_cut_search_fit_func`: Symbol describing the function for the DEP cut search
+    * `sep_cut_search_fit_func`: Symbol describing the function for the SEP cut search
+    * `uncertainty`: Uncertainty
+
 
 # Returns
-- `result`: optimal window length and corresponding survival fraction
-- `report`: report with all window lengths and survival fractions
+    * `wl`: Window length
+    * `sf`: Survival fraction
+    * `n_dep`: Number of DEP energies
+    * `n_sep`: Number of SEP energies
+
 """
 function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real}, e_sep::Vector{<:Real}, aoe_sep::ArrayOfSimilarArrays{<:Real}, a_grid_wl_sg::StepRangeLen; 
                     dep::T=1592.53u"keV", dep_window::Vector{<:T}=[12.0, 10.0]u"keV", 
@@ -62,7 +100,7 @@ function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
     sep_sfs = Vector{Quantity}(undef, length(a_grid_wl_sg))
     wls = Vector{eltype(a_grid_wl_sg)}(undef, length(a_grid_wl_sg))
 
-    # for each window lenght, calculate the survival fraction in the SEP
+    # for each window length, calculate the survival fraction in the SEP
     Threads.@threads for i_aoe in eachindex(a_grid_wl_sg)
         # get window length
         wl = a_grid_wl_sg[i_aoe]

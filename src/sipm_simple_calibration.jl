@@ -1,27 +1,30 @@
 """
-    sipm_simple_calibration(pe_uncal::Array)
+    sipm_simple_calibration(pe_uncal::Vector{<:Real};
+                                kwargs...)
 
 Perform a simple calibration for the uncalibrated p.e. spectrum array `pe_uncal`
 using just the 1 p.e. and 2 p.e. peak positions estimated by a peakfinder.
 
-Inputs:
+# Arguments
     * `pe_uncal`: array of uncalibrated peak amplitudes
-kwargs:
+
+# Keywords
     * `initial_min_amp`: uncalibrated amplitude value as a left boundary to build the uncalibrated histogram where the peak search is performed on.
                         For the peak search with noise peak, this value is consecutively increased i.o.t exclude the noise peak from the histogram.
     * `initial_max_quantile`: quantile of the uncalibrated amplitude array to used as right boundary to build the uncalibrated histogram
     * `peakfinder_σ`: sigma value in number of bins for peakfinder
     * `peakfinder_threshold`: threshold value for peakfinder
 
-Returns 
-    * `pe_simple_cal`: array of the calibrated pe array with the simple calibration
-    * `func`: function to use for the calibration (`pe_simple_cal = pe_uncal .* c .+ offset`)
-    * `c`: calibration factor
-    * `offset`: calibration offset 
+# Returns 
+    * `pe_simple_cal`: Array of the calibrated pe array with the simple calibration
+    * `f_simple_calib`: Function to use for calibration
+    * `f_simple_uncal`: Function for uncalibration
+    * `c`: Calibration factor
+    * `offset`: Calibration offset 
     * `peakpos`: 1 p.e. and 2 p.e. peak positions in uncalibrated amplitude
     * `peakpos_cal`: 1 p.e. and 2 p.e. peak positions in calibrated amplitude
-    * `h_uncal`: histogram of the uncalibrated pe array
-    * `h_calsimple`: histogram of the calibrated pe array with the simple calibration
+    * `h_uncal`: Histogram of the uncalibrated pe array
+    * `h_calsimple`: Histogram of the calibrated pe array with the simple calibration
 """
 function sipm_simple_calibration end
 export sipm_simple_calibration
@@ -65,6 +68,29 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     return result, report
 end
 
+
+"""
+    find_peaks(
+        amps::Vector{<:Real}; initial_min_amp::Real=1.0, initial_max_quantile::Real=0.99, 
+        peakfinder_σ::Real=2.0, peakfinder_threshold::Real=10.0
+    )
+
+Finds peaks in a histogram.
+
+# Arguments
+    * `amps`: Vector of amplifications
+
+# Keywords
+    * `initial_min_amp`: Initial minimum amplification
+    * `initial_max_quantile`: 
+    * `peakfinder_σ`: Standard deviation of peakfinder
+    * `peakfinder_threshold`: Threshold of peakfinder
+
+# Returns
+    * `h_decon`: Deconvoluted histogram
+    * `peakpos`: Peak position
+
+"""
 
 function find_peaks(
     amps::Vector{<:Real}; initial_min_amp::Real=1.0, initial_max_quantile::Real=0.99, 

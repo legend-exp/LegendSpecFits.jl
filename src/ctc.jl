@@ -1,19 +1,32 @@
 
 """
-    ctc_energy(e::Array{T}, qdrift::Array{T}, peak::T, window::T) where T<:Real
+    ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real}, peak::Unitful.Energy{<:Real}, window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}, m_cal_simple::Unitful.Energy{<:Real}=1.0u"keV"; e_expression::Union{Symbol, String}="e", pol_order::Int=1)
 
 Correct for the drift time dependence of the energy by minimizing the ratio of
 the FWHM and the peak height of the peak around `peak` in `e` with a cut window
 of `window`. The drift time dependence is given by `qdrift`.
 
+# Arguments
+    * `e`: Calibrated energies
+    * `qdrift`: Drift time dependence 
+    * `peak`: Energy at the peak
+    * `window`: Data window in energy
+    * `m_cal_simple`: Simple calibration factor
+
+# Keywords
+    * `e_expression`: Calibrated energy expression
+    * `pol_order`: Polynomial order
+
 # Returns 
     * `peak`: peak position
     * `window`: window size
+    * `m_cal_simple`: Simple calibration factor
+    * `func`: Function
     * `fct`: correction factor
     * `fwhm_before`: FWHM before correction
     * `fwhm_after`: FWHM after correction
-    * `func`: function to correct energy
-    * `func_generic`: generic function to correct energy
+    * `converged`: Convergence status of the fit
+
 """
 function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real}, peak::Unitful.Energy{<:Real}, window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}, m_cal_simple::Unitful.Energy{<:Real}=1.0u"keV"; e_expression::Union{Symbol, String}="e", pol_order::Int=1)
     # create cut window around peak

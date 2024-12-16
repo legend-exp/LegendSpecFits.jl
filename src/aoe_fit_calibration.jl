@@ -1,17 +1,25 @@
 @. f_aoe_sigma(x, p) = sqrt(p[1]^2 + p[2]^2/x^2)
 f_aoe_mu(x, p) = p[1] .+ p[2].*x
 """
-fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real})
+    fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real}; aoe_expression::Union{String,Symbol}="a / e", e_expression::Union{String,Symbol}="e")
 
 Fit the corrections for the AoE value of the detector.
+
+# Arguments
+    * `e`: Calibrated energies
+    * `μ`: Mean values
+    * `σ`: Sigma values
+
+# Keywords
+    * `aoe_expression`: A/E expression
+    * `e_expression`: Calibrated energy expression
+
 # Returns
-- `e`: Energy values
-- `μ`: Mean values
-- `σ`: Sigma values
-- `μ_scs`: Fit result for the mean values
-- `f_μ_scs`: Fit function for the mean values
-- `σ_scs`: Fit result for the sigma values
-- `f_σ_scs`: Fit function for the sigma values
+    * `µ_compton`: Mean compton values
+    * `σ_compton`: Sigma compton values
+    * `compton_bands`: Compton bands 
+    * `func`: A/E correction function
+
 """
 function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real}; aoe_expression::Union{String,Symbol}="a / e", e_expression::Union{String,Symbol}="e")
     # fit compton band mus with linear function

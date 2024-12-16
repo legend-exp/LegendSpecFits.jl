@@ -1,14 +1,25 @@
 
 """
-    cut_single_peak(x::Array, min_x::Float64, max_x::Float64,; n_bins::Int=-1, relative_cut::Float64=0.5)
+    cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T,; n_bins::Int=-1, relative_cut::Float64=0.5, n_tries::Int=5) where T<:Unitful.RealOrRealQuantity
 
 Cut out a single peak from the array `x` between `min_x` and `max_x`.
 The number of bins is the number of bins to use for the histogram.
 The relative cut is the fraction of the maximum counts to use for the cut.
+
+# Arguments
+    * `x`: Array of x-values
+    * `min_x`: Minimum x value
+    * `max_x`: Maximum x value
+    
+# Keywords
+    * `n_bins`: Number of bins to use in histogram
+    * `relative_cut`: Fraction of the maximum counts to use for the cut
+    * `n_tries`: Number of tries to find cut window
+
 # Returns 
-    * `max`: maximum position of the peak
-    * `low`: lower edge of the cut peak
-    * `high`: upper edge of the cut peak
+    * `max`: Maximum position of the peak
+    * `low`: Lower edge of the cut peak
+    * `high`: Upper edge of the cut peak
 """
 function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T,; n_bins::Int=-1, relative_cut::Float64=0.5, n_tries::Int=5) where T<:Unitful.RealOrRealQuantity
     @assert unit(min_x) == unit(max_x) == unit(x[1]) "Units of min_x, max_x and x must be the same"
@@ -57,10 +68,24 @@ export cut_single_peak
 
 
 """
-    get_centered_gaussian_window_cut(x::Array, min_x::Float64, max_x::Float64, n_σ::Real, center::Float64=0.0, n_bins_cut::Int=500, relative_cut::Float64=0.2, left::Bool=false)
+    get_centered_gaussian_window_cut(x::Vector{T}, min_x::T, max_x::T, n_σ::Real,; center::T=zero(x[1]), n_bins_cut::Int=500, relative_cut::Float64=0.2, left::Bool=false, fixed_center::Bool=true) where T<:Unitful.RealOrRealQuantity
 
 Cut out a single peak from the array `x` between `min_x` and `max_x` by fitting a truncated one-sided Gaussian and extrapolating a window cut with `n_σ` standard deviations.
 The `center` and side of the fit can be specified with `left` and `center` variable.
+
+# Arguments
+    * `x`: Vector of x values
+    * `min_x`: Minimum x value
+    * `max_x`: Maximum x value
+    * `n_σ`: Number of standard deviations
+    
+# Keywords
+    * `center`: center of fit
+    * `n_bins_cut`: Number of bins cut
+    * `relative_cut`: Relative cut of peak
+    * `left`: Left side of fit
+    * `fixed_center`: Center of fit is fixed if True
+
 # Returns
     * `low_cut`: lower edge of the cut peak
     * `high_cut`: upper edge of the cut peak
@@ -68,7 +93,11 @@ The `center` and side of the fit can be specified with `left` and `center` varia
     * `σ`: standard deviation of the Gaussian
     * `low_cut_fit`: lower edge of the cut peak from the fit
     * `high_cut_fit`: upper edge of the cut peak from the fit
-    * `err`: error of the fit parameters
+    * `max_cut_fit`: maximum cut
+    * `f_fit`: Function fit
+    * `x_fit`: x value fit
+    * `h`: Normalized histogram
+
 """
 function get_centered_gaussian_window_cut(x::Vector{T}, min_x::T, max_x::T, n_σ::Real,; center::T=zero(x[1]), n_bins_cut::Int=500, relative_cut::Float64=0.2, left::Bool=false, fixed_center::Bool=true) where T<:Unitful.RealOrRealQuantity
     @assert unit(min_x) == unit(max_x) == unit(x[1]) "Units of min_x, max_x and x must be the same"

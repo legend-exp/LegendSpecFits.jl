@@ -3,10 +3,14 @@
 heaviside(x) = x < zero(x) ? zero(x) : one(x)
 
 """
-    expand_vars(v::NamedTuple)::StructArray
+    expand_vars(v::NamedTuple)
 
 Expand all fields in `v` (scalars or arrays) to same array size and return
 a `StructArray`.
+
+# Arguments
+    * `v`: Variables to expand into equal array sizes
+
 """
 function expand_vars(v::NamedTuple)
     sz = Base.Broadcast.broadcast_shape((1,), map(size, values(v))...)
@@ -17,9 +21,15 @@ end
 export expand_vars
 
 """
-    subhist(h::Histogram, r::Tuple{<:Real,<:Real})
+    subhist(h::Histogram{<:Any, 1}, r::Tuple{<:Real,<:Real})
 
 Return a new `Histogram` with the bins in the range `r`.
+2 methods for the function.
+    
+# Arguments
+    * `h`: Histogram data
+    * `r`: Range of the histogram to use bins for a new histogram
+
 """
 function subhist(h::Histogram{<:Any, 1}, r::Tuple{<:Real,<:Real})
     first_bin, last_bin = (StatsBase.binindex(h, r[1]), StatsBase.binindex(h, r[2]))
@@ -40,15 +50,21 @@ export subhist
     get_distribution_transform(d::Distribution, pprior::Prior)
 
 Return a `DistributionTransform` for the given `Distribution` and `Prior`.
+
+# Arguments
+    * `d`: Distribution
+    * `pprior`: Pseudo prior
 """
 function get_distribution_transform end
 
 
 """
-    tuple_to_array(nt::NamedTuple, fields::Vector{Symbol})
+    tuple_to_array(nt::NamedTuple)
 
-Return an array with the values of the fields in `nt` in the order given by
-`fields`.
+Return an array with the values of the fields in `nt`.
+# Arguments
+    * `nt`: Field values
+
 """
 function tuple_to_array(nt::NamedTuple)
     [nt[f] for f in fieldnames(nt)]
@@ -60,6 +76,10 @@ end
 
 Return a `NamedTuple` with the values of `a` in the order given by
 `fieldnames(as_nt)`.
+
+# Arguments
+    * `a`: Array of values
+    * `as_nt`: Order for array
 """
 function array_to_tuple(a::AbstractArray, as_nt::NamedTuple)
     NamedTuple{fieldnames(as_nt)}(a)
@@ -70,6 +90,11 @@ end
     get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Integer)
 Return a `NamedTuple` with the same fields as `v` and `v_err` but with
 `Normal` distributions for each field.
+
+# Arguments
+    * `v`: Best-fit values
+    * `v_err`: Value error
+    * `n`: Number of fields
 """
 function get_mc_value_shapes(v::NamedTuple, v_err::NamedTuple, n::Integer)
     vs = BAT.distprod(map(Normal, v, v_err))
@@ -79,6 +104,12 @@ end
 """
     get_mc_value_shapes(v::NamedTuple, v_err::Matrix, n::Integer)
 Generate `n` random samples of fit parameters using their respective best-fit values `v` and covariance matrix `v_err`
+
+# Arguments
+    * `v`: Best-fit values
+    * `v_err`: Value error
+    * `n`: Number of random fit parameter samples
+
 """
 function get_mc_value_shapes(v::V, v_err::Matrix{T}, n::Integer)::Vector{V} where {V <: NamedTuple, T <: AbstractFloat}
 
@@ -100,10 +131,14 @@ function get_mc_value_shapes(v::V, v_err::Matrix{T}, n::Integer)::Vector{V} wher
         v_mc[6,i] > 0.0             # positive skew width
     ]
 end
+
 """
-    get_friedman_diaconis_bin_width(x::AbstractArray)
+    get_friedman_diaconis_bin_width(x::Vector{<:Real})
 
 Return the bin width for the given data `x` using the Friedman-Diaconis rule.
+
+# Arguments
+    * `x`: Given data
 """
 function get_friedman_diaconis_bin_width end
 
@@ -116,6 +151,15 @@ get_friedman_diaconis_bin_width(x::Vector{<:Quantity{<:Real}}) = get_friedman_di
     get_number_of_bins(x::AbstractArray,; method::Symbol=:sqrt)
 
 Return the number of bins for the given data `x` using the given method.
+
+# Arguments
+    * `x`: Data 
+
+# Keywords
+    * `method`: Given method used to find the number of bins
+
+# Returns
+    * Number of bins for given data
 """
 function get_number_of_bins(x::AbstractArray,; method::Symbol=:sqrt)
     # all methods from https://en.wikipedia.org/wiki/Histogram#:~:text=To%20construct%20a%20histogram%2C%20the,overlapping%20intervals%20of%20a%20variable.
@@ -137,9 +181,18 @@ function get_number_of_bins(x::AbstractArray,; method::Symbol=:sqrt)
 end
 
 """
-    nearestSPD(A::Matrix{<:Real}) 
+    nearestSPD(A::Matrix{<:Real},;n_iter::Signed=1)
 Returns the nearest positive definite matrix to A
 Calculation is based on matrix factorization techniques described in https://www.sciencedirect.com/science/article/pii/0024379588902236
+
+# Arguments
+    * `A`: Given matrix
+    
+# Keywords
+    * `n_iter`: Number of iterations
+
+# Returns
+    * `B`: Nearest positive definite matrix to the 'A' matrix
 """
 function nearestSPD(A::Matrix{<:Real},;n_iter::Signed=1)
     B = (A + A') / 2  # make sure matrix is symmetric

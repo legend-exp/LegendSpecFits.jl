@@ -1,3 +1,20 @@
+"""
+    get_aoe_standard_pseudo_prior(h::Histogram, ps::NamedTuple, fit_func::Symbol; fixed_position::Bool=false)
+
+Gets the A/E of a histogram using a standard pseudo prior. 
+
+# Arguments
+    * `h`: Histogram data
+    * `ps`: Peak statistics 
+    * `fit_func`: Fit function
+
+# Keywords
+    * `fixed_position`: Determines whether the function uses a fixed position or not
+
+# Returns
+    * `pprior_base`: Base pseudo prior
+"""
+
 function get_aoe_standard_pseudo_prior(h::Histogram, ps::NamedTuple, fit_func::Symbol; fixed_position::Bool=false)
     pprior_base = NamedTupleDist(
         μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Normal(ps.peak_pos, 0.5*ps.peak_sigma)),
@@ -24,6 +41,23 @@ function get_aoe_standard_pseudo_prior(h::Histogram, ps::NamedTuple, fit_func::S
         throw(ArgumentError("fit_func $fit_func not supported for aoe peakshapes"))
     end
 end
+
+"""
+    get_aoe_pseudo_prior(h::Histogram, ps::NamedTuple, fit_func::Symbol; pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), kwargs...)
+
+Gets the A/E of a histogram using a pseudo prior. 
+# Arguments
+    * `h`: Histogram data
+    * `ps`: Peak statistics
+    * `fit_func`: Fit function
+
+# Keywords
+    * `pseudo_prior`: Initial guess for parameters of histogram
+    
+# Returns
+    * `pseudo_prior`: Initial guess for parameters of histogram
+
+"""
 
 function get_aoe_pseudo_prior(h::Histogram, ps::NamedTuple, fit_func::Symbol; pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), kwargs...)
     standard_pseudo_prior = get_aoe_standard_pseudo_prior(h, ps, fit_func; kwargs...)

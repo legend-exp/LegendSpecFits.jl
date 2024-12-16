@@ -2,12 +2,19 @@
 
 
 """
-    weibull_from_mx(m::Real, x::Real, p_x::Real = 0.6827)::Weibull
+    weibull_from_mx(m::Real, x::Real, p_x::Real = 0.6827)
 
 Construct a Weibull distribution with a given median `m` and a given
 `p_x`-quantile `x`.
 
 Useful to construct priors for positive quantities.
+
+# Arguments
+    * `m`: Median of data
+    * `x`:
+    * `p_x`:
+
+TO DO: argument descriptions 
 """
 function weibull_from_mx(m::Real, x::Real, p_x::Real = 0.6827)
     α = log(-log(1-p_x) / log(2)) / log(x/m)

@@ -1,11 +1,17 @@
 """
-    baseline_qc(data, qc_config)
+    baseline_qc(data::Q, qc_config::PropDict) where Q<:Table
 
-Perform simple Gaussian fits on the baseline disitrbutions for a given data set.
+Perform simple Gaussian fits on the baseline distrbutions for a given data set.
+
+# Arguments
+    * `data`: Given dataset
+    * `qc_config`: 
+
 # Returns
-- `result`: Namedtuple containing the cut and fit results for each baseline variable
-- `report`: Namedtuple containing plotable objects.
+    * `result`: Namedtuple containing the cut and fit results for each baseline variable
+    * `report`: Namedtuple containing plotable objects.
 """
+
 function baseline_qc(data::Q, qc_config::PropDict) where Q<:Table
     # get bl mean cut
     result_blmean, report_blmean = get_centered_gaussian_window_cut(data.blmean, qc_config.blmean.min, qc_config.blmean.max, qc_config.blmean.sigma, ; n_bins_cut=convert(Int64, round(length(data) * qc_config.blmean.n_bins_fraction)), relative_cut=qc_config.blmean.relative_cut, fixed_center=false, left=true)
@@ -27,6 +33,25 @@ function baseline_qc(data::Q, qc_config::PropDict) where Q<:Table
 end
 export baseline_qc
 
+
+"""
+    get_pulser_identified_idx(data::Table, key::Symbol, σ_search::Vector{Int}, pulser_config::PropDict; min_identified::Int=10)
+
+# Arguments
+    * `data`: Given dataset
+    * `key`: Key unit
+    * `σ_search`: Standard devaition search
+    * `pulser_config`: Pulser event configurations
+    
+# Keywords
+    * `min_identified`: Minimum identified pulser events
+
+# Returns
+    * `pulser_identified_idx`: Identified pulser events
+    * `time_idx`: Times which possible pulser events occurred 
+
+TO DO: function description + arguments check.
+"""
 
 function get_pulser_identified_idx(data::Table, key::Symbol, σ_search::Vector{Int}, pulser_config::PropDict; min_identified::Int=10)
     # extract config
@@ -79,12 +104,22 @@ function get_pulser_identified_idx(data::Table, key::Symbol, σ_search::Vector{I
 end
 
 """
-    pulser_cal_qc(data, pulser_config; n_pulser_identified=100)
+    pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::Int=100) where Q<:Table
 
 Perform simple QC cuts on the data and return the data for energy calibration.
+
+# Arguments
+    * `data`: Dataset given
+    * `pulser_config`: Pulser event configurations
+    
+# Keywords
+    * `n_pulser_identified`: Number of pulser events identified
+
 # Returns 
-    - pulser_idx: indices of the pulser events
+    * `pulser_idx`: Indices of the pulser events
+
 """
+
 function pulser_cal_qc(data::Q, pulser_config::PropDict; n_pulser_identified::Int=100) where Q<:Table
     # extract config
     f = pulser_config.frequency
