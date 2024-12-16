@@ -74,11 +74,11 @@ function find_peaks(
     min_amp = initial_min_amp
     max_quantile = initial_max_quantile
     max_amp = quantile(amps, max_quantile)
-    bin_width = get_friedman_diaconis_bin_width(filter(in(quantile(amps, 0.01)..quantile(amps, 0.9)), amps))
+    bin_width = get_friedman_diaconis_bin_width(filter(in(min_amp..quantile(amps, 0.9)), amps))
 
     # Initial peak search
     h_uncal = fit(Histogram, amps, min_amp:bin_width:max_amp)
-    h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
+    h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=false, threshold=peakfinder_threshold)
 
     # Ensure at least 2 peaks
     num_peaks = length(peakpos)
@@ -98,18 +98,18 @@ function find_peaks(
     # while less than two peaks found, or second peakpos smaller than 1 pe peakpos, or gain smaller than 1 (peaks too close)
     while num_peaks < 2 || peakpos[2] <= first_pe_peak_pos || (peakpos[2] - peakpos[1]) <= 1.0
         # Adjust σ and recheck peaks
-        if peakfinder_σ < 10.0
-            println("Increasing peakfinder_σ: ", peakfinder_σ)
+        if peakfinder_σ < 25.0
+            @debug "Increasing peakfinder_σ: $peakfinder_σ"
             peakfinder_σ += 0.5
         else
             # If σ can't increase further, reduce threshold
-            println("Adjusting peakfinder_threshold: ", peakfinder_threshold)
+            @debug "Adjusting peakfinder_threshold: $peakfinder_threshold"
             peakfinder_threshold -= 1.0
             peakfinder_σ = 2.0  # Reset σ for new threshold
 
             # Safety check to avoid lowering threshold too much
             if peakfinder_threshold < 2.0
-                error("Unable to find two distinct peaks within reasonable quantile range.")
+                throw(ErrorException("Unable to find two peaks within reasonable quantile range."))
             end
         end
 
@@ -120,7 +120,7 @@ function find_peaks(
 
         # Safety check to avoid infinite loops
         if peakfinder_σ >= 10.0 && peakfinder_threshold < 2.0
-            error("Unable to find two peaks within reasonable quantile range.")
+            throw(ErrorException("Unable to find two peaks within reasonable quantile range."))
         end
     end
 
