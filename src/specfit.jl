@@ -238,8 +238,10 @@ function estimate_fwhm(v::NamedTuple)
         catch
             return NaN
         end
-    else
+    elseif haskey(v, :σ)
         return 2 * sqrt(2 * log(2)) * v.σ
+    else
+        return NaN
     end
 end
 """

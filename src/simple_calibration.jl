@@ -84,11 +84,20 @@ function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<
 end
 
 """
-    simple_calibration_gamma(e_uncal::Array, gamma_lines::Array, window_size::Float64=25.0, n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Float64=10.0, peak_quantile::ClosedInterval{<:Real} = 0.5..1.0)
-Perform a simple calibration for the uncalibrated energy array `e_uncal`
-* Find peaks within peak_quantile::ClosedInterval{<:Real} = 0.5..1.0 of the data
-* Estimate the calibration constant `c` by dividing the maximum gamma line energy by the peak guess
+    simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV", peak_quantile::ClosedInterval{<:Real} = 0.5..1.0)
+Perform a simple calibration for the uncalibrated energy array `e_uncal` for any gamma source 
+* 1. Run a peak-finding algorithm. Only the energy window that is defined by `peak_quantile` is considered for the peak search.
+* 2. Estimate the calibration constant `c` by dividing the energy of the `gamma_lines` by the energy of the most prominent peak from peak-finder 
 * Return peakstats and peakhists of gamma lines for further calibration 
+INPUTS:
+* `e_uncal`: uncalibrated energy array
+* `gamma_lines`: array of gamma lines
+* `window_sizes`: array of tuples with left and right window sizes around the gamma lines
+KEYWORD ARGUMENTS:
+* `n_bins`: number of bins for the histogram (not used, legacy from simple_calibration)
+* `quantile_perc`: quantile percentage for the most prominent peak  (not used, legacy from simple_calibration)
+* `binning_peak_window`: window size for the peak search histogram (default: 10 keV)
+* `peak_quantile`: quantile range for the peak search (default: 0.5..1.0)
 """
 function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV", peak_quantile::ClosedInterval{<:Real} = 0.5..1.0)
     e_min = quantile(e_uncal, leftendpoint(peak_quantile))
