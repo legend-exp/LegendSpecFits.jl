@@ -36,7 +36,7 @@ end
 simple_calibration(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = simple_calibration(e_uncal, gamma_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
 
 
-function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
+function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV", e_unit::Unitful.EnergyUnits=u"keV")
     # initial binning
     bin_width = get_friedman_diaconis_bin_width(filter(in(quantile(e_uncal, 0.05)..quantile(e_uncal, 0.5)), e_uncal))
     # create initial peak search histogram
@@ -57,7 +57,6 @@ function simple_calibration_th228(e_uncal::Vector{<:Real}, th228_lines::Vector{<
     # get calibration constant for simple calibration
     c = 2614.5*u"keV" / fep_guess
     e_simple = e_uncal .* c
-    e_unit = u"keV"
     # get peakhists and peakstats
     peakhists, peakstats, h_calsimple, bin_widths = get_peakhists_th228(e_simple, th228_lines, window_sizes; binning_peak_window=binning_peak_window, e_unit=e_unit)
     
@@ -99,7 +98,7 @@ KEYWORD ARGUMENTS:
 * `binning_peak_window`: window size for the peak search histogram (default: 10 keV)
 * `peak_quantile`: quantile range for the peak search (default: 0.5..1.0)
 """
-function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV", peak_quantile::ClosedInterval{<:Real} = 0.5..1.0)
+function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; n_bins::Int=15000, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV", peak_quantile::ClosedInterval{<:Real} = 0.5..1.0,  e_unit::Unitful.EnergyUnits=u"keV")
     e_min = quantile(e_uncal, leftendpoint(peak_quantile))
     e_max = quantile(e_uncal, rightendpoint(peak_quantile))
     # initial binning
@@ -121,7 +120,6 @@ function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<
     # get calibration constant for simple calibration
     c = gamma_lines[peak_idx] / peak_guess
     e_simple = e_uncal .* c
-    e_unit = u"keV"
     # get peakhists and peakstats
     peakhists, peakstats, h_calsimple, bin_widths = get_peakhists_th228(e_simple, gamma_lines, window_sizes; binning_peak_window=binning_peak_window, e_unit=e_unit)
     
