@@ -1,14 +1,34 @@
 """
-    lq_norm::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
+lq_ctc_correction(
+    lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
     ctc_dep_edgesigma::Float64=3.0 , ctc_driftime_cutoff_method::Symbol=:percentile, lq_outlier_sigma::Float64 = 2.0, drift_time_outlier_sigma::Float64 = 2.0, prehist_sigma::Float64=2.5, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) 
 
-Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a linear fit on the remaining data. The data is Corrected by subtracting the linear fit from the lq data.
+    Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a linear fit on the remaining data. The data is Corrected by subtracting the linear fit from the lq data.
+
+# Arguments 
+    * `lq`: Energy corrected lq parameter
+    * `dt_eff`: Effective drift time
+    * `e_cal`: Energy
+    * `DEP_µ`: Mean of the DEP peak
+    * `DEP_σ`: Standard deviation of the DEP peak
+
+# Keywords
+    * `ctc_dep_edgesigma`: Number of standard deviations used to define the DEP edges
+    * `ctc_driftime_cutoff_method`: Method used to define the drift time cutoff
+    * `lq_outlier_sigma`: Number of standard deviations used to define the lq cutoff
+    * `drift_time_outlier_sigma`: Number of standard deviations used to define the drift time cutoff
+    * `prehist_sigma`: Number of standard deviations used to define the drift time cutoff
+    * `lq_e_corr_expression`: Expression for the energy corrected lq classifier 
+    * `dt_eff_expression`: Expression for the effective drift time 
+    * `ctc_dt_eff_low_quantile`: Lower quantile used to define the drift time cutoff
+    * `ctc_dt_eff_high_quantile`: Higher quantile used to define the drift time cutoff
+    * `pol_fit_order`: Order of the polynomial fit used for the drift time correction
 # Returns
-    * `result`: NamedTuple of the function used for lq classifier construction
+    * `result`: NamedTuple of the function used for the drift time correction
     * `report`: NamedTuple of the histograms used for the fit, the cutoff values and the DEP edges
 """
 function lq_ctc_correction(
-    lq_norm::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
+    lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, DEP_µ::Unitful.AbstractQuantity, DEP_σ::Unitful.AbstractQuantity; 
     ctc_dep_edgesigma::Float64=3.0 , ctc_driftime_cutoff_method::Symbol=:percentile, lq_outlier_sigma::Float64 = 2.0, drift_time_outlier_sigma::Float64 = 2.0, prehist_sigma::Float64=2.5, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) 
 
     # calculate DEP edges
@@ -16,13 +36,13 @@ function lq_ctc_correction(
     DEP_right = DEP_µ + ctc_dep_edgesigma * DEP_σ
 
     # cut data to DEP peak
-    lq_DEP = lq_norm[DEP_left .< e_cal .< DEP_right]
+    lq_DEP = lq[DEP_left .< e_cal .< DEP_right]
     dt_eff_DEP = ustrip.(dt_eff[DEP_left .< e_cal .< DEP_right])
 
     lq_precut = cut_single_peak(lq_DEP, minimum(lq_DEP), maximum(lq_DEP))
 
     # truncated gaussian fit
-    lq_result, lq_report = fit_single_trunc_gauss(lq_DEP, lq_precut)
+    lq_result, lq_report = fit_single_trunc_gauss(lq_DEP, lq_precut, uncertainty=false)
     µ_lq = mvalue(lq_result.μ)
     σ_lq = mvalue(lq_result.σ)
 
@@ -52,7 +72,7 @@ function lq_ctc_correction(
         drift_edges = range(drift_start, stop=drift_stop, step=ideal_bin_width)
         drift_hist_DEP = fit(Histogram, dt_eff_DEP, drift_edges)
         
-        drift_result, drift_report = fit_binned_trunc_gauss(drift_hist_DEP)
+        drift_result, drift_report = fit_binned_trunc_gauss(drift_hist_DEP, uncertainty=false)
         µ_t = mvalue(drift_result.μ)
         σ_t = mvalue(drift_result.σ)
 
@@ -67,7 +87,7 @@ function lq_ctc_correction(
         drift_prestats = estimate_single_peak_stats(drift_prehist)
 
         #fit histogram with double gaussian
-        drift_result, drift_report = fit_binned_double_gauss(drift_prehist, drift_prestats)
+        drift_result, drift_report = fit_binned_double_gauss(drift_prehist, drift_prestats, uncertainty=false)
         
         #set cutoff at the x-value where the fit function is 10% of its maximum value
         x_values = -1000:0.5:5000  
@@ -91,12 +111,12 @@ function lq_ctc_correction(
     t_cut = dt_eff_DEP[lq_lower .< lq_DEP .< lq_upper .&& t_lower .< dt_eff_DEP .< t_upper]
 
     #polynomial fit
-    result_µ, report_µ = chi2fit(pol_fit_order, t_cut, lq_cut; uncertainty=true)
+    result_µ, report_µ = chi2fit(pol_fit_order, t_cut, lq_cut; uncertainty=false)
     par = mvalue(result_µ.par)
-    drift_time_func(x) =  sum((mvalue(par[i])) * x^(i-1) for i in eachindex(par))
+    pol_fit_func = report_µ.f_fit
 
     #property function for drift time correction
-    lq_class_func = "$lq_e_corr_expression - " * join(["$(mvalue(par[i])) * $dt_eff_expression^$(i-1)" for i in eachindex(par)], " - ")
+    lq_class_func = "$lq_e_corr_expression - " * join(["$(par[i]) * $dt_eff_expression^$(i-1)" for i in eachindex(par)], " - ")
     lq_class_func_generic = "lq / e  - (slope * qdrift / e + y_inter)"
 
     #create result and report
@@ -110,7 +130,7 @@ function lq_ctc_correction(
     drift_prehist = drift_prehist, 
     drift_report = drift_report,
     lq_box = box,
-    drift_time_func = drift_time_func,
+    drift_time_func = pol_fit_func,
     DEP_left = DEP_left,
     DEP_right = DEP_right,
     )
@@ -121,9 +141,22 @@ end
 export lq_ctc_correction
 
 """
+lq_cut(
     DEP_µ::Unitful.Energy, DEP_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=2.0)
 
-Evaluates the cutoff value for the LQ cut. The function performs a binned gaussian fit on the sidebandsubtracted LQ histogram and evaluates the cutoff value difined at 3σ of the fit.
+    Evaluates the cutoff value for the LQ cut. The function performs a binned gaussian fit on the sidebandsubtracted LQ histogram and evaluates the cutoff value difined at 3σ of the fit.
+
+# Arguments
+    * `DEP_µ`: Mean of the DEP peak
+    * `DEP_σ`: Standard deviation of the DEP peak
+    * `e_cal`: Energy
+    * `lq_classifier`: LQ classifier
+
+# Keywords
+    * `cut_sigma`: Number of standard deviations used to define the final cutoff value
+    * `dep_sideband_sigma`: Number of standard deviations used to define the sideband edges
+    * `cut_truncation_sigma`: Number of standard deviations used for the precut of sideband subtracted histogram
+
 # Returns
     * `result`: NamedTuple of the cutoff value
     * `report`: NamedTuple of the fit result, fit report and temporary histograms
