@@ -15,10 +15,12 @@ function autocal_energy(e::AbstractArray{<:Real}, photon_lines::Vector{<:Unitful
     h_uncal = fit(Histogram, e, min_e:bin_width:max_e)
     if mode == :fit
         @debug "Auto calibrate via peak fitting"
-        h_cal, h_deconv, peakPositions, threshold, c, _ = RadiationSpectra.calibrate_spectrum(h_uncal, ustrip.(e_unit, photon_lines); min_n_peaks = min_n_peaks, max_n_peaks = max_n_peaks, threshold=threshold, α=α, σ=σ, rtol=rtol)
+        _, _, peak_positions, threshold, c, _ = RadiationSpectra.calibrate_spectrum(h_uncal, ustrip.(e_unit, photon_lines); min_n_peaks = min_n_peaks, max_n_peaks = max_n_peaks, threshold=threshold, α=α, σ=σ, rtol=rtol)
     elseif mode == :ratio
         @debug "Auto calibrate via peak ratios"
-        c, h_deconv, peakPositions, threshold = RadiationSpectra.determine_calibration_constant_through_peak_ratios(h_uncal, ustrip.(e_unit, photon_lines), min_n_peaks = min_n_peaks, max_n_peaks = max_n_peaks, threshold=threshold, α=α, σ=σ, rtol=rtol)
+        c, _, peak_positions, threshold = RadiationSpectra.determine_calibration_constant_through_peak_ratios(h_uncal, ustrip.(e_unit, photon_lines), min_n_peaks = min_n_peaks, max_n_peaks = max_n_peaks, threshold=threshold, α=α, σ=σ, rtol=rtol)
+    else
+        throw(ArgumentError("Unknown mode $mode, only `:fit` and `:ratio` are supported"))
     end
     
     # generate calibratio constant
@@ -30,8 +32,8 @@ function autocal_energy(e::AbstractArray{<:Real}, photon_lines::Vector{<:Unitful
     e_cal = ustrip.(f_calib.(e))
     h_cal = fit(Histogram, e_cal, cal_hist_binning)
     # return result and report
-    result = (f_calib = f_calib, h_cal = h_cal, h_uncal = h_uncal, c = c, peak_positions = peakPositions, threshold = threshold)
-    report = (h_cal = h_cal, h_uncal = h_uncal, c = c, peak_positions = peakPositions, threshold = threshold)
+    result = (; f_calib, h_cal, h_uncal, c, peak_positions, threshold)
+    report = result
     return result, report
 end
 export autocal_energy
