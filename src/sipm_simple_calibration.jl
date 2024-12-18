@@ -67,17 +67,14 @@ end
 
 
 function find_peaks(
-    amps::Vector{<:Real}; initial_min_amp::Real=1.0, initial_max_quantile::Real=0.99, 
+    amps::Vector{<:Real}; initial_min_amp::Real=1.0, initial_max_amp::Real=100.0, initial_max_bin_width_quantile::Real=0.9, 
     peakfinder_σ::Real=2.0, peakfinder_threshold::Real=10.0
 )
     # Start with a big window where the noise peak is included
-    min_amp = initial_min_amp
-    max_quantile = initial_max_quantile
-    max_amp = quantile(amps, max_quantile)
-    bin_width = get_friedman_diaconis_bin_width(filter(in(min_amp..quantile(amps, 0.9)), amps))
+    bin_width = get_friedman_diaconis_bin_width(filter(in(initial_min_amp..quantile(amps, initial_max_bin_width_quantile)), amps))
 
     # Initial peak search
-    h_uncal = fit(Histogram, amps, min_amp:bin_width:max_amp)
+    h_uncal = fit(Histogram, amps, initial_min_amp:bin_width:initial_max_amp)
     h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=false, threshold=peakfinder_threshold)
 
     # Ensure at least 2 peaks
@@ -114,12 +111,12 @@ function find_peaks(
         end
 
         # Find peaks with updated parameters
-        h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=true, threshold=peakfinder_threshold)
+        h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=false, threshold=peakfinder_threshold)
         filter!(x -> x >= first_pe_peak_pos, peakpos)
         num_peaks = length(peakpos)
 
         # Safety check to avoid infinite loops
-        if peakfinder_σ >= 10.0 && peakfinder_threshold < 2.0
+        if peakfinder_σ >= 10.0 && peakfinder_threshold < 0.1
             throw(ErrorException("Unable to find two peaks within reasonable quantile range."))
         end
     end
