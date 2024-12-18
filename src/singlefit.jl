@@ -473,6 +473,7 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
     report = (
             f_fit = x -> Base.Fix2(f_fit, v_ml)(x) * bin_width,
             h = h_nocut,
+            h_cut = h,
             μ = result.μ,
             σ = result.σ,
             gof = get(result, :gof, NamedTuple())

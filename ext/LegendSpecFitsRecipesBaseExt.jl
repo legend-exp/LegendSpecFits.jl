@@ -1275,7 +1275,7 @@ end
 
 # recipe for the lq_drift_time_correction report
 
-@recipe function f(report::NamedTuple{(:lq_report, :drift_prehist, :drift_report, :lq_box, :drift_time_func, :DEP_left, :DEP_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
+@recipe function f(report::NamedTuple{(:lq_report, :drift_report, :lq_box, :drift_time_func, :DEP_left, :DEP_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
 
     # Extract data from the report
     DEP_left = report.DEP_left
@@ -1321,13 +1321,15 @@ end
         # Create 2D histogram with all data
         colorbar_scale := :log10
 
-        # dynamic bin size
-        xmin = ustrip.(quantile(dt_eff, 0.001))
-        xmax = ustrip.(quantile(dt_eff, 0.999))
-        xstep = (xmax - xmin) / 200
-        ymin = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.005)) #filters NaNs for quantile
-        ymax = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.94)) #filters NaNs for quantile
-        ystep = (ymax - ymin) / 200
+        # dynamic bin size dependant on fit constraint box
+        t_diff = box.t_upper - box.t_lower
+        lq_diff = box.lq_upper - box.lq_lower
+        xmin = box.t_lower - 1*t_diff
+        xmax = box.t_upper + 1*t_diff
+        xstep = (xmax - xmin) / 400
+        ymin = box.lq_lower - 8*lq_diff
+        ymax = box.lq_upper + 8*lq_diff
+        ystep = (ymax - ymin) / 400
         nbins := (xmin:xstep:xmax, ymin:ystep:ymax)
 
         @series begin
@@ -1362,7 +1364,8 @@ end
         # Evaluate drift_time_func over the full range of drift time (x-axis)
         dt_range = range(xmin, xmax, length=100)  # 100 points across the x-axis
         lq_fit = report.drift_time_func.(dt_range)  # Apply the linear function to the full dt range
-
+        xlims := (xmin, xmax)
+        ylims := (ymin, ymax)
         dt_range, lq_fit
 
     end
@@ -1390,7 +1393,11 @@ end
         # 2D histogram for LQ Cut
         xlabel := "Energy"
         ylabel := "LQ (A.U.)"
-        nbins := (0:6:3000, -0.1:0.0006:0.2)
+        #lq bins dependant on cut value
+        ymin = -5 * cut_value
+        ymax = 10 * cut_value
+        ystep = (ymax - ymin) / 500
+        nbins := (0:6:3000, ymin:ystep:ymax)
         colorbar_scale := :log10
         color := :viridis
         legend := :bottomright
@@ -1448,6 +1455,67 @@ end
             label := "Cut Fraction"
             0:3:3000, h_diff
         end
+
+    elseif plot_type == :fit
+        # Fit plot
+        xlabel := "LQ (A.U.)"
+        ylabel := "Counts"
+        
+        @series begin
+            seriestype := :stepbins
+            label := "Data"
+            subplot := 1
+            color := :black
+            xlabel := "LQ [A.U.]"
+            ylabel := "Counts"
+            report.fit_report.h
+
+        end
+        
+        @series begin
+            seriestype := :line
+            label := "Gaussian Fit"
+            subplot := 1
+            linewidth := 2
+            color := :blue
+            xlims := quantile(filter(isfinite, lq_class), 0.13), quantile(filter(isfinite, lq_class), 0.80)
+            report.fit_report.f_fit
+        end
+
+        @series begin
+            seriestype := :vline
+            label := "Cut Value"
+            subplot := 1
+            linewidth := 2
+            color := :red
+            xlims := quantile(filter(isfinite, lq_class), 0.13), quantile(filter(isfinite, lq_class), 0.80)
+            [cut_value]
+        end
+    elseif plot_type == :sideband
+        # Sideband histograms
+        xlabel := "Energy"
+        ylabel := "Counts"
+
+        @series begin
+            seriestype := :stepbins
+            label := "Peak"
+            report.temp_hists.hist_DEP
+        end
+
+        @series begin
+            seriestype := :stepbins
+            label := "Sideband 1"
+            report.temp_hists.hist_sb1
+        end
+
+        @series begin
+            seriestype := :stepbins
+            label := "Sideband 2"
+            xlims := quantile(filter(isfinite, lq_class), 0.05), quantile(filter(isfinite, lq_class), 0.95)
+            report.temp_hists.hist_sb2
+        end
+
+
     end
 end
 
