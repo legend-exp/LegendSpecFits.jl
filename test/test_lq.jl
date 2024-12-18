@@ -27,15 +27,15 @@ using Distributions
 
     lq_norm_tail = [lq + (tail_factor * (tail_threshold - dt)^2 / tail_threshold) * (dt < tail_threshold ? 1.0 : 0.0) for (lq, dt) in zip(lq_norm, ustrip.(dt_eff))]
 
-    # Generate energies at DEP
+    # Generate energies at dep
     e_cal = 1600.0u"keV" .+ randn(N) .* 1.0u"keV"
 
-    # DEP parameters
-    DEP_µ = 1600.0u"keV"
-    DEP_σ = 1.0u"keV"
+    # dep parameters
+    dep_µ = 1600.0u"keV"
+    dep_σ = 1.0u"keV"
 
     # Call the function with mode=:percentile
-    result, report = lq_ctc_correction(lq_norm_tail, dt_eff, e_cal, DEP_µ, DEP_σ; ctc_driftime_cutoff_method=:percentile)
+    result, report = lq_ctc_correction(lq_norm_tail, dt_eff, e_cal, dep_µ, dep_σ; ctc_driftime_cutoff_method=:percentile)
 
     # Retrieve the fitted parameters
     fitted_slope = report.drift_time_func(1.0) - report.drift_time_func(0.0)
@@ -50,13 +50,13 @@ end
 # Define the test function
 @testset "lq_cut Test" begin
     # Define energy peak parameters
-    DEP_µ = 1000.0u"keV"
-    DEP_σ = 1.0u"keV"
+    dep_µ = 1000.0u"keV"
+    dep_σ = 1.0u"keV"
     n_peak = 50000  # Peak events
     n_bg = div(n_peak, 10)  # Background events
 
-    # Energy calibration (fixed at DEP_µ for all events)
-    e_cal = vcat(fill(DEP_µ, n_peak + n_bg), fill(DEP_µ - 5* DEP_σ, n_bg ÷ 2), fill(DEP_µ + 5* DEP_σ, n_bg ÷ 2) )  # Fixed energy value for peak and background
+    # Energy calibration (fixed at dep_µ for all events)
+    e_cal = vcat(fill(dep_µ, n_peak + n_bg), fill(dep_µ - 5* dep_σ, n_bg ÷ 2), fill(dep_µ + 5* dep_σ, n_bg ÷ 2) )  # Fixed energy value for peak and background
 
     # LQ Classifier
     # Peak 1: Normally distributed LQ values
@@ -72,12 +72,12 @@ end
     lq_classifier_combined = vcat(lq_classifier_peak1, lq_classifier_peak2, lq_classifier_below, lq_classifier_above)
 
     # Call the LQ_cut function
-    result, report = lq_cut(DEP_µ, DEP_σ, e_cal, lq_classifier_combined)
+    result, report = lq_cut(dep_µ, dep_σ, e_cal, lq_classifier_combined)
 
-    # plot(report.temp_hists.hist_DEP, label="LQ SEP")
+    # plot(report.temp_hists.hist_dep, label="LQ SEP")
     # plot!(report.temp_hists.hist_sb1, label="LQ SB1")
     # plot!(report.temp_hists.hist_sb2, label="LQ SB2")
-    # plot!(report.temp_hists.hist_subtracted, label="DEP Subtracted")
+    # plot!(report.temp_hists.hist_subtracted, label="dep Subtracted")
     # plot(report.temp_hists.hist_corrected, label="original histogram")
     # plot!(report.fit_report.f_fit, label="Fit function")
 
