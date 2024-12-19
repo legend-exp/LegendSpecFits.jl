@@ -1,5 +1,9 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 
+using Interpolations: Throw, extrapolate, interpolate, Gridded, Linear
+_linear_interpolation(range::AbstractVector, vs::AbstractVector; extrapolation_bc = Throw()) =
+    extrapolate(interpolate((range, ), vs, Gridded(Linear())), extrapolation_bc)
+
 """
     generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=th228_fit_functions.f_fit)
 Sample Legend200 calibration data based on "Inverse Transform Sampling" method
@@ -53,7 +57,7 @@ function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpe
     for i=1:length(th228_lines)
         bandwidth = maximum(model_cdf_all[i])-minimum(model_cdf_all[i])
         rand_i = minimum(model_cdf_all[i]).+bandwidth.*rand(n_i[i]); # make sure sample is within model range 
-        interp_cdf_inv = linear_interpolation(model_cdf_all[i], bin_centers_all[i]) # inverse cdf
+        interp_cdf_inv = _linear_interpolation(model_cdf_all[i], bin_centers_all[i]) # inverse cdf
         energy_mc_all[i] = interp_cdf_inv.(rand_i) 
     end
 
