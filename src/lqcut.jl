@@ -1,6 +1,6 @@
 """
     lq_ctc_correction(lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
-    ctc_dep_edgesigma::Float64=3.0 , ctc_driftime_cutoff_method::Symbol=:percentile, lq_outlier_sigma::Float64 = 2.0, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) )
+    ctc_dep_edgesigma::Float64=3.0 , ctc_lq_precut_relative_cut::Float64=0.5, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) )
 
     Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a polynomial fit on the remaining data. The data is Corrected by subtracting the polynomial fit from the lq data.
 
@@ -13,6 +13,7 @@
 
 # Keywords
     * `ctc_dep_edgesigma`: Number of standard deviations used to define the DEP edges
+    * `ctc_lq_precut_relative_cut`: Relative cut for cut_single_peak function
     * `ctc_driftime_cutoff_method`: Method used to define the drift time cutoff
     * `lq_outlier_sigma`: Number of standard deviations used to define the lq cutoff
     * `dt_eff_outlier_sigma`: Number of standard deviations used to define the drift time cutoff
@@ -29,7 +30,7 @@
 """
 function lq_ctc_correction(
     lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
-    ctc_dep_edgesigma::Float64=3.0 , ctc_driftime_cutoff_method::Symbol=:percentile, lq_outlier_sigma::Float64 = 2.0, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) 
+    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.5, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) 
 
     # calculate DEP edges
     dep_left = dep_µ - ctc_dep_edgesigma * dep_σ
@@ -40,7 +41,7 @@ function lq_ctc_correction(
     dt_eff_dep = ustrip.(dt_eff[dep_left .< e_cal .< dep_right])
 
     # precut lq data for fit
-    lq_precut = cut_single_peak(lq_dep, 0.0, quantile(filter(isfinite, lq_dep), 0.95); relative_cut=0.49)
+    lq_precut = cut_single_peak(lq_dep, 0.0, quantile(filter(isfinite, lq_dep), 0.95); relative_cut=ctc_lq_precut_relative_cut)
 
     # truncated gaussian fit
     lq_result, lq_report = fit_single_trunc_gauss(lq_dep, lq_precut, uncertainty=false)
