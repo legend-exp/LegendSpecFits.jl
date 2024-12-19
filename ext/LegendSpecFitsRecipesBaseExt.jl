@@ -1275,16 +1275,16 @@ end
 
 # recipe for the lq_drift_time_correction report
 
-@recipe function f(report::NamedTuple{(:lq_report, :drift_report, :lq_box, :drift_time_func, :DEP_left, :DEP_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
+@recipe function f(report::NamedTuple{(:lq_report, :drift_report, :lq_box, :drift_time_func, :dep_left, :dep_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
 
     # Extract data from the report
-    DEP_left = report.DEP_left
-    DEP_right = report.DEP_right
+    dep_left = report.dep_left
+    dep_right = report.dep_right
     box = report.lq_box
 
     #cut data to DEP
-    dt_DEP = dt_eff[DEP_left .< e_cal .< DEP_right]
-    lq_DEP = lq_e_corr[DEP_left .< e_cal .< DEP_right]
+    dt_dep = dt_eff[dep_left .< e_cal .< dep_right]
+    lq_dep = lq_e_corr[dep_left .< e_cal .< dep_right]
 
     # Plot configuration: 2D histogram
     xlabel := "Drift Time"
@@ -1300,7 +1300,7 @@ end
 
 
     if plot_type == :DEP
-        # Create 2D histogram with filtered data based on DEP_left and DEP_right
+        # Create 2D histogram with filtered data based on dep_left and dep_right
         
         # dynamic bin size dependant on fit constraint box
         t_diff = box.t_upper - box.t_lower
@@ -1315,7 +1315,7 @@ end
 
         @series begin
             seriestype := :histogram2d
-            dt_DEP, lq_DEP
+            dt_dep, lq_dep
         end
     elseif plot_type == :whole
         # Create 2D histogram with all data
@@ -1461,25 +1461,23 @@ end
         xlabel := "LQ (A.U.)"
         ylabel := "Counts"
         
+        ylabel := "Normalized Counts"
+        margins := (4, :mm)
+        framestyle := :box
+        legend := :topleft
+        xlims := (ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)), ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)))
         @series begin
-            seriestype := :stepbins
             label := "Data"
-            subplot := 1
-            color := :black
-            xlabel := "LQ [A.U.]"
-            ylabel := "Counts"
+            subplot --> 1
             report.fit_report.h
-
         end
-        
         @series begin
-            seriestype := :line
-            label := "Gaussian Fit"
-            subplot := 1
-            linewidth := 2
-            color := :blue
-            xlims := quantile(filter(isfinite, lq_class), 0.13), quantile(filter(isfinite, lq_class), 0.80)
-            report.fit_report.f_fit
+            color := :red
+            subplot --> 1
+            label := "Normal Fit (μ = $(round_wo_units(report.fit_report.μ, digits=2)), \n σ = $(round_wo_units(report.fit_report.σ, digits=2)))"
+            lw := 3
+            bottom_margin --> (-4, :mm)
+            ustrip(Measurements.value(report.fit_report.μ - 10*report.fit_report.σ)):ustrip(Measurements.value(report.fit_report.σ / 1000)):ustrip(Measurements.value(report.fit_report.μ + 10*report.fit_report.σ)), t -> report.fit_report.f_fit(t)
         end
 
         @series begin
@@ -1488,9 +1486,49 @@ end
             subplot := 1
             linewidth := 2
             color := :red
-            xlims := quantile(filter(isfinite, lq_class), 0.13), quantile(filter(isfinite, lq_class), 0.80)
             [cut_value]
         end
+
+        if !isempty(report.fit_report.gof)
+            link --> :x
+            layout --> @layout([a{0.7h}; b{0.3h}])
+            @series begin
+                seriestype := :hline
+                ribbon := 3
+                subplot --> 2
+                fillalpha := 0.5
+                label := ""
+                fillcolor := :lightgrey
+                linecolor := :darkgrey
+                [0.0]
+            end
+            @series begin
+                seriestype := :hline
+                ribbon := 1
+                subplot --> 2
+                fillalpha := 0.5
+                label := ""
+                fillcolor := :grey
+                linecolor := :darkgrey
+                [0.0]
+            end
+            @series begin
+                seriestype := :scatter
+                subplot --> 2
+                label := ""
+                title := ""
+                markercolor --> :black
+                ylabel := "Residuals (σ)"
+                link --> :x
+                top_margin --> (-4, :mm)
+                ylims := (-5, 5)
+                xlims := (ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)), ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)))
+                yscale --> :identity
+                yticks := ([-3, 0, 3])
+                collect(report.fit_report.h.edges[1])[1:end-1] .+ diff(collect(report.fit_report.h.edges[1]))[1]/2 , [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.fit_report.gof.residuals_norm]
+            end
+        end
+
     elseif plot_type == :sideband
         # Sideband histograms
         xlabel := "Energy"
@@ -1499,7 +1537,7 @@ end
         @series begin
             seriestype := :stepbins
             label := "Peak"
-            report.temp_hists.hist_DEP
+            report.temp_hists.hist_dep
         end
 
         @series begin

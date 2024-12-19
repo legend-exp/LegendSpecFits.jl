@@ -92,7 +92,7 @@ function lq_ctc_correction(
         t_lower = minimum(x_at_threshold)
         t_upper = maximum(x_at_threshold)
     else
-        error("Driftime cutoff method $ctc_driftime_cutoff_method not supported")
+        throw(ArgumentError("Drift time cutoff method $ctc_driftime_cutoff_method not supported"))
     end
 
     #store cutoff values in box to return later    
@@ -115,6 +115,8 @@ function lq_ctc_correction(
     result = (
     func = lq_class_func,
     func_generic = lq_class_func_generic,
+    fit_result = result_µ,
+    box_constraints = box,
     )
 
     report = (
@@ -196,8 +198,7 @@ function lq_cut(
 
     result = (
         cut = cut_3σ,
-        fit_µ = fit_result.μ,
-        fit_σ = fit_result.σ,
+        cut_fit_result = fit_result,
     )
 
     report = (
