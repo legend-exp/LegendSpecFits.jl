@@ -27,23 +27,39 @@ function sipm_simple_calibration end
 export sipm_simple_calibration
 
 function sipm_simple_calibration(pe_uncal::Vector{<:Real};
-                                kwargs...)
+    min_pe_peak::Int=2, max_pe_peak::Int=5, relative_cut_noise_cut::Real=0.5, n_fwhm_noise_cut::Real=5.0,
+    initial_min_amp::Real=1.0, initial_max_amp::Real=25.0, initial_max_bin_width_quantile::Real=0.9, 
+    peakfinder_σ::Real=2.0, peakfinder_threshold::Real=10.0, peakfinder_rtol::Real=0.1, peakfinder_α::Real=0.05
+)
     
-    h_uncal, peakpos = find_peaks(pe_uncal; kwargs...)
+    # Start with a big window where the noise peak is included
+    bin_width = get_friedman_diaconis_bin_width(filter(in(initial_min_amp..quantile(pe_uncal, initial_max_bin_width_quantile)), pe_uncal))
+
+    # Initial peak search
+    h_uncal = fit(Histogram, pe_uncal, initial_min_amp:bin_width:initial_max_amp)
+
+    cuts_1pe = cut_single_peak(pe_uncal, initial_min_amp, initial_max_amp, relative_cut=relative_cut_noise_cut)
+
+    h_uncal_cut = fit(Histogram, pe_uncal, cuts_1pe.max+n_fwhm_noise_cut*(cuts_1pe.high - cuts_1pe.max):bin_width:initial_max_amp)
+
+    c, h_deconv, peakpos, threshold = RadiationSpectra.determine_calibration_constant_through_peak_ratios(h_uncal_cut, collect(range(min_pe_peak, max_pe_peak, step=1)),
+        min_n_peaks = 2, max_n_peaks = 2*max_pe_peak, threshold=peakfinder_threshold, rtol=peakfinder_rtol, α=peakfinder_α, σ=peakfinder_σ)
+
 
     # simple calibration
     sort!(peakpos)
-    gain = peakpos[2] - peakpos[1]
+    gain = peakpos[min_pe_peak + 1] - peakpos[min_pe_peak]
     c = 1/gain
-    offset = - (peakpos[1] * c - 1) 
+    offset = - (peakpos[min_pe_peak] * c - min_pe_peak)
 
     f_simple_calib = x -> x .* c .+ offset
     f_simple_uncal = x -> (x .- offset) ./ c
-    pe_simple_cal = pe_uncal .* c .+ offset
-    peakpos_cal = peakpos .* c .+ offset
+
+    pe_simple_cal = f_simple_calib.(pe_uncal)
+    peakpos_cal = f_simple_calib.(peakpos)
 
     bin_width_cal = get_friedman_diaconis_bin_width(filter(in(0.5..1.5), pe_simple_cal))
-    bin_width_uncal = get_friedman_diaconis_bin_width(filter(in( (0.5 - offset) / c .. (1.5 - offset) / c), pe_simple_cal))
+    bin_width_uncal = f_simple_uncal(bin_width_cal) - f_simple_uncal(0.0)
 
     h_calsimple = fit(Histogram, pe_simple_cal, 0.0:bin_width_cal:6.0)
     h_uncal = fit(Histogram, pe_uncal, 0.0:bin_width_uncal:(6.0 - offset) / c)
@@ -67,59 +83,23 @@ end
 
 
 function find_peaks(
-    amps::Vector{<:Real}; initial_min_amp::Real=1.0, initial_max_amp::Real=100.0, initial_max_bin_width_quantile::Real=0.9, 
-    peakfinder_σ::Real=2.0, peakfinder_threshold::Real=10.0
+    amps::Vector{<:Real}; 
+    min_pe_peak::Real=1.0, max_pe_peak::Real=5.0, n_fwhm_noise_cut::Real=5.0,
+    initial_min_amp::Real=1.0, initial_max_amp::Real=100.0, initial_max_bin_width_quantile::Real=0.9, 
+    peakfinder_σ::Real=2.0, peakfinder_threshold::Real=10.0, peakfinder_rtol::Real=0.1, peakfinder_α::Real=0.05
 )
     # Start with a big window where the noise peak is included
     bin_width = get_friedman_diaconis_bin_width(filter(in(initial_min_amp..quantile(amps, initial_max_bin_width_quantile)), amps))
 
     # Initial peak search
     h_uncal = fit(Histogram, amps, initial_min_amp:bin_width:initial_max_amp)
-    h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=false, threshold=peakfinder_threshold)
 
-    # Ensure at least 2 peaks
-    num_peaks = length(peakpos)
-    if num_peaks == 0
-        error("No peaks found.")
-    end
+    cuts_1pe = cut_single_peak(amps, initial_min_amp, initial_max_amp, relative_cut=0.5)
 
-    # Determine the 1 p.e. peak position based on the assumption that it is the highest
-    peakpos_idxs = StatsBase.binindex.(Ref(h_decon), peakpos)
-    cts_peakpos = h_decon.weights[peakpos_idxs]
-    first_pe_peak_pos = peakpos[argmax(cts_peakpos)]
+    h_uncal_cut = fit(Histogram, trig_max, cuts_1pe.max+n_fwhm_noise_cut*(cuts_1pe.high - cuts_1pe.max):bin_width:initial_max_amp)
 
-    # Remove all peaks with x vals < x pos of 1p.e. peak
-    filter!(x -> x >= first_pe_peak_pos, peakpos)
-    num_peaks = length(peakpos)
-
-    # while less than two peaks found, or second peakpos smaller than 1 pe peakpos, or gain smaller than 1 (peaks too close)
-    while num_peaks < 2 || peakpos[2] <= first_pe_peak_pos || (peakpos[2] - peakpos[1]) <= 1.0
-        # Adjust σ and recheck peaks
-        if peakfinder_σ < 25.0
-            @debug "Increasing peakfinder_σ: $peakfinder_σ"
-            peakfinder_σ += 0.5
-        else
-            # If σ can't increase further, reduce threshold
-            @debug "Adjusting peakfinder_threshold: $peakfinder_threshold"
-            peakfinder_threshold -= 1.0
-            peakfinder_σ = 2.0  # Reset σ for new threshold
-
-            # Safety check to avoid lowering threshold too much
-            if peakfinder_threshold < 2.0
-                throw(ErrorException("Unable to find two peaks within reasonable quantile range."))
-            end
-        end
-
-        # Find peaks with updated parameters
-        h_decon, peakpos = peakfinder(h_uncal, σ=peakfinder_σ, backgroundRemove=false, threshold=peakfinder_threshold)
-        filter!(x -> x >= first_pe_peak_pos, peakpos)
-        num_peaks = length(peakpos)
-
-        # Safety check to avoid infinite loops
-        if peakfinder_σ >= 10.0 && peakfinder_threshold < 0.1
-            throw(ErrorException("Unable to find two peaks within reasonable quantile range."))
-        end
-    end
+    c, h_deconv, peak_positions, threshold = RadiationSpectra.determine_calibration_constant_through_peak_ratios(h_uncal_cut, collect(range(min_pe_peak, max_pe_peak, step=1)),
+        min_n_peaks = 2, max_n_peaks = 2*max_pe_peak, threshold=peakfinder_threshold, rtol=peakfinder_rtol, α=peakfinder_α, σ=peakfinder_σ)
 
     return h_decon, peakpos
 end
