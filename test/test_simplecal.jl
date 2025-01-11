@@ -28,4 +28,5 @@ include("test_utils.jl")
     
     # simple calibration
     result_simple, report_simple = simple_calibration(e_uncal, th228_lines, window_sizes,; calib_type= :th228, kwargs...);
+    @test isapprox(result_simple.c, m_cal_simple, atol = 0.05.*(m_cal_simple))
 end

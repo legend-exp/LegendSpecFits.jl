@@ -66,7 +66,7 @@ function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<
         result_peak = peak_search_gamma(e_uncal, gamma_lines; kwargs...)
     elseif peaksearch_type == :th228
         @debug "Use Th228 full-energy peak (FEP) and fixed peakfinder and binning parameters"
-        kwargs = merge(NamedTuple(kwargs), (peakfinder_σ = 5.0, peakfinder_threshold = 10.0, peak_quantile = 0.9..1.0, bin_quantile = 0.05..0.5))
+        kwargs = merge((peakfinder_σ = 5.0, peakfinder_threshold = 10.0, peak_quantile = 0.9..1.0, bin_quantile = 0.05..0.5), NamedTuple(kwargs)) # give good default values for Th228
         result_peak = peak_search_gamma(e_uncal, [2614.5*u"keV"]; kwargs...)
     elseif peaksearch_type ==:guess
     end 
@@ -106,7 +106,7 @@ peak search in gamma-ray spectrum
 * keyword arguments:
         * `peakfinder_σ::Real=2.0`: The expected sigma of a peak in the spectrum. In units of bins. (see RadiationSpectra.peakfinder)
         * `peakfinder_threshold::Real=10.0``: Threshold for being identified as a peak in the deconvoluted spectrum. A single bin is identified as an peak when its weight exceeds the threshold and the previous bin was not identified as an peak. (see RadiationSpectra.peakfinder)
-        * `peak_quantile::ClosedInterval{<:Real}=0.5..1.0`: quantiles that define energy window that is considered peak search (default: 0.0..1.0 == whole range)
+        * `peak_quantile::ClosedInterval{<:Real}=0.5..1.0`: quantiles that define energy window that is considered peak search (default: 0.0..1.0 == whole range). All `gamma_lines` have to be within this window.
         * `bin_quantile::ClosedInterval{<:Real}=0.5..1.0`: quantiles that define energy window that is used to find optimal binning (default same as peak_quantile)
         * `quantile_perc::Float64=NaN`: If NaN the standard peakfinder is used. If not NaN, the peak for simple calibration is set to given quantile energy. Useful for debugging/testing
 # output: `result` NamedTuple with the following fields:
@@ -133,12 +133,12 @@ function peak_search_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitfu
         # find the most prominent peak in the deconvoluted histogram
         peakpos_idxs = StatsBase.binindex.(Ref(h_decon), peakpos)
         cts_peakpos = h_decon.weights[peakpos_idxs]
-        peak_guess, peak_idx =  peakpos[argmax(cts_peakpos)], argmax(cts_peakpos)
+        peakpos[argmax(cts_peakpos)], argmax(cts_peakpos)
     else
         quantile(e_uncal, quantile_perc), length(gamma_lines)
     end
 
-    @info "Identified most prominent peak (peak $(peak_idx), $(gamma_lines[peak_idx])). Peak guess: $peak_guess"
+    @debug "Identified most prominent peak at $(round(peak_guess, digits = 2)) - literature value: $(gamma_lines[peak_idx])"
 
     # get calibration constant for simple calibration
     c = gamma_lines[peak_idx] / peak_guess

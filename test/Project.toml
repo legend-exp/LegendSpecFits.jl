@@ -8,6 +8,7 @@ Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
 
 [compat]
 Distributions = "0.24, 0.25"
@@ -17,3 +18,4 @@ LegendDataTypes = "0.1"
 Measurements = "2"
 StatsBase = "0.32, 0.33, 0.34"
 Unitful = "1"
+IntervalSets = "0.7"
