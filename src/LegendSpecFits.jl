@@ -81,6 +81,7 @@ include("specfit_functions.jl")
 include("calfunc.jl")
 include("sipm_simple_calibration.jl")
 include("sipmfit.jl")
+include("sipm_filter_optimization.jl")
 abstract type UncertTag end
 ForwardDiff.:(≺)(::Type{<:ForwardDiff.Tag}, ::Type{UncertTag}) = true
 ForwardDiff.:(≺)(::Type{UncertTag}, ::Type{<:ForwardDiff.Tag}) = false
