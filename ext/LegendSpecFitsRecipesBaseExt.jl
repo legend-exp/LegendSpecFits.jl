@@ -1453,7 +1453,7 @@ end
 
         @series begin
             label := "Cut Fraction"
-            0:3:3000, h_diff
+            0:3:3*length(h_diff)-1, h_diff
         end
 
     elseif plot_type == :fit
@@ -1465,7 +1465,8 @@ end
         margins := (4, :mm)
         framestyle := :box
         legend := :topleft
-        xlims := (ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)), ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)))
+        xlims = (ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)), ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)))
+        xlims := xlims
         @series begin
             label := "Data"
             subplot --> 1
@@ -1477,7 +1478,7 @@ end
             label := "Normal Fit (μ = $(round_wo_units(report.fit_report.μ, digits=2)), \n σ = $(round_wo_units(report.fit_report.σ, digits=2)))"
             lw := 3
             bottom_margin --> (-4, :mm)
-            ustrip(Measurements.value(report.fit_report.μ - 10*report.fit_report.σ)):ustrip(Measurements.value(report.fit_report.σ / 1000)):ustrip(Measurements.value(report.fit_report.μ + 10*report.fit_report.σ)), t -> report.fit_report.f_fit(t)
+            ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)):ustrip(Measurements.value(report.fit_report.σ / 1000)):ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)), t -> report.fit_report.f_fit(t)
         end
 
         @series begin
@@ -1522,16 +1523,19 @@ end
                 link --> :x
                 top_margin --> (-4, :mm)
                 ylims := (-5, 5)
-                xlims := (ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)), ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)))
+                xlims := xlims
                 yscale --> :identity
                 yticks := ([-3, 0, 3])
-                collect(report.fit_report.h.edges[1])[1:end-1] .+ diff(collect(report.fit_report.h.edges[1]))[1]/2 , [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.fit_report.gof.residuals_norm]
+                
+                bin_midpoints = report.fit_report.gof.bin_centers
+                residuals = report.fit_report.gof.residuals_norm
+                bin_midpoints, residuals             
             end
         end
 
     elseif plot_type == :sideband
         # Sideband histograms
-        xlabel := "Energy"
+        xlabel := "Lq (A.U.)"
         ylabel := "Counts"
 
         @series begin

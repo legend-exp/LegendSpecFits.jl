@@ -30,7 +30,7 @@
 """
 function lq_ctc_correction(
     lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
-    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.5, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) 
+    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) 
 
     # calculate DEP edges
     dep_left = dep_µ - ctc_dep_edgesigma * dep_σ
@@ -40,11 +40,14 @@ function lq_ctc_correction(
     lq_dep = lq[dep_left .< e_cal .< dep_right]
     dt_eff_dep = ustrip.(dt_eff[dep_left .< e_cal .< dep_right])
 
+    #filter out NaN values
+    lq_dep_NaNfree = filter(isfinite, lq_dep)
+   
     # precut lq data for fit
-    lq_precut = cut_single_peak(lq_dep, 0.0, quantile(filter(isfinite, lq_dep), 0.95); relative_cut=ctc_lq_precut_relative_cut)
+    lq_precut = cut_single_peak(lq_dep_NaNfree, minimum(lq_dep_NaNfree), quantile(lq_dep_NaNfree, 0.99); relative_cut=ctc_lq_precut_relative_cut)
 
     # truncated gaussian fit
-    lq_result, lq_report = fit_single_trunc_gauss(lq_dep, lq_precut, uncertainty=false)
+    lq_result, lq_report = fit_single_trunc_gauss(lq_dep_NaNfree, lq_precut, uncertainty=false)
     µ_lq = mvalue(lq_result.μ)
     σ_lq = mvalue(lq_result.σ)
 
@@ -155,7 +158,7 @@ export lq_ctc_correction
 
 """
 function lq_cut(
-    dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=2.0)
+    dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5)
 
     # Define sidebands
     lq_dep = lq_classifier[dep_µ - dep_sideband_sigma * dep_σ .< e_cal .< dep_µ + dep_sideband_sigma * dep_σ]
@@ -163,7 +166,7 @@ function lq_cut(
     lq_sb2 = lq_classifier[dep_µ + dep_sideband_sigma * dep_σ .< e_cal .< dep_µ + 2 * dep_sideband_sigma * dep_σ]
     
     # Generate values for histogram edges
-    combined = [lq_dep; lq_sb1; lq_sb2]
+    combined = filter(isfinite,[lq_dep; lq_sb1; lq_sb2])
     ideal_bin_width = get_friedman_diaconis_bin_width(combined)
     edges = range(start=minimum(combined), stop=maximum(combined), step=ideal_bin_width)
 
