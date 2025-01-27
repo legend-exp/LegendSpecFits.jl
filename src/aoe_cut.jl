@@ -95,8 +95,9 @@ Get the survival fraction of a peak after a AoE cut value `aoe_cut` for a given 
 - `result`: Dict of results for each peak
 - `report`: Dict of reports for each peak
 """
-function get_peaks_survival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; 
-    uncertainty::Bool=true, inverted_mode::Bool=false, aoe_lowcut_vec::BitVector=falses(length(aoe)), bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
+#version for lq with cut_vector
+function get_peaks_survival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector,; 
+    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
     @assert length(peaks) == length(peak_names) == length(windows) "Length of peaks, peak_names and windows must be equal"
     # create return and result vectors
     v_result = Vector{NamedTuple}(undef, length(peak_names))
@@ -107,7 +108,7 @@ function get_peaks_survival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity},
         # extract peak, name and window
         peak, name, window, fit_func = peaks[i], peak_names[i], windows[i], fit_funcs[i]
         # fit peak
-        result_peak, report_peak = get_peak_survival_fraction(aoe, e, peak, collect(window), aoe_cut; uncertainty=uncertainty, inverted_mode=inverted_mode, aoe_lowcut_vec=aoe_lowcut_vec, bin_width_window=bin_width_window, sigma_high_sided=sigma_high_sided, fit_func=fit_func)
+        result_peak, report_peak = get_peak_survival_fraction(aoe, e, peak, collect(window), aoe_cut, cut_vector; uncertainty=uncertainty, inverted_mode=inverted_mode, bin_width_window=bin_width_window, sigma_high_sided=sigma_high_sided, fit_func=fit_func)
         # save results
         v_result[i] = result_peak
         v_report[i] = report_peak
@@ -118,6 +119,13 @@ function get_peaks_survival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity},
     report = Dict{Symbol, NamedTuple}(peak_names .=> v_report)
     
     return result, report
+end
+get_peaks_survival_fractions(aoe, e, peaks, peak_names, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}, aoe_cut, cut_vector; kwargs...) = get_peaks_survival_fractions(aoe, e, peaks, peak_names, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)], aoe_cut, cut_vector; kwargs...)
+
+function get_peaks_survival_fractions(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, aoe_cut::Unitful.RealOrRealQuantity,; 
+    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
+    
+    get_peaks_survival_fractions(aoe, e, peaks, peak_names, windows, aoe_cut, trues(length(aoe)); uncertainty=uncertainty, inverted_mode=inverted_mode, bin_width_window=bin_width_window, sigma_high_sided=sigma_high_sided, fit_funcs=fit_funcs)
 end
 get_peaks_survival_fractions(aoe, e, peaks, peak_names, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}, aoe_cut; kwargs...) = get_peaks_survival_fractions(aoe, e, peaks, peak_names, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)], aoe_cut; kwargs...)
 
@@ -137,52 +145,62 @@ Get the survival fraction of a peak after a AoE cut value `aoe_cut` for a given 
 - `sf`: Survival fraction
 - `err`: Uncertainties
 """
-function get_peak_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity,; 
-    uncertainty::Bool=true, inverted_mode::Bool=false, aoe_lowcut_vec::BitVector=falses(length(aoe)), bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}  
-    # estimate bin width
-    bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
-    # get energy before cut and create histogram
-    peakhist = fit(Histogram, ustrip.(e), ustrip(peak-first(window):bin_width:peak+last(window)))
-    # estimate peak stats
-    peakstats = estimate_single_peak_stats(peakhist)
-    # fit peak and return number of signal counts
-    result_before, report_before = fit_single_peak_th228(peakhist, peakstats,; uncertainty=uncertainty, fit_func=fit_func)
+function get_peak_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity; 
+    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}  
 
-    # get energy after cuts
-    e_survived, e_cut = if !inverted_mode
-        #normal aoe version
-        e[aoe_cut .< aoe .< sigma_high_sided], e[aoe .<= aoe_cut .|| aoe .>= sigma_high_sided]
-    else
-        #lq version
-        e[aoe .< aoe_cut .&& .!aoe_lowcut_vec], e[aoe_cut .<= aoe .&& .!aoe_lowcut_vec]
-    end
-    
-    # estimate bin width
-    bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
-    # get energy after cut and create histogram
-    survived = fit(Histogram, ustrip(e_survived), ustrip(peak-first(window):bin_width:peak+last(window)))
-    cut      = fit(Histogram, ustrip(e_cut),      ustrip(peak-first(window):bin_width:peak+last(window)))
-    # fit peak and return number of signal counts
-    result_after, report_after = fit_subpeaks_th228(survived, cut, result_before; uncertainty=uncertainty, fit_func=fit_func)
-    # calculate survival fraction
-    sf = result_after.sf * 100u"percent"
-    result = (
-        peak = peak,
-        fit_func=fit_func,
-        n_before = result_before.n,
-        n_after = result_before.n * result_after.sf,
-        sf = sf, 
-        gof = (after = result_after.gof, before = result_before.gof),
-    )
-    report = (
-        peak = result.peak, 
-        n_before = result.n_before,
-        n_after = result.n_before * result_after.sf,
-        sf = result.sf,
-        before = report_before,
-        after = report_after,
-    )
-    return result, report
+    get_peak_survival_fractions(aoe, e, peak, window, aoe_cut, trues(length(aoe)); uncertainty=uncertainty, inverted_mode=inverted_mode, bin_width_window=bin_width_window, sigma_high_sided=sigma_high_sided, fit_func=fit_func)
+end
+
+
+"""
+#Overloaded method with an additional cut_vector parameter.
+"""
+function get_peak_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, aoe_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector; 
+    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
+     # estimate bin width
+     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
+     # get energy before cut and create histogram
+     peakhist = fit(Histogram, ustrip.(e), ustrip(peak-first(window):bin_width:peak+last(window)))
+     # estimate peak stats
+     peakstats = estimate_single_peak_stats(peakhist)
+     # fit peak and return number of signal counts
+     result_before, report_before = fit_single_peak_th228(peakhist, peakstats; uncertainty=uncertainty, fit_func=fit_func)
+ 
+     # get energy after cuts
+     e_survived, e_cut = if !inverted_mode
+         #normal aoe version
+         e[aoe_cut .< aoe .< sigma_high_sided], e[aoe .<= aoe_cut .|| aoe .>= sigma_high_sided]
+     else
+         #lq version
+         e[aoe .< aoe_cut .&& cut_vector], e[aoe_cut .<= aoe .&& cut_vector]
+     end
+     
+     # estimate bin width
+     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
+     # get energy after cut and create histogram
+     survived = fit(Histogram, ustrip(e_survived), ustrip(peak-first(window):bin_width:peak+last(window)))
+     cut      = fit(Histogram, ustrip(e_cut),      ustrip(peak-first(window):bin_width:peak+last(window)))
+     # fit peak and return number of signal counts
+     result_after, report_after = fit_subpeaks_th228(survived, cut, result_before; uncertainty=uncertainty, fit_func=fit_func)
+     # calculate survival fraction
+     sf = result_after.sf * 100u"percent"
+     result = (
+         peak = peak,
+         fit_func=fit_func,
+         n_before = result_before.n,
+         n_after = result_before.n * result_after.sf,
+         sf = sf, 
+         gof = (after = result_after.gof, before = result_before.gof),
+     )
+     report = (
+         peak = result.peak, 
+         n_before = result.n_before,
+         n_after = result.n_before * result_after.sf,
+         sf = result.sf,
+         before = report_before,
+         after = report_after,
+     )
+     return result, report
 end
 
 Base.@deprecate get_peak_surrival_fraction(args...; kwargs...) get_peak_survival_fraction(args...; kwargs...)
@@ -200,24 +218,33 @@ Get the survival fraction of a continuum after a AoE cut value `aoe_cut` for a g
 - `n_after`: Number of counts after the cut
 - `sf`: Survival fraction
 """
-function get_continuum_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity,; inverted_mode::Bool=false, aoe_lowcut_vec::BitVector=falses(length(aoe)), sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
+function get_continuum_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity; 
+    inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
+
+    get_continuum_survival_fraction(aoe, e, center, window, aoe_cut, trues(length(aoe)); inverted_mode=inverted_mode, sigma_high_sided=sigma_high_sided)
+end
+
+function get_continuum_survival_fraction(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, aoe_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector,; inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(aoe))) where T<:Unitful.Energy{<:Real}
     # scale unit
     e_unit = u"keV"
     # get energy around center
-    e_wdw = e[center - window .< e .< center + window]
+    cut_vector = cut_vector[center - window .< e .< center + window]
+    aoe = aoe[center - window .< e .< center + window]
+    e = e[center - window .< e .< center + window]
+
     # get bin width
-    bin_width = get_friedman_diaconis_bin_width(e_wdw)
+    bin_width = get_friedman_diaconis_bin_width(e)
     # get number of events in window before cut
-    n_before = length(e_wdw)
+    n_before = length(e)
     # get energy after cuts
     e_survived, e_cut = if !inverted_mode
         #normal aoe version
         e[aoe_cut .< aoe .< sigma_high_sided], e[aoe .<= aoe_cut .|| aoe .>= sigma_high_sided]
     else
         #lq version
-        e[aoe .< aoe_cut .&& .!aoe_lowcut_vec], e[aoe_cut .<= aoe .&& .!aoe_lowcut_vec]
+        e[aoe .< aoe_cut .&& .!cut_vector], e[aoe_cut .<= aoe .&& .!cut_vector]
     end
-    n_after = length(e_survived[center - window .< e_survived .< center + window])
+    n_after = length(e_survived)
 
     # calculate survival fraction
     sf = n_after / n_before
