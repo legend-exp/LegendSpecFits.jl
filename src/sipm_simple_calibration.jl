@@ -49,7 +49,7 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
         @debug "Peakfinder σ: $(peakfinder_σ)"
         try
             c, h_deconv, peakpos, threshold = RadiationSpectra.determine_calibration_constant_through_peak_ratios(h_uncal_cut, collect(range(min_pe_peak, max_pe_peak, step=1)),
-                min_n_peaks = 2, max_n_peaks = 2*max_pe_peak, threshold=peakfinder_threshold, rtol=peakfinder_rtol, α=peakfinder_α, σ=peakfinder_σ)
+                min_n_peaks = 2, max_n_peaks = max_pe_peak, threshold=peakfinder_threshold, rtol=peakfinder_rtol, α=peakfinder_α, σ=peakfinder_σ)
         catch e
             @warn "Failed to find peaks with bin width scale $(bin_width_scale): $(e)"
             continue
