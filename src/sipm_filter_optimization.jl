@@ -33,11 +33,11 @@ function fit_sipm_wl(trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRang
             result_simple, report_simple = sipm_simple_calibration(trig_max; initial_min_amp=threshold, initial_max_amp=initial_max_amp, initial_max_bin_width_quantile=initial_max_bin_width_quantile,
                                             min_pe_peak=min_pe_peak, max_pe_peak=max_pe_peak, n_fwhm_noise_cut=n_fwhm_noise_cut, peakfinder_threshold=peakfinder_threshold, 
                                             peakfinder_rtol=peakfinder_rtol, peakfinder_α=peakfinder_α, peakfinder_σ=peakfinder_σ)
-                                                # min_pe_peak=1, n_fwhm_noise_cut=2.0, peakfinder_threshold=5.0, initial_max_bin_width_quantile=0.9999, peakfinder_rtol=0.1, peakfinder_α=0.1, peakfinder_σ=-1.0)
 
             result_fit, report_fit = fit_sipm_spectrum(result_simple.pe_simple_cal, min_pe_fit, max_pe_fit; f_uncal=result_simple.f_simple_uncal, Δpe_peak_assignment=Δpe_peak_assignment)
 
-            gain_wl[w] = minimum(result_simple.peakpos) - ifelse(threshold == 0.0, result_simple.noisepeakpos, threshold)
+            # gain_wl[w] = minimum(result_simple.peakpos) - ifelse(threshold == 0.0, result_simple.noisepeakpos, threshold)
+            gain_wl[w] = minimum(result_simple.peakpos) - result_simple.noisepeakpos
             res_1pe_wl[w] = first(result_fit.resolutions)
             pos_1pe_wl[w] = first(result_fit.positions)
             reports_simple[w] = report_simple
@@ -49,7 +49,7 @@ function fit_sipm_wl(trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRang
     end
 
     thrs = if all(thresholds .== 0.0) ones(length(e_grid_wl)) else thresholds end
-    obj = sqrt.(res_1pe_wl[success]) .* sqrt.(thrs[success]) ./ gain_wl[success] ./ sqrt.(pos_1pe_wl[success])
+    obj = sqrt.(res_1pe_wl[success]) .* sqrt.(thrs[success]) ./ gain_wl[success]
     wls = collect(e_grid_wl)[success]
 
     if isempty(obj)
@@ -62,8 +62,8 @@ function fit_sipm_wl(trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRang
     min_gain   = gain_wl[success][findmin(obj)[2]]
     min_pos1pe = pos_1pe_wl[success][findmin(obj)[2]]
     min_threshold = thresholds[success][findmin(obj)[2]]
-    report_simple = reports_simple[success][findmin(obj)[2]]
-    report_fit = reports_fit[success][findmin(obj)[2]]
+    min_report_simple = reports_simple[success][findmin(obj)[2]]
+    min_report_fit = reports_fit[success][findmin(obj)[2]]
 
     # generate result and report
     result = (
@@ -77,14 +77,14 @@ function fit_sipm_wl(trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRang
     report = (
         wl = result.wl,
         min_obj = result.obj,
-        gain = result.gain,
-        res_1pe = result.res_1pe,
-        pos_1pe = result.pos_1pe,
-        threshold = result.threshold,
+        gain = gain_wl,
+        res_1pe = res_1pe_wl,
+        pos_1pe = pos_1pe_wl,
+        threshold = thresholds[success],
         a_grid_wl_sg = wls,
         obj = obj,
-        report_simple = report_simple,
-        report_fit = report_fit,
+        report_simple = min_report_simple,
+        report_fit = min_report_fit,
     )
     return result, report
 end
