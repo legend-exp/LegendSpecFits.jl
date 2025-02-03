@@ -24,7 +24,7 @@ Fit a Gaussian Mixture Model to the given pe calibration data and return the fit
 - `report`: a tuple with the fit report which can be plotted via a recipe
 """
 function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Real=3.5;
-    n_mixtures::Int=ceil(Int, (max_pe - min_pe) * 4), nIter::Int=50, nInit::Int=50, 
+    n_mixtures::Int=ceil(Int, (max_pe - min_pe) * 4), nIter::Int=25, nInit::Int=50, 
     method::Symbol=:kmeans, kind=:diag, Δpe_peak_assignment::Real=0.3, f_uncal::Function=identity, uncertainty::Bool=true)
     
     # first filter peak positions out of amplitude vector
@@ -104,10 +104,10 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
 
     # get pe_pos
     get_pe_pos = pe -> let sel = in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)
-        dot(view(μ,sel), view(w,sel)) / sum(view(w,sel))
+        dot(view(μ, sel), view(w, sel)) / sum(view(w, sel))
     end
     get_pe_res = pe -> let sel = in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)
-        dot(view(σ,sel), view(w,sel)) / sum(view(w,sel))
+        sqrt(dot(view(σ, sel).^2, view(w, sel).^2))
     end 
     n_pos_mixtures = [count(in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)) for pe in pes]
 
