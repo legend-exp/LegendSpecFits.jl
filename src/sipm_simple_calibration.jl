@@ -38,7 +38,7 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     bin_width_cut_min = cuts_1pe.max+n_fwhm_noise_cut*(cuts_1pe.high - cuts_1pe.max)
     bin_width_cut = get_friedman_diaconis_bin_width(filter(in(bin_width_cut_min..quantile(pe_uncal, initial_max_bin_width_quantile)), pe_uncal))
     peakpos = []
-    for bin_width_scale in exp10.(range(0, stop=-3, length=50))  # 1e-3 to 1
+    for bin_width_scale in exp10.(range(0, stop=-3, length=50))
         @debug "Using bin width: $(bin_width_cut)"
 
         bin_width_cut_scaled = bin_width_cut * bin_width_scale
