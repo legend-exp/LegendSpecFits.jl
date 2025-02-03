@@ -20,7 +20,7 @@ function fit_sipm_wl(trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRang
     gain_wl    = Vector{Measurement{Float64}}(undef, length(e_grid_wl))
     res_1pe_wl = Vector{Measurement{Float64}}(undef, length(e_grid_wl))
     pos_1pe_wl = Vector{Measurement{Float64}}(undef, length(e_grid_wl))
-    success    = Vector{Bool}(zeros(length(e_grid_wl)))
+    success    = falses(length(e_grid_wl))  
     reports_simple     = Vector{NamedTuple}(undef, length(e_grid_wl))
     reports_fit        = Vector{NamedTuple}(undef, length(e_grid_wl))
 
@@ -56,14 +56,14 @@ function fit_sipm_wl(trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRang
         @error "No valid gain found"
         throw(ErrorException("No valid gain found, could not determine optimal window length"))
     end
-    min_obj    = minimum(obj)
-    wl_min_obj = wls[findmin(obj)[2]]
-    min_res1pe = res_1pe_wl[success][findmin(obj)[2]]
-    min_gain   = gain_wl[success][findmin(obj)[2]]
-    min_pos1pe = pos_1pe_wl[success][findmin(obj)[2]]
-    min_threshold = thresholds[success][findmin(obj)[2]]
-    min_report_simple = reports_simple[success][findmin(obj)[2]]
-    min_report_fit = reports_fit[success][findmin(obj)[2]]
+    min_obj, min_obj_idx = findmin(obj)  
+    wl_min_obj = wls[min_obj_idx]
+    min_res1pe = res_1pe_wl[success][min_obj_idx]
+    min_gain   = gain_wl[success][min_obj_idx]
+    min_pos1pe = pos_1pe_wl[success][min_obj_idx]
+    min_threshold = thresholds[success][min_obj_idx]
+    min_report_simple = reports_simple[success][min_obj_idx]
+    min_report_fit = reports_fit[success][min_obj_idx]
 
     # generate result and report
     result = (
