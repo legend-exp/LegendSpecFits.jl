@@ -154,6 +154,36 @@ end
     end
 end
 
+
+@recipe function f(report:: NamedTuple{(:wl, :min_obj, :gain, :res_1pe, :pos_1pe, :threshold, :a_grid_wl_sg, :obj, :report_simple, :report_fit)})
+    xlabel := "Window Length ($(unit(first(report.a_grid_wl_sg))))"
+    ylabel := "Objective \n σ  * √(threshold) \n ______________ \n gain * √(pos_1pe)"
+    grid := :true
+    gridcolor := :black
+    gridalpha := 0.2
+    gridlinewidth := 0.5
+    ylims := (0, 1.5 * maximum(Measurements.value.(report.obj)))
+    @series begin
+        seriestype := :scatter
+        label := "Obj"
+        ustrip.(report.a_grid_wl_sg), ustrip.(report.obj)
+    end
+    @series begin
+        seriestype := :hline
+        label := "Min. Obj $(report.min_obj) (WL: $(report.wl))"
+        color := :red
+        linewidth := 2.5
+        [ustrip(Measurements.value(report.min_obj))]
+    end
+    @series begin
+        seriestype := :hspan
+        label := ""
+        color := :red
+        alpha := 0.1
+        ustrip.([Measurements.value(report.min_obj)-Measurements.uncertainty(report.min_obj), Measurements.value(report.min_obj)+Measurements.uncertainty(report.min_obj)])
+    end
+end
+
 @recipe function f(report::NamedTuple{(:v, :h, :f_fit, :f_components, :gof)}; show_label=true, show_fit=true, show_components=true, show_residuals=true, f_fit_x_step_scaling=1/100, _subplot=1, x_label="Energy (keV)")
     f_fit_x_step = ustrip(value(report.v.σ)) * f_fit_x_step_scaling
     bin_centers = collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2 
@@ -509,14 +539,14 @@ end
         pps = report.peakpos
     end
     xlims := (0, last(first(h.edges)))
-    min_y = minimum(h.weights) == 0.0 ? 1e-3*maximum(h.weights) : 0.8*minimum(h.weights)
+    min_y = minimum(h.weights) == 0.0 ? 1e1 : 0.8*minimum(h.weights)
     ylims --> (min_y, maximum(h.weights)*1.1)
     @series begin
         seriestype := :stepbins
         label := "amps"
         h
     end
-    y_vline = min_y:1:maximum(h.weights)*1.1
+    y_vline = [min_y, maximum(h.weights)*1.1]
     for (i, p) in enumerate(pps)
         @series begin
             seriestype := :line
@@ -544,7 +574,7 @@ end
     ylabel := "Counts / $(round_wo_units(report_sipm.bin_width * 1e3, digits=2))E-3 P.E."
     xlims := (first(first(report_sipm.h_cal.edges)), last(first(report_sipm.h_cal.edges)))
     xticks := (ceil(first(first(report_sipm.h_cal.edges)))-0.5:0.5:last(first(report_sipm.h_cal.edges)))
-    min_y = minimum(report_sipm.h_cal.weights) == 0.0 ? 1e-3*maximum(report_sipm.h_cal.weights) : 0.8*minimum(report_sipm.h_cal.weights)
+    min_y = minimum(report_sipm.h_cal.weights) == 0.0 ? 1e1 : 0.8*minimum(report_sipm.h_cal.weights)
     ylims := (min_y, maximum(report_sipm.h_cal.weights)*1.1)
     bin_centers = collect(report_sipm.h_cal.edges[1])[1:end-1] .+ diff(collect(report_sipm.h_cal.edges[1]))[1]/2 
     @series begin
