@@ -71,7 +71,7 @@ end
             xlims := (ustrip(Measurements.value(report.μ - 5*report.σ)), ustrip(Measurements.value(report.μ + 5*report.σ)))
             yscale --> :identity
             yticks := ([-3, 0, 3])
-            collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2 , [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.gof.residuals_norm]
+            report.gof.bin_centers, [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.gof.residuals_norm]
         end
     end
 end
