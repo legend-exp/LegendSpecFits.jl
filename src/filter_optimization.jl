@@ -135,11 +135,7 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
     Threads.@threads for f in eachindex(e_grid_ft)
         # get ft
         ft = e_grid_ft[f]
-        # if ft > rt filter doesn't make sense, continue
-        if ft > rt
-            @debug "FT $ft bigger than RT $rt, skipping"
-            continue
-        end
+        
         # get e values for this ft
         e_ft = Array{Float64}(flatview(e_grid)[f, :])
         e_ft = e_ft[isfinite.(e_ft)]
@@ -245,11 +241,6 @@ function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vecto
         # get ft
         ft = e_grid_ft[f]
 
-        # if ft > rt filter doesn't make sense, continue
-        if ft > rt
-            @debug "FT $ft bigger than RT $rt, skipping"
-            continue
-        end
         # get e values for this ft
         e_ft = Array{Float64}(flatview(e_grid)[f, :])
         e_isfinite_cut = isfinite.(e_ft) .&& isfinite.(qdrift) .&& e_ft .> 0 .&& qdrift .> 0
