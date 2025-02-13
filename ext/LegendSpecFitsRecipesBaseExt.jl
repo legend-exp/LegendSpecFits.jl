@@ -71,9 +71,7 @@ end
             xlims := (ustrip(Measurements.value(report.μ - 5*report.σ)), ustrip(Measurements.value(report.μ + 5*report.σ)))
             yscale --> :identity
             yticks := ([-3, 0, 3])
-            cut_low  = report.f_fit.f_fit.cut_low.contents
-            cut_high = report.f_fit.f_fit.cut_high.contents
-            midpoints(first(report.h.edges))[(cut_low .< midpoints(first(report.h.edges)) .< cut_high) .&& report.h.weights .> 0] , [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.gof.residuals_norm]
+            report.gof.bin_centers, [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.gof.residuals_norm]
         end
     end
 end
