@@ -223,7 +223,9 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     end
 
     # create histogram of nocut data for normalization 20 sigma around peak
-    h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
+    # ensuring that the bin edges are identical to those of h (on which the fit was performed)
+    h_nocut = fit(Histogram, x_nocut, (ifelse(left, cut_low, μ) + floor(((v_ml.μ-20*v_ml.σ) - ifelse(left, cut_low, μ)) / bin_width) * bin_width):bin_width:(ifelse(left, cut_low, μ) + ceil(((v_ml.μ+20*v_ml.σ) - ifelse(left, cut_low, μ)) / bin_width) * bin_width))
+
     # normalize nocut histogram to PDF of cut histogram
     h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(abs.(h.weights)) ./ step(h.edges[1]))
 
@@ -342,7 +344,8 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     end
     
     # create histogram of nocut data for normalization 20 sigma around peak
-    h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
+    h_nocut = fit(Histogram, x_nocut, (ifelse(left, cut_low, cut_max) + floor(((v_ml.μ-20*v_ml.σ) - ifelse(left, cut_low, cut_max)) / bin_width) * bin_width):bin_width:(ifelse(left, cut_low, cut_max) + ceil(((v_ml.μ+20*v_ml.σ) - ifelse(left, cut_low, cut_max)) / bin_width) * bin_width))
+
     # normalize nocut histogram to PDF of cut histogram
     h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(abs.(h.weights)) ./ step(h.edges[1]))
 
