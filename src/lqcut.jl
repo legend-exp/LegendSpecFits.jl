@@ -191,8 +191,6 @@ function lq_cut(
     lq_start = lq_prestats.peak_pos - cut_truncation_sigma * lq_prestats.peak_sigma
     lq_stop = lq_prestats.peak_pos + cut_truncation_sigma * lq_prestats.peak_sigma
 
-    #simplecuts benutzen
-
     # Fit the sideband subtracted histogram
     fit_result, fit_report = fit_binned_trunc_gauss(hist_corrected, (low=lq_start, high=lq_stop, max=NaN), uncertainty=true)
 
