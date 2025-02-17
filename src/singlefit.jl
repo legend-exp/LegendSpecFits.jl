@@ -16,7 +16,7 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     x, cut_low, cut_high, cut_max = ustrip.(x_unit, x), ustrip(x_unit, cuts.low), ustrip(x_unit, cuts.high), ustrip(x_unit, cuts.max)
     cut_low, cut_high = ifelse(isnan(cut_low), minimum(x), cut_low), ifelse(isnan(cut_high), maximum(x), cut_high)
 
-    bin_width = get_friedman_diaconis_bin_width(x[cut_low .< x .< cut_high])
+    bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
     x_min, x_max = extrema(x)
     x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
@@ -24,7 +24,7 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     @debug "Peak stats: $ps"
 
     # cut peak out of data
-    x = x[cut_low .< x .< cut_high]
+    x = x[cut_low .<= x .<= cut_high]
     h = fit(Histogram, x, cut_low:bin_width:cut_high)
     n = length(x)
 
@@ -135,7 +135,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     x, cut_low, cut_high, cut_max, μ = ustrip.(x), ustrip(cuts.low), ustrip(cuts.high), ustrip(cuts.max), ustrip(μ)
 
     # get peak stats
-    bin_width = get_friedman_diaconis_bin_width(x[(x .> cut_low) .&& (x .< cut_high)])
+    bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
     x_min, x_max = minimum(x), maximum(x)
     x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
@@ -143,7 +143,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     @debug "Peak stats: $ps"
 
     # cut peak out of data
-    x = ifelse(left, x[(x .> cut_low) .&& (x .< cut_high) .&& x .< μ], x[(x .> cut_low) .&& (x .< cut_high) .&& x .> μ])
+    x = x[cut_low .<= x .<= cut_high .&& ifelse(left, x .<= μ, x .>= μ)]
     h = fit(Histogram, x, ifelse(left, cut_low, μ):bin_width:ifelse(left, μ, cut_high))
     n = length(x)
 
@@ -256,7 +256,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     x, cut_low, cut_high, cut_max = ustrip.(x), ustrip(cuts.low), ustrip(cuts.high), ustrip(cuts.max)
 
     # get peak stats
-    bin_width = get_friedman_diaconis_bin_width(x[(x .> cut_low) .&& (x .< cut_high)])
+    bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
     x_min, x_max = minimum(x), maximum(x)
     x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
@@ -264,7 +264,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     @debug "Peak stats: $ps"
 
     # cut peak out of data
-    x = x[(x .> ifelse(left, cut_low, cut_max)) .&& (x .< ifelse(left, cut_max, cut_high))]
+    x = x[ifelse(left, cut_low, cut_max) .<= x .<= ifelse(left, cut_max, cut_high)]
     h = fit(Histogram, x, ifelse(left, cut_low, cut_max):bin_width:ifelse(left, cut_max, cut_high))
     n = length(x)
 
