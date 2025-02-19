@@ -350,7 +350,8 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
 
     # Create report for plotting the combined fit results
     label_fit_µ = "Combined Fit: $(round(mvalue(v_ml.μA), digits=2)) + E * $(round(mvalue(v_ml.μB)*1e6, digits=2))e-6"
-    label_fit_σ = "Combined Fit: sqrt($(round(mvalue(v_ml.σA)*1e6, digits=1))e-6 + $(round(ustrip(mvalue(v_ml.σB)), digits=2)) / E^2)"
+    label_fit_σ = "Combined Fit: sqrt(($(round(mvalue(v_ml.σA)*1e6, digits=1))e-6)^2 + $(round(ustrip(mvalue(v_ml.σB)), digits=2))^2 / E^2)"
+    #label_fit_σ = "Combined Fit: sqrt(($(round(mvalue(v_ml.σA)*1e3, digits=1))e-3)^2 + $(round(ustrip(mvalue(v_ml.σB)), digits=2))^2 / E^2)"
     
     μ_values = f_aoe_mu(es, (v_ml.μA, v_ml.μB))
     σ_values = f_aoe_sigma(es, (v_ml.σA, v_ml.σB))
