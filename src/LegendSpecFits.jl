@@ -23,6 +23,7 @@ using GaussianMixtures
 using IntervalSets
 using InverseFunctions
 using IrrationalConstants
+using LaTeXStrings
 using LogExpFunctions
 using LsqFit
 using Measurements

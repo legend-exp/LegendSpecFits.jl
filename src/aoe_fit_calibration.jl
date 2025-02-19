@@ -28,7 +28,7 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     func_µ = "$(mvalue(result_µ.par[1])) + ($e_expression) * $(mvalue(result_µ.par[2]))$e_unit^-1"
     par_µ = [result_µ.par[i] ./ e_unit^(i-1) for i=1:length(result_µ.par)] # add units
     result_µ = merge(result_µ, (par = par_µ, func = func_µ, µ = µ)) 
-    report_µ = merge(report_µ, (e_unit = e_unit, label_y = "µ", label_fit = "Best Fit: $(mvalue(round(result_µ.par[1], digits=2))) + E * $(mvalue(round(ustrip(result_µ.par[2]) * 1e6, digits=2)))1e-6"))
+    report_µ = merge(report_µ, (e_unit = e_unit, label_y = "µ", label_fit = latexstring("Best Fit: \$ $(mvalue(round(result_µ.par[1], digits=2))) $(mvalue(ustrip(result_µ.par[2])) >= 0 ? "+" : "") $(mvalue(round(ustrip(result_µ.par[2]) * 1e6, digits=2)))\\cdot 10^{-6} \\; E \$")))
     @debug "Compton band µ correction: $(result_µ.func)"
 
     # fit compton band σ with sqrt function
@@ -37,7 +37,7 @@ function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Rea
     func_σ = "sqrt( ($(mvalue(result_σ.par[1])))^2 + ($(mvalue(result_σ.par[2]))$(e_unit))^2 / ($e_expression)^2 )" 
 
     result_σ = merge(result_σ, (par = par_σ, func = func_σ, σ = σ))
-    report_σ = merge(report_σ, (e_unit = e_unit, label_y = "σ", label_fit = "Best Fit: sqrt(($(round(mvalue(result_σ.par[1])*1e6, digits=1))e-6)^2 + $(round(ustrip(mvalue(result_σ.par[2])), digits=2))^2 / E^2)"))
+    report_σ = merge(report_σ, (e_unit = e_unit, label_y = "σ", label_fit = latexstring("Best Fit: \$\\sqrt{($(abs(round(mvalue(result_σ.par[1])*1e3, digits=2)))\\cdot10^{-3})^2 + $(abs(round(ustrip(mvalue(result_σ.par[2])), digits=2)))^2 / E^2}\$")))
     #report_σ = merge(report_σ, (e_unit = e_unit, label_y = "σ", label_fit = "Best Fit: sqrt(($(round(mvalue(result_σ.par[1])*1e3, digits=2))e-3)^2 + $(round(ustrip(mvalue(result_σ.par[2])), digits=2))^2 / E^2)"))
     @debug "Compton band σ normalization: $(result_σ.func)"
 

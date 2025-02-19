@@ -349,8 +349,10 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     result = merge(result, (µ_compton = result_µ, σ_compton = result_σ, compton_bands = (e = es,), func = func_aoe_corr))
 
     # Create report for plotting the combined fit results
-    label_fit_µ = "Combined Fit: $(round(mvalue(v_ml.μA), digits=2)) + E * $(round(mvalue(v_ml.μB)*1e6, digits=2))e-6"
-    label_fit_σ = "Combined Fit: sqrt(($(round(mvalue(v_ml.σA)*1e6, digits=1))e-6)^2 + $(round(ustrip(mvalue(v_ml.σB)), digits=2))^2 / E^2)"
+    label_fit_µ = latexstring("Combined Fit: \$ $(round(mvalue(v_ml.μA), digits=2)) $(mvalue(v_ml.μB) >= 0 ? "+" : "") $(round(mvalue(v_ml.μB)*1e6, digits=2))\\cdot 10^{-6} \\; E \$")
+    label_fit_σ = latexstring("Combined Fit: \$\\sqrt{($(abs(round(mvalue(v_ml.σA)*1e3, digits=2)))\\cdot10^{-3})^2 + $(abs(round(ustrip(mvalue(v_ml.σB)), digits=2)))^2 / E^2}\$")
+    #label_fit_µ = "Combined Fit:  + E * $(round(mvalue(v_ml.μB)*1e6, digits=2))e-6"
+    #label_fit_σ = "Combined Fit: sqrt(($(round(mvalue(v_ml.σA)*1e6, digits=1))e-6)^2 + $(round(ustrip(mvalue(v_ml.σB)), digits=2))^2 / E^2)"
     #label_fit_σ = "Combined Fit: sqrt(($(round(mvalue(v_ml.σA)*1e3, digits=2))e-3)^2 + $(round(ustrip(mvalue(v_ml.σB)), digits=2))^2 / E^2)"
     
     μ_values = f_aoe_mu(es, (v_ml.μA, v_ml.μB))
