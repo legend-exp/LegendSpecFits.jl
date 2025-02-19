@@ -113,14 +113,14 @@ Get the survival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `result`: Dict of results for each peak
 - `report`: Dict of reports for each peak
 """
-function get_peaks_survival_fractions(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, psd_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector,; 
+function get_peaks_survival_fractions(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, psd_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector=trues(length(psd_parameter)); 
     uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
     @assert length(peaks) == length(peak_names) == length(windows) "Length of peaks, peak_names and windows must be equal"
     # create return and result vectors
     v_result = Vector{NamedTuple}(undef, length(peak_names))
     v_report = Vector{NamedTuple}(undef, length(peak_names))
     
-    # iterate throuh all peaks
+    # iterate through all peaks
     Threads.@threads for i in eachindex(peak_names)
         # extract peak, name and window
         peak, name, window, fit_func = peaks[i], peak_names[i], windows[i], fit_funcs[i]
@@ -138,39 +138,14 @@ function get_peaks_survival_fractions(psd_parameter::Vector{<:Unitful.RealOrReal
     return result, report
 end
 get_peaks_survival_fractions(psd_parameter, e, peaks, peak_names, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}, psd_cut, cut_vector; kwargs...) = get_peaks_survival_fractions(psd_parameter, e, peaks, peak_names, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)], psd_cut, cut_vector; kwargs...)
-
-function get_peaks_survival_fractions(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peaks::Vector{<:T}, peak_names::Vector{Symbol}, windows::Vector{<:Tuple{T, T}}, psd_cut::Unitful.RealOrRealQuantity,; 
-    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter)), fit_funcs::Vector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
-    @assert length(peaks) == length(peak_names) == length(windows) "Length of peaks, peak_names and windows must be equal"
-    # create return and result vectors
-    v_result = Vector{NamedTuple}(undef, length(peak_names))
-    v_report = Vector{NamedTuple}(undef, length(peak_names))
-    
-    # iterate throuh all peaks
-    Threads.@threads for i in eachindex(peak_names)
-        # extract peak, name and window
-        peak, name, window, fit_func = peaks[i], peak_names[i], windows[i], fit_funcs[i]
-        # fit peak
-        result_peak, report_peak = get_peak_survival_fraction(psd_parameter, e, peak, collect(window), psd_cut; uncertainty=uncertainty, inverted_mode=inverted_mode, bin_width_window=bin_width_window, sigma_high_sided=sigma_high_sided, fit_func=fit_func)
-        # save results
-        v_result[i] = result_peak
-        v_report[i] = report_peak
-    end
-
-    # create result and report dict
-    result = Dict{Symbol, NamedTuple}(peak_names .=> v_result)
-    report = Dict{Symbol, NamedTuple}(peak_names .=> v_report)
-    
-    return result, report
-end
 get_peaks_survival_fractions(psd_parameter, e, peaks, peak_names, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}, psd_cut; kwargs...) = get_peaks_survival_fractions(psd_parameter, e, peaks, peak_names, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)], psd_cut; kwargs...)
 
 Base.@deprecate get_peaks_surrival_fractions(args...; kwargs...) get_peaks_survival_fractions(args...; kwargs...)
 export get_peaks_survival_fractions, get_peaks_surrival_fractions
 
 """
-    get_peak_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, psd_cut::Unitful.RealOrRealQuantity; 
-    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}  
+    get_peak_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, psd_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector=trues(length(psd_parameter)); 
+    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
 
 Get the survival fraction of a peak after a PSD cut value `psd_cut` for a given `peak` and `window` size while performing a peak fit with fixed position.
     
@@ -180,6 +155,7 @@ Get the survival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `peak`: The energy position of the peak.
 - `window`: Energy window (lower and upper bounds) around the peak.
 - `psd_cut`: Threshold value for the PSD cut.
+- `cut_vector`: A BitVector cutting events additionally to the PSD cut. Defaults to a vector of `true` values (i.e. all events are initially selected).
 
 # Keyword Arguments
 - `uncertainty`: If `true`, includes uncertainty estimation in the fit.
@@ -189,12 +165,24 @@ Get the survival fraction of a peak after a PSD cut value `psd_cut` for a given 
 - `fit_func`: Specifies the fitting function for peak estimation.
 
 # Returns
-A tuple containing:
-- `result`: NamedTuple with peak position, counts before and after the cut, survival fraction, and goodness-of-fit metrics.
-- `report`: NamedTuple with detailed fitting results for before and after the cut.
+A tuple `(result, report)` where:
+- `result` is a named tuple containing:
+  - `peak`: The energy position of the peak.
+  - `fit_func`: The fitting function used.
+  - `n_before`: The number of signal counts in the peak region before applying the PSD cut.
+  - `n_after`: The number of signal counts after applying the PSD cut.
+  - `sf`: The survival fraction (expressed as a percentage) after the PSD cut.
+  - `gof`: A named tuple with goodness-of-fit metrics for the fits before and after the cut.
+- `report` is a named tuple with detailed fitting results including:
+  - `peak`: The energy position of the peak.
+  - `n_before`: The total counts before applying the PSD cut.
+  - `n_after`: The total counts after applying the PSD cut.
+  - `sf`: The computed survival fraction.
+  - `before`: Detailed report from the initial peak fit.
+  - `after`: Detailed report from the post-cut peak fit.
 """
-function get_peak_survival_fraction(cut_vector::BitVector, e::Vector{<:T}, peak::T, window::Vector{T}; 
-    uncertainty::Bool=true, bin_width_window::T=2.0u"keV", fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}  
+function get_peak_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, psd_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector=trues(length(psd_parameter)); 
+    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
 
     # Estimate bin width
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
@@ -208,8 +196,15 @@ function get_peak_survival_fraction(cut_vector::BitVector, e::Vector{<:T}, peak:
     # Fit peak and return number of signal counts
     result_before, report_before = fit_single_peak_th228(peakhist, peakstats; uncertainty=uncertainty, fit_func=fit_func)
 
+    # Construct combined cut vector from PSD parameter, cut value and cut vector
+    combined_cut_vector = if !inverted_mode
+        psd_cut .< psd_parameter .< sigma_high_sided .&& cut_vector
+    else
+        psd_parameter .< psd_cut .&& cut_vector
+    end
+
     # Apply cut using precomputed cut_vector
-    e_survived, e_cut = e[cut_vector], e[.!cut_vector]
+    e_survived, e_cut = e[combined_cut_vector], e[.!combined_cut_vector]
 
     # Get energy after cut and create histograms
     survived = fit(Histogram, ustrip(e_survived), ustrip(peak-first(window):bin_width:peak+last(window)))
@@ -239,45 +234,12 @@ function get_peak_survival_fraction(cut_vector::BitVector, e::Vector{<:T}, peak:
     return result, report
 end
 
-# Overloaded function for psd_cut only
-function get_peak_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, psd_cut::Unitful.RealOrRealQuantity; 
-    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
-
-    cut_vector = if !inverted_mode
-        psd_cut .< psd_parameter .< sigma_high_sided
-    else
-        psd_parameter .< psd_cut
-    end
-
-    get_peak_survival_fraction(cut_vector, e, peak, window; 
-                               uncertainty=uncertainty, 
-                               bin_width_window=bin_width_window, 
-                               fit_func=fit_func)
-end
-
-# Overloaded function for psd_cut and existing cut_vector
-function get_peak_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, psd_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector; 
-    uncertainty::Bool=true, inverted_mode::Bool=false, bin_width_window::T=2.0u"keV", sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter)), fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
-
-    combined_cut_vector = if !inverted_mode
-        psd_cut .< psd_parameter .< sigma_high_sided .&& cut_vector
-    else
-        psd_parameter .< psd_cut .&& cut_vector
-    end
-
-    get_peak_survival_fraction(combined_cut_vector, e, peak, window; 
-                               uncertainty=uncertainty, 
-                               bin_width_window=bin_width_window, 
-                               fit_func=fit_func)
-end
-
-
 Base.@deprecate get_peak_surrival_fraction(args...; kwargs...) get_peak_survival_fraction(args...; kwargs...)
 export get_peak_survival_fraction, get_peak_surrival_fraction
 
 
 """
-    get_continuum_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, psd_cut::Unitful.RealOrRealQuantity; 
+    get_continuum_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, psd_cut::Unitful.RealOrRealQuantity, e::Vector{<:T}, center::T, window::T, cut_vector::BitVector=trues(length(psd_parameter)); 
     inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter))) where T<:Unitful.Energy{<:Real}
 Get the survival fraction of a continuum after a psd_parameter cut value `psd_cut` for a given `center` and `window` size.
 
@@ -313,8 +275,14 @@ Get the survival fraction of a continuum after a psd_parameter cut value `psd_cu
   - `e_unit`: The energy unit used (e.g., keV).
   - `bin_width`: The calculated bin width for histograms.
 """
-function get_continuum_survival_fraction(cut_vector::BitVector, psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, psd_cut::Unitful.RealOrRealQuantity,; 
-    sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter))) where T<:Unitful.Energy{<:Real}
+function get_continuum_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, psd_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector=trues(length(psd_parameter)); 
+    inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter))) where T<:Unitful.Energy{<:Real}
+
+    combined_cut_vector = if !inverted_mode
+        psd_cut .< psd_parameter .< sigma_high_sided .&& cut_vector
+    else
+        psd_parameter .< psd_cut .&& cut_vector
+    end
 
     # Scale unit
     e_unit = u"keV"
@@ -322,14 +290,14 @@ function get_continuum_survival_fraction(cut_vector::BitVector, psd_parameter::V
     e_wdw_idx = findall(center - window .< e .< center + window)
     psd_parameter = psd_parameter[e_wdw_idx]
     e = e[e_wdw_idx]
-    cut_vector = cut_vector[e_wdw_idx]  # Ensure the cut vector is restricted to the window
+    combined_cut_vector = combined_cut_vector[e_wdw_idx]  # Ensure the cut vector is restricted to the window
 
     # Get bin width
     bin_width = get_friedman_diaconis_bin_width(e)
     # Number of events before cut
     n_before = length(e)
-    # Apply cut using precomputed cut_vector
-    e_survived, e_cut = e[cut_vector], e[.!cut_vector]
+    # Apply cut using precomputed combined_cut_vector
+    e_survived, e_cut = e[combined_cut_vector], e[.!combined_cut_vector]
     n_after = length(e_survived)
 
     # Calculate survival fraction
@@ -354,33 +322,6 @@ function get_continuum_survival_fraction(cut_vector::BitVector, psd_parameter::V
         bin_width = bin_width,
     )
     return result, report
-end
-
-# Overloaded function for psd_cut only
-function get_continuum_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, psd_cut::Unitful.RealOrRealQuantity; 
-    inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter))) where T<:Unitful.Energy{<:Real}
-
-    cut_vector = if !inverted_mode
-        psd_cut .< psd_parameter .< sigma_high_sided
-    else
-        psd_parameter .< psd_cut
-    end
-    get_continuum_survival_fraction(cut_vector, psd_parameter, e, center, window, psd_cut; 
-                                    sigma_high_sided=sigma_high_sided)
-end
-
-# Overloaded function for psd_cut and existing cut_vector
-function get_continuum_survival_fraction(psd_parameter::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, center::T, window::T, psd_cut::Unitful.RealOrRealQuantity, cut_vector::BitVector; 
-    inverted_mode::Bool=false, sigma_high_sided::Unitful.RealOrRealQuantity=Inf*unit(first(psd_parameter))) where T<:Unitful.Energy{<:Real}
-
-    combined_cut_vector = if !inverted_mode
-        psd_cut .< psd_parameter .< sigma_high_sided .&& cut_vector
-    else
-        psd_parameter .< psd_cut .&& cut_vector
-    end
-
-    get_continuum_survival_fraction(combined_cut_vector, psd_parameter, e, center, window, psd_cut; 
-                                    sigma_high_sided=sigma_high_sided)
 end
 
 Base.@deprecate get_continuum_surrival_fraction(args...; kwargs...) get_continuum_survival_fraction(args...; kwargs...)

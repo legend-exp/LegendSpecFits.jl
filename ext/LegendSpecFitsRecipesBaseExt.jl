@@ -1488,7 +1488,7 @@ end
 
     elseif plot_type == :fit
         # Fit plot
-        xlabel := "LQ (A.U.)"
+        xlabel := ""
         ylabel := "Counts"
         
         ylabel := "Normalized Counts"
@@ -1550,6 +1550,7 @@ end
                 title := ""
                 markercolor --> :black
                 ylabel := "Residuals (σ)"
+                xlabel := "LQ (A.U.)"
                 link --> :x
                 top_margin --> (-4, :mm)
                 ylims := (-5, 5)

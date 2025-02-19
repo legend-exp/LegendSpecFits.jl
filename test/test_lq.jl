@@ -2,11 +2,8 @@ using Test
 using LegendSpecFits
 using Unitful
 using Distributions
-# using Plots
-
 
 @testset "Test lq_drift_time_correction with Tail" begin
-
     # Generate 10000 data points
     N = 10000
 
@@ -61,10 +58,11 @@ end
     # LQ Classifier
     # Peak 1: Normally distributed LQ values
     lq_classifier_peak1 = randn(n_peak)
-    # Peak 2: Flat background within the peak
+
+    # Bkg peak: Flat background within the peak
     lq_classifier_peak2 = -4 .+ 14 .* rand(n_bg)
 
-    # Below: Flat background below the peak
+    # Bkg sidebands: Flat background below the peak
     lq_classifier_below = -4 .+ 14 .* rand(n_bg ÷ 2)
     lq_classifier_above = -4 .+ 14 .* rand(n_bg ÷ 2)
 
@@ -73,13 +71,6 @@ end
 
     # Call the LQ_cut function
     result, report = lq_cut(dep_µ, dep_σ, e_cal, lq_classifier_combined)
-
-    # plot(report.temp_hists.hist_dep, label="LQ SEP")
-    # plot!(report.temp_hists.hist_sb1, label="LQ SB1")
-    # plot!(report.temp_hists.hist_sb2, label="LQ SB2")
-    # plot!(report.temp_hists.hist_subtracted, label="dep Subtracted")
-    # plot(report.temp_hists.hist_corrected, label="original histogram")
-    # plot!(report.fit_report.f_fit, label="Fit function")
 
     # Extract the cutoff value
     cut_3σ = result.cut

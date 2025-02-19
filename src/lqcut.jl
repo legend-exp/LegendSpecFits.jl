@@ -30,24 +30,22 @@
 """
 function lq_ctc_correction(
     lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
-    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) 
+    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1, uncertainty::Bool=false) 
 
     # calculate DEP edges
     dep_left = dep_µ - ctc_dep_edgesigma * dep_σ
     dep_right = dep_µ + ctc_dep_edgesigma * dep_σ
 
     # cut data to DEP peak
-    lq_dep = lq[dep_left .< e_cal .< dep_right]
-    dt_eff_dep = ustrip.(dt_eff[dep_left .< e_cal .< dep_right])
-
-    #filter out NaN values
-    lq_dep_NaNfree = filter(isfinite, lq_dep)
+    dep_finite = (dep_left .< e_cal .< dep_right .&& isfinite.(e_cal))
+    lq_dep = lq[dep_finite]
+    dt_eff_dep = ustrip.(dt_eff[dep_finite])
    
     # precut lq data for fit
-    lq_precut = cut_single_peak(lq_dep_NaNfree, minimum(lq_dep_NaNfree), quantile(lq_dep_NaNfree, 0.99); relative_cut=ctc_lq_precut_relative_cut)
+    lq_precut = cut_single_peak(lq_dep, minimum(lq_dep), quantile(lq_dep, 0.99); relative_cut=ctc_lq_precut_relative_cut)
 
     # truncated gaussian fit
-    lq_result, lq_report = fit_single_trunc_gauss(lq_dep_NaNfree, lq_precut, uncertainty=false)
+    lq_result, lq_report = fit_single_trunc_gauss(lq_dep, lq_precut; uncertainty)
     µ_lq = mvalue(lq_result.μ)
     σ_lq = mvalue(lq_result.σ)
 
@@ -67,7 +65,7 @@ function lq_ctc_correction(
     elseif ctc_driftime_cutoff_method == :gaussian # can't be used for detectors with double peaks
         
         dt_eff_precut = cut_single_peak(dt_eff_dep, minimum(lq_dep), maximum(lq_dep))
-        drift_result, drift_report = fit_single_trunc_gauss(dt_eff_dep, dt_eff_precut, uncertainty=false)
+        drift_result, drift_report = fit_single_trunc_gauss(dt_eff_dep, dt_eff_precut; uncertainty)
         µ_t = mvalue(drift_result.μ)
         σ_t = mvalue(drift_result.σ)
 
@@ -82,7 +80,7 @@ function lq_ctc_correction(
         drift_prestats = estimate_single_peak_stats(drift_prehist)
 
         #fit histogram with double gaussian
-        drift_result, drift_report = fit_binned_double_gauss(drift_prehist, drift_prestats, uncertainty=false)
+        drift_result, drift_report = fit_binned_double_gauss(drift_prehist, drift_prestats; uncertainty)
         
         #set cutoff at the x-value where the fit function is 10% of its maximum value
         x_values = -1000:0.5:5000  
@@ -99,14 +97,14 @@ function lq_ctc_correction(
     end
 
     #store cutoff values in box to return later    
-    box = (lq_lower = lq_lower, lq_upper = lq_upper, t_lower = t_lower, t_upper = t_upper)
+    box = (;lq_lower, lq_upper, t_lower, t_upper)
 
     #cut data according to cutoff values
     lq_cut = lq_dep[lq_lower .< lq_dep .< lq_upper .&& t_lower .< dt_eff_dep .< t_upper]
     t_cut = dt_eff_dep[lq_lower .< lq_dep .< lq_upper .&& t_lower .< dt_eff_dep .< t_upper]
 
     #polynomial fit
-    result_µ, report_µ = chi2fit(pol_fit_order, t_cut, lq_cut; uncertainty=false)
+    result_µ, report_µ = chi2fit(pol_fit_order, t_cut, lq_cut; uncertainty)
     par = mvalue(result_µ.par)
     pol_fit_func = report_µ.f_fit
 
@@ -158,7 +156,8 @@ export lq_ctc_correction
 
 """
 function lq_cut(
-    dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5)
+    dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5, uncertainty::Bool=true
+    )
 
     # Define sidebands
     lq_dep = lq_classifier[dep_µ - dep_sideband_sigma * dep_σ .< e_cal .< dep_µ + dep_sideband_sigma * dep_σ]
@@ -184,7 +183,7 @@ function lq_cut(
     hist_corrected = Histogram(edges, weights_corrected)
     
     # Create a named tuple of histograms for crosschecks
-    temp_hists = (hist_dep = hist_dep, hist_sb1 = hist_sb1, hist_sb2 = hist_sb2, hist_subtracted = hist_subtracted, hist_corrected = hist_corrected)
+    temp_hists = (;hist_dep, hist_sb1, hist_sb2, hist_subtracted, hist_corrected)
 
     #get truncate values for fit; needed if outliers are present after in sideband subtracted histogram
     lq_prestats = estimate_single_peak_stats(hist_corrected)
@@ -192,7 +191,7 @@ function lq_cut(
     lq_stop = lq_prestats.peak_pos + cut_truncation_sigma * lq_prestats.peak_sigma
 
     # Fit the sideband subtracted histogram
-    fit_result, fit_report = fit_binned_trunc_gauss(hist_corrected, (low=lq_start, high=lq_stop, max=NaN), uncertainty=true)
+    fit_result, fit_report = fit_binned_trunc_gauss(hist_corrected, (low=lq_start, high=lq_stop, max=NaN); uncertainty)
 
     #final cutoff value defined by "cut_sigma"
     cut_3σ = fit_result.μ + cut_sigma * fit_result.σ
