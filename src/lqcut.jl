@@ -37,7 +37,7 @@ function lq_ctc_correction(
     dep_right = dep_µ + ctc_dep_edgesigma * dep_σ
 
     # cut data to DEP peak
-    dep_finite = (dep_left .< e_cal .< dep_right .&& isfinite.(e_cal))
+    dep_finite = (dep_left .< e_cal .< dep_right .&& isfinite.(lq) .&& isfinite.(dt_eff))
     lq_dep = lq[dep_finite]
     dt_eff_dep = ustrip.(dt_eff[dep_finite])
    
@@ -49,7 +49,7 @@ function lq_ctc_correction(
     µ_lq = mvalue(lq_result.μ)
     σ_lq = mvalue(lq_result.σ)
 
-    #set cutoff in lq dimension for later fit
+    # set cutoff in lq dimension for later fit
     lq_lower = µ_lq - lq_outlier_sigma * σ_lq 
     lq_upper = µ_lq + lq_outlier_sigma * σ_lq 
 
@@ -96,23 +96,23 @@ function lq_ctc_correction(
         throw(ArgumentError("Drift time cutoff method $ctc_driftime_cutoff_method not supported"))
     end
 
-    #store cutoff values in box to return later    
+    # store cutoff values in box to return later    
     box = (;lq_lower, lq_upper, t_lower, t_upper)
 
-    #cut data according to cutoff values
+    # cut data according to cutoff values
     lq_cut = lq_dep[lq_lower .< lq_dep .< lq_upper .&& t_lower .< dt_eff_dep .< t_upper]
     t_cut = dt_eff_dep[lq_lower .< lq_dep .< lq_upper .&& t_lower .< dt_eff_dep .< t_upper]
 
-    #polynomial fit
+    # polynomial fit
     result_µ, report_µ = chi2fit(pol_fit_order, t_cut, lq_cut; uncertainty)
     par = mvalue(result_µ.par)
     pol_fit_func = report_µ.f_fit
 
-    #property function for drift time correction
+    # property function for drift time correction
     lq_class_func = "$lq_e_corr_expression - " * join(["$(par[i]) * $dt_eff_expression^$(i-1)" for i in eachindex(par)], " - ")
     lq_class_func_generic = "lq / e  - (slope * qdrift / e + y_inter)"
 
-    #create result and report
+    # create result and report
     result = (
     func = lq_class_func,
     func_generic = lq_class_func_generic,
@@ -159,41 +159,41 @@ function lq_cut(
     dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5, uncertainty::Bool=true
     )
 
-    # Define sidebands
+    # define sidebands
     lq_dep = lq_classifier[dep_µ - dep_sideband_sigma * dep_σ .< e_cal .< dep_µ + dep_sideband_sigma * dep_σ]
     lq_sb1 = lq_classifier[dep_µ -  2 * dep_sideband_sigma * dep_σ .< e_cal .< dep_µ - dep_sideband_sigma * dep_σ]
     lq_sb2 = lq_classifier[dep_µ + dep_sideband_sigma * dep_σ .< e_cal .< dep_µ + 2 * dep_sideband_sigma * dep_σ]
     
-    # Generate values for histogram edges
+    # generate values for histogram edges
     combined = filter(isfinite,[lq_dep; lq_sb1; lq_sb2])
     ideal_bin_width = get_friedman_diaconis_bin_width(combined)
     edges = range(start=minimum(combined), stop=maximum(combined), step=ideal_bin_width)
 
-    # Create histograms with the same bin edges
+    # create histograms with the same bin edges
     hist_dep = fit(Histogram, lq_dep, edges)
     hist_sb1 = fit(Histogram, lq_sb1, edges)
     hist_sb2 = fit(Histogram, lq_sb2, edges)
     
-    # Subtract histograms
+    # subtract histograms
     weights_subtracted = hist_dep.weights .- hist_sb1.weights .- hist_sb2.weights
     hist_subtracted = Histogram(edges, weights_subtracted)
 
-    # Replace negative bins with 0
+    # replace negative bins with 0
     weights_corrected = max.(weights_subtracted, 0)
     hist_corrected = Histogram(edges, weights_corrected)
     
-    # Create a named tuple of histograms for crosschecks
+    # create a named tuple of histograms for crosschecks
     temp_hists = (;hist_dep, hist_sb1, hist_sb2, hist_subtracted, hist_corrected)
 
-    #get truncate values for fit; needed if outliers are present after in sideband subtracted histogram
+    # get truncate values for fit; needed if outliers are present after in sideband subtracted histogram
     lq_prestats = estimate_single_peak_stats(hist_corrected)
     lq_start = lq_prestats.peak_pos - cut_truncation_sigma * lq_prestats.peak_sigma
     lq_stop = lq_prestats.peak_pos + cut_truncation_sigma * lq_prestats.peak_sigma
 
-    # Fit the sideband subtracted histogram
+    # fit the sideband subtracted histogram
     fit_result, fit_report = fit_binned_trunc_gauss(hist_corrected, (low=lq_start, high=lq_stop, max=NaN); uncertainty)
 
-    #final cutoff value defined by "cut_sigma"
+    # final cutoff value defined by "cut_sigma"
     cut_3σ = fit_result.μ + cut_sigma * fit_result.σ
 
     result = (
