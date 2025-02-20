@@ -1305,16 +1305,16 @@ end
 
 # recipe for the lq_drift_time_correction report
 
-@recipe function f(report::NamedTuple{(:lq_prehist, :lq_report, :drift_prehist, :drift_report, :lq_box, :drift_time_func, :DEP_left, :DEP_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
+@recipe function f(report::NamedTuple{(:lq_report, :drift_report, :lq_box, :drift_time_func, :dep_left, :dep_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
 
     # Extract data from the report
-    DEP_left = report.DEP_left
-    DEP_right = report.DEP_right
+    dep_left = report.dep_left
+    dep_right = report.dep_right
     box = report.lq_box
 
     #cut data to DEP
-    dt_DEP = dt_eff[DEP_left .< e_cal .< DEP_right]
-    lq_DEP = lq_e_corr[DEP_left .< e_cal .< DEP_right]
+    dt_dep = dt_eff[dep_left .< e_cal .< dep_right]
+    lq_dep = lq_e_corr[dep_left .< e_cal .< dep_right]
 
     # Plot configuration: 2D histogram
     xlabel := "Drift Time"
@@ -1330,7 +1330,7 @@ end
 
 
     if plot_type == :DEP
-        # Create 2D histogram with filtered data based on DEP_left and DEP_right
+        # Create 2D histogram with filtered data based on dep_left and dep_right
         
         # dynamic bin size dependant on fit constraint box
         t_diff = box.t_upper - box.t_lower
@@ -1345,19 +1345,21 @@ end
 
         @series begin
             seriestype := :histogram2d
-            dt_DEP, lq_DEP
+            dt_dep, lq_dep
         end
     elseif plot_type == :whole
         # Create 2D histogram with all data
         colorbar_scale := :log10
 
-        # dynamic bin size
-        xmin = ustrip.(quantile(dt_eff, 0.001))
-        xmax = ustrip.(quantile(dt_eff, 0.999))
-        xstep = (xmax - xmin) / 200
-        ymin = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.005)) #filters NaNs for quantile
-        ymax = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.94)) #filters NaNs for quantile
-        ystep = (ymax - ymin) / 200
+        # dynamic bin size dependant on fit constraint box
+        t_diff = box.t_upper - box.t_lower
+        lq_diff = box.lq_upper - box.lq_lower
+        xmin = box.t_lower - 1*t_diff
+        xmax = box.t_upper + 1*t_diff
+        xstep = (xmax - xmin) / 400
+        ymin = box.lq_lower - 8*lq_diff
+        ymax = box.lq_upper + 8*lq_diff
+        ystep = (ymax - ymin) / 400
         nbins := (xmin:xstep:xmax, ymin:ystep:ymax)
 
         @series begin
@@ -1392,7 +1394,8 @@ end
         # Evaluate drift_time_func over the full range of drift time (x-axis)
         dt_range = range(xmin, xmax, length=100)  # 100 points across the x-axis
         lq_fit = report.drift_time_func.(dt_range)  # Apply the linear function to the full dt range
-
+        xlims := (xmin, xmax)
+        ylims := (ymin, ymax)
         dt_range, lq_fit
 
     end
@@ -1420,7 +1423,11 @@ end
         # 2D histogram for LQ Cut
         xlabel := "Energy"
         ylabel := "LQ (A.U.)"
-        nbins := (0:6:3000, -2.0:0.012:4.0)
+        #lq bins dependant on cut value
+        ymin = -5 * cut_value
+        ymax = 10 * cut_value
+        ystep = (ymax - ymin) / 500
+        nbins := (0:6:3000, ymin:ystep:ymax)
         colorbar_scale := :log10
         color := :viridis
         legend := :bottomright
@@ -1476,8 +1483,112 @@ end
 
         @series begin
             label := "Cut Fraction"
-            0:3:3000, h_diff
+            0:3:3*length(h_diff)-1, h_diff
         end
+
+    elseif plot_type == :fit
+        # Fit plot
+        xlabel := ""
+        ylabel := "Counts"
+        
+        ylabel := "Normalized Counts"
+        margins := (4, :mm)
+        framestyle := :box
+        legend := :topleft
+        xlims = (ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)), ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)))
+        xlims := xlims
+        @series begin
+            label := "Data"
+            subplot --> 1
+            report.fit_report.h
+        end
+        @series begin
+            color := :red
+            subplot --> 1
+            label := "Normal Fit (μ = $(round_wo_units(report.fit_report.μ, digits=2)), \n σ = $(round_wo_units(report.fit_report.σ, digits=2)))"
+            lw := 3
+            bottom_margin --> (-4, :mm)
+            ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)):ustrip(Measurements.value(report.fit_report.σ / 1000)):ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)), t -> report.fit_report.f_fit(t)
+        end
+
+        @series begin
+            seriestype := :vline
+            label := "Cut Value"
+            subplot := 1
+            linewidth := 2
+            color := :red
+            [cut_value]
+        end
+
+        if !isempty(report.fit_report.gof)
+            link --> :x
+            layout --> @layout([a{0.7h}; b{0.3h}])
+            @series begin
+                seriestype := :hline
+                ribbon := 3
+                subplot --> 2
+                fillalpha := 0.5
+                label := ""
+                fillcolor := :lightgrey
+                linecolor := :darkgrey
+                [0.0]
+            end
+            @series begin
+                seriestype := :hline
+                ribbon := 1
+                subplot --> 2
+                fillalpha := 0.5
+                label := ""
+                fillcolor := :grey
+                linecolor := :darkgrey
+                [0.0]
+            end
+            @series begin
+                seriestype := :scatter
+                subplot --> 2
+                label := ""
+                title := ""
+                markercolor --> :black
+                ylabel := "Residuals (σ)"
+                xlabel := "LQ (A.U.)"
+                link --> :x
+                top_margin --> (-4, :mm)
+                ylims := (-5, 5)
+                xlims := xlims
+                yscale --> :identity
+                yticks := ([-3, 0, 3])
+                
+                bin_midpoints = report.fit_report.gof.bin_centers
+                residuals = report.fit_report.gof.residuals_norm
+                bin_midpoints, residuals             
+            end
+        end
+
+    elseif plot_type == :sideband
+        # Sideband histograms
+        xlabel := "Lq (A.U.)"
+        ylabel := "Counts"
+
+        @series begin
+            seriestype := :stepbins
+            label := "Peak"
+            report.temp_hists.hist_dep
+        end
+
+        @series begin
+            seriestype := :stepbins
+            label := "Sideband 1"
+            report.temp_hists.hist_sb1
+        end
+
+        @series begin
+            seriestype := :stepbins
+            label := "Sideband 2"
+            xlims := quantile(filter(isfinite, lq_class), 0.05), quantile(filter(isfinite, lq_class), 0.95)
+            report.temp_hists.hist_sb2
+        end
+
+
     end
 end
 
