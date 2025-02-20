@@ -14,10 +14,10 @@ Fit the corrections for the AoE value of the detector.
 - `f_σ_scs`: Fit function for the sigma values
 """
 function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real}; aoe_expression::Union{String,Symbol}="a / e", e_expression::Union{String,Symbol}="e")
-    # fit compton band mus with linear function
-    μ_cut = (mean(μ) - 2*std(μ) .< μ .< mean(μ) + 2*std(μ)) .&& muncert.(μ) .> 0.0
+
+    μ_cut = muncert.(μ) .> 0.0
     e, μ, σ = e[μ_cut], μ[μ_cut], σ[μ_cut]
-    σ_cut = (mean(σ) - std(σ) .< σ .< mean(σ) + std(σ)) .&& muncert.(σ) .> 0.0
+    σ_cut = muncert.(σ) .> 0.0
     e_unit = unit(first(e))
     e = ustrip.(e_unit, e)
     
