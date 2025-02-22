@@ -35,13 +35,16 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     # Initial peak search
     cuts_1pe = cut_single_peak(pe_uncal, initial_min_amp, initial_max_amp, relative_cut=relative_cut_noise_cut)
     
-    bin_width_cut_min = cuts_1pe.max+n_fwhm_noise_cut*(cuts_1pe.high - cuts_1pe.max)
+    bin_width_cut_min = if n_fwhm_noise_cut == 0.0
+        initial_min_amp
+    else
+        cuts_1pe.max+n_fwhm_noise_cut*(cuts_1pe.high - cuts_1pe.max)
+    end
     bin_width_cut = get_friedman_diaconis_bin_width(filter(in(bin_width_cut_min..quantile(pe_uncal, initial_max_bin_width_quantile)), pe_uncal))
     peakpos = []
     for bin_width_scale in exp10.(range(0, stop=-3, length=50))
-        @debug "Using bin width: $(bin_width_cut)"
-
         bin_width_cut_scaled = bin_width_cut * bin_width_scale
+        @debug "Using bin width: $(bin_width_cut_scaled)"
         h_uncal_cut = fit(Histogram, pe_uncal, bin_width_cut_min:bin_width_cut_scaled:initial_max_amp)
         if peakfinder_σ <= 0.0
             peakfinder_σ_scaled = round(Int, 2*(cuts_1pe.high - cuts_1pe.max) / bin_width_cut_scaled / 2.355)
@@ -55,13 +58,15 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
             continue
         else
             @debug "Found peaks with bin width scale $(bin_width_scale)"
-            if !isempty(peakpos)
+            if !isempty(peakpos) && length(peakpos) >= 2
                 break
             end
         end
     end
 
     if isempty(peakpos) || length(peakpos) < 2
+        h_uncal_cut = fit(Histogram, pe_uncal, bin_width_cut_min:bin_width_cut:initial_max_amp)
+
         throw(ErrorException("Failed to find peaks"))
     end
 
