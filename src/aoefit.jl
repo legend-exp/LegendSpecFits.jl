@@ -54,7 +54,7 @@ function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton
     simple_pars_aoe_μ       = simple_fit_aoe_μ.param
     simple_pars_error_aoe_μ = zeros(length(simple_pars_aoe_μ))
     try
-        simple_pars_error_aoe_μ = standard_errors(simple_fit_aoe_μ)
+        simple_pars_error_aoe_μ = stderror(simple_fit_aoe_μ)
     catch e
         @warn "Error calculating standard errors for simple fitted μ: $e"
     end
@@ -67,7 +67,7 @@ function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton
     simple_pars_aoe_σ       = simple_fit_aoe_σ.param
     simple_pars_error_aoe_σ = zeros(length(simple_pars_aoe_σ))
     try
-        simple_pars_error_aoe_σ = standard_errors(simple_fit_aoe_σ)
+        simple_pars_error_aoe_σ = stderror(simple_fit_aoe_σ)
     catch e
         @warn "Error calculating standard errors for simple fitted σ: $e"
     end

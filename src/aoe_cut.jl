@@ -9,8 +9,8 @@ Get the survival fraction after a AoE cut value `aoe_cut` for a given `peak` and
 """
 function get_sf_after_aoe_cut(aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple; uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
     # get energy after cut and create histogram
-    survived = fit(Histogram, ustrip.(e[aoe .>= aoe_cut]), ustrip(peak-first(window):bin_width:peak+last(window)))
-    cut = fit(Histogram, ustrip.(e[aoe .< aoe_cut]), ustrip(peak-first(window):bin_width:peak+last(window)))
+    survived = fit(Histogram, ustrip.(e[aoe .>= aoe_cut]), ustrip.(peak-first(window):bin_width:peak+last(window)))
+    cut = fit(Histogram, ustrip.(e[aoe .< aoe_cut]), ustrip.(peak-first(window):bin_width:peak+last(window)))
     # fit peak and return number of signal counts
     result, _ = fit_subpeaks_th228(survived, cut, result_before; uncertainty=uncertainty, fit_func=fit_func)
     return result.sf
