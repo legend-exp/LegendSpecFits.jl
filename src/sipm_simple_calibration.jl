@@ -51,7 +51,10 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
         end
         @debug "Peakfinder σ: $(peakfinder_σ_scaled)"
         try
-            c, h_deconv, peakpos, threshold = RadiationSpectra.determine_calibration_constant_through_peak_ratios(h_uncal_cut, collect(range(min_pe_peak, max_pe_peak, step=1)),
+            # use SavitzkyGolay filter to smooth the histogram
+            sg_uncal_cut = savitzky_golay(h_uncal_cut.weights, ifelse(isodd(peakfinder_σ_scaled), peakfinder_σ_scaled, peakfinder_σ_scaled + 1), 3)
+            h_uncal_cut_sg = Histogram(h_uncal_cut.edges[1], sg_uncal_cut.y)
+            c, h_deconv, peakpos, threshold = RadiationSpectra.determine_calibration_constant_through_peak_ratios(h_uncal_cut_sg, collect(range(min_pe_peak, max_pe_peak, step=1)),
                 min_n_peaks = 2, max_n_peaks = max_pe_peak, threshold=peakfinder_threshold, rtol=peakfinder_rtol, α=peakfinder_α, σ=peakfinder_σ_scaled)
         catch e
             @warn "Failed to find peaks with bin width scale $(bin_width_scale): $(e)"
@@ -65,8 +68,6 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     end
 
     if isempty(peakpos) || length(peakpos) < 2
-        h_uncal_cut = fit(Histogram, pe_uncal, bin_width_cut_min:bin_width_cut:initial_max_amp)
-
         throw(ErrorException("Failed to find peaks"))
     end
 

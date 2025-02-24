@@ -37,6 +37,7 @@ using PropDicts
 using RadiationSpectra
 using RadiationSpectra: peakfinder
 using Roots
+using SavitzkyGolay
 using SpecialFunctions
 using StatsBase
 using StructArrays
