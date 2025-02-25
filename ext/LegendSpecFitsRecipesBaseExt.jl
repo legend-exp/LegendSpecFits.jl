@@ -1300,6 +1300,76 @@ end
     end
 end
 
+@recipe function f(report::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :aoe_peak, :aoe_ctc, :qdrift_peak, :h_before, :h_after, :σ_before, :σ_after, :report_before, :report_after)})
+    
+    size --> (1000,1000)
+    layout := @layout [a{0.4h}; b{0.6h}]
+    link := :x
+    
+    xtickfontsize --> 12
+    xlabelfontsize --> 14
+    ylabelfontsize --> 14
+    ytickfontsize --> 12
+    legendfontsize --> 12
+    foreground_color_legend --> :silver
+    background_color_legend --> :white
+    
+    grid --> false
+    framestyle --> :semi
+    left_margin --> (5,:mm)
+    right_margin --> (5,:mm)
+    bottom_margin --> (-4,:mm)
+    
+    @series begin
+        subplot := 1
+        color := :darkgrey
+        fill := true
+        alpha := 0.5
+        seriestype := :stepbins
+        label := "Before correction"
+        report.h_before
+    end
+    
+    @series begin
+        subplot := 1
+        ylabel := "Counts / $(round(step(first(report.h_after.edges)), digits = 2))"
+        xlims --> (-9,5)
+        xticks := []
+        ylims := (0, Inf)
+        legend := :topleft
+        color := :purple
+        fill := true
+        alpha := 0.5
+        seriestype := :stepbins
+        label := "After correction"
+        report.h_after
+    end
+
+    @series begin
+        subplot := 2
+        colorbar := :none
+        fill := true
+        color := :binary
+        st := :line
+        label := "Before correction"
+        yformatter := :plain
+        kde((report.aoe_peak, report.qdrift_peak))
+    end
+    
+    @series begin
+        subplot := 2
+        xlims --> (-9,5)
+        ylims --> (0,12)
+        xlabel --> "A/E classifier"
+        ylabel := "Eff. Drift time / Energy (a.u.)"
+        colorbar := :none
+        color := :plasma
+        st := :line
+        label := "After correction"
+        kde((report.aoe_ctc, report.qdrift_peak))
+    end
+end
+
 
 ### lq recipe functions
 
