@@ -86,7 +86,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
 
     # optimization
     optf = OptimizationFunction((u, p) -> f_minimize(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, fct_start, [], lb=fct_lb, ub=fct_ub)
+    optpro = OptimizationProblem(optf, fct_start, (), lb=fct_lb, ub=fct_ub)
     res = solve(optpro, NLopt.LN_BOBYQA(), maxiters = 3000, maxtime=optim_time_limit)
     converged = (res.retcode == ReturnCode.Success)
 

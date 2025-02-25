@@ -51,7 +51,7 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
 
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
@@ -170,7 +170,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
 
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
@@ -291,7 +291,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
 
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
@@ -423,7 +423,7 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
 
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
@@ -529,7 +529,7 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
 
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
