@@ -31,7 +31,7 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
 
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
@@ -128,7 +128,7 @@ function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram
     # MLE
     if optimize
         optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-        optpro = OptimizationProblem(optf, v_init, [])
+        optpro = OptimizationProblem(optf, v_init, ())
         res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
         converged = (res.retcode == ReturnCode.Success)
@@ -202,7 +202,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, NLopt.LN_BOBYQA(), maxiters = 5000, maxtime=5*optim_time_limit)
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
