@@ -97,7 +97,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     if !converged @warn "CTC did not converge" end
 
     # calculate drift time corrected aoe
-    _aoe_ctc = aoe_all .+ PolCalFunc(0.0, fct...).(qdrift_e_all)
+    _aoe_ctc = aoe_cut .+ PolCalFunc(0.0, fct...).(qdrift_e_cut)
     
     # normalize once again to μ = 0 and σ = 1
     h_norm = fit(Histogram, _aoe_ctc, -20:bin_width:3) ### hard-coded values: should include some tolerance to higher values
@@ -111,7 +111,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     aoe_ctc_func = "( ( $(aoe_expression) ) + " * join(["$(fct[i]) * ( $(qdrift_expression) )^$(i)" for i in eachindex(fct)], " + ") * " - $(μ_norm) ) / $(σ_norm) "
     
     # create final histograms
-    h_after = fit(Histogram, aoe_ctc, -20:bin_width:3) ### hard-coded values: should include some tolerance to higher values
+    h_after = fit(Histogram, aoe_ctc, hist_start:bin_width:hist_end) ### hard-coded values: should include some tolerance to higher values
     ps_after = estimate_single_peak_stats(h_after)
     result_after, report_after = fit_single_aoe_compton(h_after, ps_after, fit_func=:aoe_two_bck, pseudo_prior = pseudo_prior, uncertainty=true)
 
