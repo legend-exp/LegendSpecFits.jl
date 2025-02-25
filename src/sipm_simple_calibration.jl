@@ -83,7 +83,7 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
         
         # use SavitzkyGolay filter to smooth the histogram
         sg_uncal_cut = savitzky_golay(h_uncal_cut.weights, ifelse(isodd(peakfinder_σ_scaled), peakfinder_σ_scaled, peakfinder_σ_scaled + 1), 3)
-        edges = (h_uncal_cut.edges[1][1:end-1] .+ h_uncal_cut.edges[1][2:end]) ./ 2
+        edges = StatsBase.midpoints(first(h_uncal_cut.edges))  # use midpoints as x values
         counts_sg = sg_uncal_cut.y
         # get local maxima
         min_i_prominence = round(Int, peakfinder_σ_scaled / 2)
