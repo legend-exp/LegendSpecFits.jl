@@ -1415,7 +1415,8 @@ end
 
         @series begin
             seriestype := :histogram2d
-            dt_dep, lq_dep
+            idxs_finite = findall(isfinite.(dt_dep) .&& isfinite.(lq_dep))
+            dt_dep[idxs_finite], lq_dep[idxs_finite]
         end
     elseif plot_type == :whole
         # Create 2D histogram with all data
@@ -1434,7 +1435,8 @@ end
 
         @series begin
             seriestype := :histogram2d
-            dt_eff, lq_e_corr
+            idxs_finite = findall(isfinite.(dt_eff) .&& isfinite.(lq_e_corr))
+            dt_eff[idxs_finite], lq_e_corr[idxs_finite]
         end
     end
     
@@ -1504,7 +1506,9 @@ end
         
         @series begin
             seriestype := :histogram2d
-            e_cal, lq_class
+            idxs_finite = findall(isfinite.(e_cal) .&& isfinite.(lq_class))
+            clims := (1, 5e3)
+            e_cal[idxs_finite], lq_class[idxs_finite]
         end
 
         @series begin
