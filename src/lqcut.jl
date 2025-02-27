@@ -159,11 +159,29 @@ function lq_cut(
     dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5, uncertainty::Bool=true
     )
 
-    # define sidebands
-    lq_dep = lq_classifier[dep_µ - dep_sideband_sigma * dep_σ .< e_cal .< dep_µ + dep_sideband_sigma * dep_σ]
-    lq_sb1 = lq_classifier[dep_µ -  2 * dep_sideband_sigma * dep_σ .< e_cal .< dep_µ - dep_sideband_sigma * dep_σ]
-    lq_sb2 = lq_classifier[dep_µ + dep_sideband_sigma * dep_σ .< e_cal .< dep_µ + 2 * dep_sideband_sigma * dep_σ]
-    
+    # define sidebands; different for low and high energy resolution detectors to avoid sb reaching into 212-Bi FEP
+    DEP_edge_left  = dep_µ - dep_sideband_sigma * dep_σ
+    DEP_edge_right = dep_µ + dep_sideband_sigma * dep_σ
+
+    if dep_σ < 2.0u"keV"
+        sb1_edge = dep_µ - 2 * dep_sideband_sigma * dep_σ
+        sb2_edge = dep_µ + 2 * dep_sideband_sigma * dep_σ  
+
+        lq_dep = lq_classifier[DEP_edge_left .< e_cal .< DEP_edge_right]
+        lq_sb1 = lq_classifier[sb1_edge .< e_cal .< DEP_edge_left]
+        lq_sb2 = lq_classifier[DEP_edge_right .< e_cal .< sb2_edge]
+    else
+        sb1_edge = dep_µ - 2 * dep_sideband_sigma * dep_σ  
+        sb2_edge = dep_µ - 3 * dep_sideband_sigma * dep_σ
+
+        lq_dep = lq_classifier[DEP_edge_left .< e_cal .< DEP_edge_right]
+        lq_sb1 = lq_classifier[sb1_edge .< e_cal .< DEP_edge_left]
+        lq_sb2 = lq_classifier[sb2_edge .< e_cal .< sb1_edge]
+    end
+
+    # save edges for crosschecks
+    edges_for_crosschecks = (;DEP_edge_left, DEP_edge_right, sb1_edge, sb2_edge)
+
     # generate values for histogram edges
     combined = filter(isfinite,[lq_dep; lq_sb1; lq_sb2])
     ideal_bin_width = get_friedman_diaconis_bin_width(combined)
@@ -206,6 +224,8 @@ function lq_cut(
         fit_result = fit_result,
         temp_hists = temp_hists,
         fit_report = fit_report,
+        dep_σ = dep_σ,
+        edges = edges_for_crosschecks,
     )
 
     return result, report

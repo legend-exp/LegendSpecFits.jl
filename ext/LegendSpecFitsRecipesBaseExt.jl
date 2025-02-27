@@ -1476,7 +1476,7 @@ end
 
 # recipe for the lq_cut report
 
-@recipe function f(report::NamedTuple{(:cut, :fit_result, :temp_hists, :fit_report)}, lq_class::Vector{Float64}, e_cal, plot_type::Symbol)
+@recipe function f(report::NamedTuple{(:cut, :fit_result, :temp_hists, :fit_report, :dep_σ, :edges)}, lq_class::Vector{Float64}, e_cal, plot_type::Symbol)
 
     # Extract cutvalue from the report
     cut_value = Measurements.value.(report.cut)
@@ -1662,10 +1662,40 @@ end
             report.temp_hists.hist_sb2
         end
 
-
+    elseif plot_type == :energy_spectrum
+        # Plot energy spectrum with DEP and sideband regions
+        left_margin := -2Plots.mm
+        bottom_margin := -4Plots.mm
+        top_margin := -3Plots.mm
+        thickness_scaling := 1.6
+        size := (1200, 900)
+        framestyle := :box
+        formatter := :plain
+        xlabel := "Energy"
+        ylabel := "Counts"
+        
+        @series begin
+            seriestype := :stephist
+            label := "Energy Spectrum (σ: $(report.dep_σ))"
+            bins := 1000
+            e_cal[1500u"keV" .< e_cal .< 1660u"keV"]
+        end
+    
+        @series begin
+            seriestype := :vline
+            label := "DEP Region"
+            fillcolor := :red
+            [report.edges.DEP_edge_left, report.edges.DEP_edge_right]
+        end
+    
+        @series begin
+            seriestype := :vline
+            label := "Sideband Edges"
+            fillcolor := :green
+            legend := :bottomright
+            [report.edges.sb1_edge, report.edges.sb2_edge]
+        end
     end
 end
-
-
 
 end # module LegendSpecFitsRecipesBaseExt
