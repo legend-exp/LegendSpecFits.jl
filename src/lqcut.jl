@@ -109,7 +109,7 @@ function lq_ctc_correction(
     pol_fit_func = report_µ.f_fit
 
     # property function for drift time correction
-    lq_class_func = "$lq_e_corr_expression - " * join(["$(par[i]) * $dt_eff_expression^$(i-1)" for i in eachindex(par)], " - ")
+    lq_class_func = "$lq_e_corr_expression - " * join(["($(par[i]) * $dt_eff_expression)^$(i-1)" for i in eachindex(par)], " - ")
     lq_class_func_generic = "lq / e  - (slope * qdrift / e + y_inter)"
 
     # create result and report
