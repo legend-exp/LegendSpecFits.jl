@@ -51,8 +51,8 @@ function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.Real
     result_fit = merge(result_fit, (par = par_unit,))
 
     # built function in string 
-    func = join(["$(mvalue(par[i]))$e_unit * ($(e_expression))^$(i-1)" for i in eachindex(par)], " + ")
-    func_err = join(["($(par[i]))$e_unit * ($(e_expression))^$(i-1)" for i in eachindex(par)], " + ")
+    func = join(["$(mvalue(par[i]))$e_unit .* ($(e_expression)).^$(i-1)" for i in eachindex(par)], " .+ ")
+    func_err = join(["($(par[i]))$e_unit .* ($(e_expression)).^$(i-1)" for i in eachindex(par)], " .+ ")
     
     result = merge(result_fit, (func = func, func_err = func_err, µ = μ, peaks = peaks))
     report = merge(report_fit, (e_unit = e_unit, par = result.par, type = :cal))
