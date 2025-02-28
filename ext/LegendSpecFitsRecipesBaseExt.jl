@@ -1390,9 +1390,9 @@ end
     xlabel := "Drift Time"
     ylabel := "LQ (A.U.)"
     framestyle := :box
-    left_margin := -2Plots.mm
-    bottom_margin := -4Plots.mm
-    top_margin := -3Plots.mm
+    left_margin := (-2, :mm)
+    bottom_margin := (-4, :mm)
+    top_margin := (-3, :mm)
     color := :viridis
     formatter := :plain
     thickness_scaling := 1.6
@@ -1482,9 +1482,9 @@ end
     cut_value = Measurements.value.(report.cut)
 
     # Plot configuration for all types
-    left_margin := -2Plots.mm
-    bottom_margin := -4Plots.mm
-    top_margin := -3Plots.mm
+    left_margin := (-2, :mm)
+    bottom_margin := (-4, :mm)
+    top_margin := (-3, :mm)
     thickness_scaling := 1.6
     size := (1200, 900)
     framestyle := :box
@@ -1664,9 +1664,9 @@ end
 
     elseif plot_type == :energy_spectrum
         # Plot energy spectrum with DEP and sideband regions
-        left_margin := -2Plots.mm
-        bottom_margin := -4Plots.mm
-        top_margin := -3Plots.mm
+        left_margin := (-2, :mm)
+        bottom_margin := (-4, :mm)
+        top_margin := (-3, :mm)
         thickness_scaling := 1.6
         size := (1200, 900)
         framestyle := :box
@@ -1676,7 +1676,7 @@ end
         
         @series begin
             seriestype := :stephist
-            label := "Energy Spectrum (σ: $(report.dep_σ))"
+            label := "Energy Spectrum (σ: $(round(u"keV", report.dep_σ, sigdigits=3)))"
             bins := 1000
             e_cal[1500u"keV" .< e_cal .< 1660u"keV"]
         end
@@ -1692,7 +1692,7 @@ end
             seriestype := :vline
             label := "Sideband Edges"
             fillcolor := :green
-            legend := :bottomright
+            legend := :topleft
             [report.edges.sb1_edge, report.edges.sb2_edge]
         end
     end
