@@ -54,7 +54,8 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
         @debug "Peakfinder σ: $(peakfinder_σ_scaled)"
         try
             # use SavitzkyGolay filter to smooth the histogram
-            sg_uncal_cut = savitzky_golay(h_uncal_cut.weights, ifelse(isodd(peakfinder_σ_scaled), peakfinder_σ_scaled, peakfinder_σ_scaled + 1), 3)
+            peakfinder_σ_scaled_int = round(Int, peakfinder_σ_scaled)
+            sg_uncal_cut = savitzky_golay(h_uncal_cut.weights, ifelse(isodd(peakfinder_σ_scaled_int), peakfinder_σ_scaled_int, peakfinder_σ_scaled_int + 1), 3)
             h_uncal_cut_sg = Histogram(h_uncal_cut.edges[1], sg_uncal_cut.y)
             _, _, peakpos, _ = RadiationSpectra.determine_calibration_constant_through_peak_ratios(h_uncal_cut_sg, collect(range(min_pe_peak, max_pe_peak, step=1)),
                 min_n_peaks = 2, max_n_peaks = max_pe_peak, threshold=peakfinder_threshold, rtol=peakfinder_rtol, α=peakfinder_α, σ=peakfinder_σ_scaled)
@@ -82,7 +83,8 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
         end
         
         # use SavitzkyGolay filter to smooth the histogram
-        sg_uncal_cut = savitzky_golay(h_uncal_cut.weights, ifelse(isodd(peakfinder_σ_scaled), peakfinder_σ_scaled, peakfinder_σ_scaled + 1), 3)
+        peakfinder_σ_scaled_int = round(Int, peakfinder_σ_scaled)
+        sg_uncal_cut = savitzky_golay(h_uncal_cut.weights, ifelse(isodd(peakfinder_σ_scaled_int), peakfinder_σ_scaled_int, peakfinder_σ_scaled_int + 1), 3)
         edges = StatsBase.midpoints(first(h_uncal_cut.edges))  # use midpoints as x values
         counts_sg = sg_uncal_cut.y
         # get local maxima
