@@ -47,9 +47,9 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
         @debug "Using bin width: $(bin_width_cut_scaled)"
         h_uncal_cut = fit(Histogram, pe_uncal, bin_width_cut_min:bin_width_cut_scaled:initial_max_amp)
         peakfinder_σ_scaled = if peakfinder_σ <= 0.0
-            round(Int, 2*(cuts_1pe.high - cuts_1pe.max) / bin_width_cut_scaled / (2 * sqrt(2 * log(2))) )
+            2*(cuts_1pe.high - cuts_1pe.max) / bin_width_cut_scaled / (2 * sqrt(2 * log(2)))
         else
-            rount(Int, peakfinder_σ)  
+            peakfinder_σ
         end
         @debug "Peakfinder σ: $(peakfinder_σ_scaled)"
         try
@@ -76,9 +76,9 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
         
         h_uncal_cut = fit(Histogram, pe_uncal, bin_width_cut_min:bin_width_cut_scaled:initial_max_amp)
         peakfinder_σ_scaled = if peakfinder_σ <= 0.0
-            round(Int, 2*(cuts_1pe.high - cuts_1pe.max) / bin_width_cut_scaled / (2 * sqrt(2 * log(2))) )
+            2*(cuts_1pe.high - cuts_1pe.max) / bin_width_cut_scaled / (2 * sqrt(2 * log(2))) 
         else
-            rount(Int, peakfinder_σ)
+            peakfinder_σ
         end
         
         # use SavitzkyGolay filter to smooth the histogram
