@@ -94,13 +94,13 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
             # gof 
             chi2min = res.objective
             dof = length(x) - length(v_chi2)
-            if dof == 0
-                pvalue = NaN
-                  @warn "The number of fit parameters is equivalent to number of data points --> dof = 0 ; p-value not meaningful, set to NaN"
+            pvalue = if iszero(dof)
+                @warn "The number of fit parameters is equivalent to number of data points --> dof = 0 ; p-value not meaningful, set to NaN"
+                NaN
             else 
-                pvalue = ccdf(Chisq(dof), chi2min)
+                ccdf(Chisq(dof), chi2min)
             end 
-          
+
             function get_y_pred_err(f_fit, x_val, x_err, pars)  # get final uncertainties for normalized residuals
                 dual_x = ForwardDiff.Dual{UncertTag}(x_val, x_err)
                 dual_y = f_fit(dual_x, pars...)
