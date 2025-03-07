@@ -71,7 +71,7 @@ end
             xlims := (ustrip(Measurements.value(report.μ - 5*report.σ)), ustrip(Measurements.value(report.μ + 5*report.σ)))
             yscale --> :identity
             yticks := ([-3, 0, 3])
-            collect(report.h.edges[1])[1:end-1] .+ diff(collect(report.h.edges[1]))[1]/2 , [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.gof.residuals_norm]
+            report.gof.bin_centers, [ifelse(abs(r) < 1e-6, 0.0, r) for r in report.gof.residuals_norm]
         end
     end
 end
@@ -151,6 +151,36 @@ end
         color := :red
         alpha := 0.1
         ustrip.([Measurements.value(report.min_sf)-Measurements.uncertainty(report.min_sf), Measurements.value(report.min_sf)+Measurements.uncertainty(report.min_sf)])
+    end
+end
+
+
+@recipe function f(report:: NamedTuple{(:wl, :min_obj, :gain, :res_1pe, :pos_1pe, :threshold, :a_grid_wl_sg, :obj, :report_simple, :report_fit)})
+    xlabel := "Window Length ($(unit(first(report.a_grid_wl_sg))))"
+    ylabel := "Objective \n σ  * √(threshold) \n ______________ \n gain * √(pos_1pe)"
+    grid := :true
+    gridcolor := :black
+    gridalpha := 0.2
+    gridlinewidth := 0.5
+    ylims := (0, 1.5 * maximum(Measurements.value.(report.obj)))
+    @series begin
+        seriestype := :scatter
+        label := "Obj"
+        ustrip.(report.a_grid_wl_sg), ustrip.(report.obj)
+    end
+    @series begin
+        seriestype := :hline
+        label := "Min. Obj $(report.min_obj) (WL: $(report.wl))"
+        color := :red
+        linewidth := 2.5
+        [ustrip(Measurements.value(report.min_obj))]
+    end
+    @series begin
+        seriestype := :hspan
+        label := ""
+        color := :red
+        alpha := 0.1
+        ustrip.([Measurements.value(report.min_obj)-Measurements.uncertainty(report.min_obj), Measurements.value(report.min_obj)+Measurements.uncertainty(report.min_obj)])
     end
 end
 
@@ -510,14 +540,14 @@ end
         pps = report.peakpos
     end
     xlims := (0, last(first(h.edges)))
-    min_y = minimum(h.weights) == 0.0 ? 1e-3*maximum(h.weights) : 0.8*minimum(h.weights)
+    min_y = minimum(h.weights) == 0.0 ? 1e1 : 0.8*minimum(h.weights)
     ylims --> (min_y, maximum(h.weights)*1.1)
     @series begin
         seriestype := :stepbins
         label := "amps"
         h
     end
-    y_vline = min_y:1:maximum(h.weights)*1.1
+    y_vline = [min_y, maximum(h.weights)*1.1]
     for (i, p) in enumerate(pps)
         @series begin
             seriestype := :line
@@ -545,7 +575,7 @@ end
     ylabel := "Counts / $(round_wo_units(report_sipm.bin_width * 1e3, digits=2))E-3 P.E."
     xlims := (first(first(report_sipm.h_cal.edges)), last(first(report_sipm.h_cal.edges)))
     xticks := (ceil(first(first(report_sipm.h_cal.edges)))-0.5:0.5:last(first(report_sipm.h_cal.edges)))
-    min_y = minimum(report_sipm.h_cal.weights) == 0.0 ? 1e-3*maximum(report_sipm.h_cal.weights) : 0.8*minimum(report_sipm.h_cal.weights)
+    min_y = minimum(report_sipm.h_cal.weights) == 0.0 ? 1e1 : 0.8*minimum(report_sipm.h_cal.weights)
     ylims := (min_y, maximum(report_sipm.h_cal.weights)*1.1)
     bin_centers = collect(report_sipm.h_cal.edges[1])[1:end-1] .+ diff(collect(report_sipm.h_cal.edges[1]))[1]/2 
     @series begin
@@ -1272,29 +1302,99 @@ end
     end
 end
 
+@recipe function f(report::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :aoe_peak, :aoe_ctc, :qdrift_peak, :h_before, :h_after, :σ_before, :σ_after, :report_before, :report_after)})
+    
+    size --> (1000,1000)
+    layout := @layout [a{0.4h}; b{0.6h}]
+    link := :x
+    
+    xtickfontsize --> 12
+    xlabelfontsize --> 14
+    ylabelfontsize --> 14
+    ytickfontsize --> 12
+    legendfontsize --> 12
+    foreground_color_legend --> :silver
+    background_color_legend --> :white
+    
+    grid --> false
+    framestyle --> :semi
+    left_margin --> (5,:mm)
+    right_margin --> (5,:mm)
+    bottom_margin --> (-4,:mm)
+    
+    @series begin
+        subplot := 1
+        color := :darkgrey
+        fill := true
+        alpha := 0.5
+        seriestype := :stepbins
+        label := "Before correction"
+        report.h_before
+    end
+    
+    @series begin
+        subplot := 1
+        ylabel := "Counts / $(round(step(first(report.h_after.edges)), digits = 2))"
+        xlims --> (-9,5)
+        xticks := []
+        ylims := (0, Inf)
+        legend := :topleft
+        color := :purple
+        fill := true
+        alpha := 0.5
+        seriestype := :stepbins
+        label := "After correction"
+        report.h_after
+    end
+
+    @series begin
+        subplot := 2
+        colorbar := :none
+        fill := true
+        color := :binary
+        st := :line
+        label := "Before correction"
+        yformatter := :plain
+        kde((report.aoe_peak, report.qdrift_peak))
+    end
+    
+    @series begin
+        subplot := 2
+        xlims --> (-9,5)
+        ylims --> (0,12)
+        xlabel --> "A/E classifier"
+        ylabel := "Eff. Drift time / Energy (a.u.)"
+        colorbar := :none
+        color := :plasma
+        st := :line
+        label := "After correction"
+        kde((report.aoe_ctc, report.qdrift_peak))
+    end
+end
+
 
 ### lq recipe functions
 
 # recipe for the lq_drift_time_correction report
 
-@recipe function f(report::NamedTuple{(:lq_prehist, :lq_report, :drift_prehist, :drift_report, :lq_box, :drift_time_func, :DEP_left, :DEP_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
+@recipe function f(report::NamedTuple{(:lq_report, :drift_report, :lq_box, :drift_time_func, :dep_left, :dep_right)}, e_cal, dt_eff, lq_e_corr, plot_type::Symbol)
 
     # Extract data from the report
-    DEP_left = report.DEP_left
-    DEP_right = report.DEP_right
+    dep_left = report.dep_left
+    dep_right = report.dep_right
     box = report.lq_box
 
     #cut data to DEP
-    dt_DEP = dt_eff[DEP_left .< e_cal .< DEP_right]
-    lq_DEP = lq_e_corr[DEP_left .< e_cal .< DEP_right]
+    dt_dep = dt_eff[dep_left .< e_cal .< dep_right]
+    lq_dep = lq_e_corr[dep_left .< e_cal .< dep_right]
 
     # Plot configuration: 2D histogram
     xlabel := "Drift Time"
     ylabel := "LQ (A.U.)"
     framestyle := :box
-    left_margin := -2Plots.mm
-    bottom_margin := -4Plots.mm
-    top_margin := -3Plots.mm
+    left_margin := (-2, :mm)
+    bottom_margin := (-4, :mm)
+    top_margin := (-3, :mm)
     color := :viridis
     formatter := :plain
     thickness_scaling := 1.6
@@ -1302,7 +1402,7 @@ end
 
 
     if plot_type == :DEP
-        # Create 2D histogram with filtered data based on DEP_left and DEP_right
+        # Create 2D histogram with filtered data based on dep_left and dep_right
         
         # dynamic bin size dependant on fit constraint box
         t_diff = box.t_upper - box.t_lower
@@ -1317,24 +1417,28 @@ end
 
         @series begin
             seriestype := :histogram2d
-            dt_DEP, lq_DEP
+            idxs_finite = findall(isfinite.(dt_dep) .&& isfinite.(lq_dep))
+            dt_dep[idxs_finite], lq_dep[idxs_finite]
         end
     elseif plot_type == :whole
         # Create 2D histogram with all data
         colorbar_scale := :log10
 
-        # dynamic bin size
-        xmin = ustrip.(quantile(dt_eff, 0.001))
-        xmax = ustrip.(quantile(dt_eff, 0.999))
-        xstep = (xmax - xmin) / 200
-        ymin = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.005)) #filters NaNs for quantile
-        ymax = ustrip.(quantile(lq_e_corr[.!isnan.(lq_e_corr)], 0.94)) #filters NaNs for quantile
-        ystep = (ymax - ymin) / 200
+        # dynamic bin size dependant on fit constraint box
+        t_diff = box.t_upper - box.t_lower
+        lq_diff = box.lq_upper - box.lq_lower
+        xmin = box.t_lower - 1*t_diff
+        xmax = box.t_upper + 1*t_diff
+        xstep = (xmax - xmin) / 400
+        ymin = box.lq_lower - 8*lq_diff
+        ymax = box.lq_upper + 8*lq_diff
+        ystep = (ymax - ymin) / 400
         nbins := (xmin:xstep:xmax, ymin:ystep:ymax)
 
         @series begin
             seriestype := :histogram2d
-            dt_eff, lq_e_corr
+            idxs_finite = findall(isfinite.(dt_eff) .&& isfinite.(lq_e_corr))
+            dt_eff[idxs_finite], lq_e_corr[idxs_finite]
         end
     end
     
@@ -1364,7 +1468,8 @@ end
         # Evaluate drift_time_func over the full range of drift time (x-axis)
         dt_range = range(xmin, xmax, length=100)  # 100 points across the x-axis
         lq_fit = report.drift_time_func.(dt_range)  # Apply the linear function to the full dt range
-
+        xlims := (xmin, xmax)
+        ylims := (ymin, ymax)
         dt_range, lq_fit
 
     end
@@ -1373,15 +1478,15 @@ end
 
 # recipe for the lq_cut report
 
-@recipe function f(report::NamedTuple{(:cut, :fit_result, :temp_hists, :fit_report)}, lq_class::Vector{Float64}, e_cal, plot_type::Symbol)
+@recipe function f(report::NamedTuple{(:cut, :fit_result, :temp_hists, :fit_report, :dep_σ, :edges)}, lq_class::Vector{Float64}, e_cal, plot_type::Symbol)
 
     # Extract cutvalue from the report
     cut_value = Measurements.value.(report.cut)
 
     # Plot configuration for all types
-    left_margin := -2Plots.mm
-    bottom_margin := -4Plots.mm
-    top_margin := -3Plots.mm
+    left_margin := (-2, :mm)
+    bottom_margin := (-4, :mm)
+    top_margin := (-3, :mm)
     thickness_scaling := 1.6
     size := (1200, 900)
     framestyle := :box
@@ -1392,14 +1497,20 @@ end
         # 2D histogram for LQ Cut
         xlabel := "Energy"
         ylabel := "LQ (A.U.)"
-        nbins := (0:6:3000, -2.0:0.012:4.0)
+        #lq bins dependant on cut value
+        ymin = -5 * cut_value
+        ymax = 10 * cut_value
+        ystep = (ymax - ymin) / 500
+        nbins := (0:6:3000, ymin:ystep:ymax)
         colorbar_scale := :log10
         color := :viridis
         legend := :bottomright
         
         @series begin
             seriestype := :histogram2d
-            e_cal, lq_class
+            idxs_finite = findall(isfinite.(e_cal) .&& isfinite.(lq_class))
+            clims := (1, 5e3)
+            e_cal[idxs_finite], lq_class[idxs_finite]
         end
 
         @series begin
@@ -1448,11 +1559,145 @@ end
 
         @series begin
             label := "Cut Fraction"
-            0:3:3000, h_diff
+            0:3:3*length(h_diff)-1, h_diff
+        end
+
+    elseif plot_type == :fit
+        # Fit plot
+        xlabel := ""
+        ylabel := "Counts"
+        
+        ylabel := "Normalized Counts"
+        margins := (4, :mm)
+        framestyle := :box
+        legend := :topleft
+        xlims = (ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)), ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)))
+        xlims := xlims
+        @series begin
+            label := "Data"
+            subplot --> 1
+            report.fit_report.h
+        end
+        @series begin
+            color := :red
+            subplot --> 1
+            label := "Normal Fit (μ = $(round_wo_units(report.fit_report.μ, digits=2)), \n σ = $(round_wo_units(report.fit_report.σ, digits=2)))"
+            lw := 3
+            bottom_margin --> (-4, :mm)
+            ustrip(Measurements.value(report.fit_report.μ - 5*report.fit_report.σ)):ustrip(Measurements.value(report.fit_report.σ / 1000)):ustrip(Measurements.value(report.fit_report.μ + 5*report.fit_report.σ)), t -> report.fit_report.f_fit(t)
+        end
+
+        @series begin
+            seriestype := :vline
+            label := "Cut Value"
+            subplot := 1
+            linewidth := 2
+            color := :red
+            [cut_value]
+        end
+
+        if !isempty(report.fit_report.gof)
+            link --> :x
+            layout --> @layout([a{0.7h}; b{0.3h}])
+            @series begin
+                seriestype := :hline
+                ribbon := 3
+                subplot --> 2
+                fillalpha := 0.5
+                label := ""
+                fillcolor := :lightgrey
+                linecolor := :darkgrey
+                [0.0]
+            end
+            @series begin
+                seriestype := :hline
+                ribbon := 1
+                subplot --> 2
+                fillalpha := 0.5
+                label := ""
+                fillcolor := :grey
+                linecolor := :darkgrey
+                [0.0]
+            end
+            @series begin
+                seriestype := :scatter
+                subplot --> 2
+                label := ""
+                title := ""
+                markercolor --> :black
+                ylabel := "Residuals (σ)"
+                xlabel := "LQ (A.U.)"
+                link --> :x
+                top_margin --> (-4, :mm)
+                ylims := (-5, 5)
+                xlims := xlims
+                yscale --> :identity
+                yticks := ([-3, 0, 3])
+                
+                bin_midpoints = report.fit_report.gof.bin_centers
+                residuals = report.fit_report.gof.residuals_norm
+                bin_midpoints, residuals             
+            end
+        end
+
+    elseif plot_type == :sideband
+        # Sideband histograms
+        xlabel := "Lq (A.U.)"
+        ylabel := "Counts"
+
+        @series begin
+            seriestype := :stepbins
+            label := "Peak"
+            report.temp_hists.hist_dep
+        end
+
+        @series begin
+            seriestype := :stepbins
+            label := "Sideband 1"
+            report.temp_hists.hist_sb1
+        end
+
+        @series begin
+            seriestype := :stepbins
+            label := "Sideband 2"
+            xlims := quantile(filter(isfinite, lq_class), 0.05), quantile(filter(isfinite, lq_class), 0.95)
+            report.temp_hists.hist_sb2
+        end
+
+    elseif plot_type == :energy_spectrum
+        # Plot energy spectrum with DEP and sideband regions
+        left_margin := (-2, :mm)
+        bottom_margin := (-4, :mm)
+        top_margin := (-3, :mm)
+        thickness_scaling := 1.6
+        size := (1200, 900)
+        framestyle := :box
+        formatter := :plain
+        xlabel := "Energy"
+        ylabel := "Counts"
+        
+        @series begin
+            seriestype := :stephist
+            label := "Energy Spectrum (σ: $(round(u"keV", report.dep_σ, sigdigits=3)))"
+            bins := 1000
+            e_cal[1500u"keV" .< e_cal .< 1660u"keV"]
+        end
+    
+        @series begin
+            seriestype := :vline
+            label := "DEP Region"
+            fillcolor := :red
+            [report.edges.DEP_edge_left, report.edges.DEP_edge_right]
+        end
+    
+        @series begin
+            seriestype := :vline
+            label := "Sideband Edges"
+            fillcolor := :green
+            legend := :topleft
+            [report.edges.sb1_edge, report.edges.sb2_edge]
         end
     end
 end
-
-
 
 end # module LegendSpecFitsRecipesBaseExt

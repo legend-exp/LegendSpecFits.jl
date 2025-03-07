@@ -67,7 +67,7 @@ function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real},
 
     # optimization
     optf = OptimizationFunction((u, p) -> f_minimize(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, ustrip.(e_unit, fct_start), [], lb=ustrip.(e_unit, fct_lb), ub=ustrip.(e_unit, fct_ub))
+    optpro = OptimizationProblem(optf, ustrip.(e_unit, fct_start), (), lb=ustrip.(e_unit, fct_lb), ub=ustrip.(e_unit, fct_ub))
     res = solve(optpro, NLopt.LN_BOBYQA(), maxiters = 3000, maxtime=optim_time_limit)
     converged = (res.retcode == ReturnCode.Success)
 

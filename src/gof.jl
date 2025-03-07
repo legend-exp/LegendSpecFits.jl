@@ -168,6 +168,7 @@ Calcualte bin-wise p-value based on poisson distribution for each bin.
  * `residuals` difference: model - data (histogram bin count)
  * `residuals_norm` normalized residuals: model - data / sqrt(model)
  * `p_value_binwise` p-value for each bin based on poisson distribution
+ * `bin_centers` centers of the bins for which the `residuals` were determined
 """
 function get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     # prepare data
@@ -187,6 +188,6 @@ function get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union
     cdf_value_low = cdf.(dist, model_counts[model_counts .> 0] .- abs.(residuals))
     cdf_value_up = 1 .- cdf.(dist, model_counts[model_counts .> 0] .+ abs.(residuals))
     p_value_binwise = cdf_value_low .+ cdf_value_up # significance of residuals -> ~proabability that residual (for a given bin) is as large as observed or larger
-    return residuals, residuals_norm, p_value_binwise, bin_centers
+    return residuals, residuals_norm, p_value_binwise, bin_centers[model_counts .> 0]
 end
 
