@@ -22,7 +22,7 @@ end
 export fit_peaks
 
 function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::Vector{T},; e_unit::Union{Nothing, Unitful.EnergyUnits}=nothing, uncertainty::Bool=true, low_e_tail::Bool=true, iterative_fit::Bool=false,
-    fit_func::Vector{Symbol}= fill(:gamma_def, length(th228_lines)), pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::MaybeWithEnergyUnits = 1.0) where T<:Any
+    fit_func::Vector{Symbol}= fill(:gamma_def, length(th228_lines)), pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),  m_cal_simple::MaybeWithEnergyUnits = 1.0) where T
     
     e_unit = ifelse(isnothing(e_unit), NoUnits, e_unit)
 
@@ -60,8 +60,8 @@ function fit_peaks_th228(peakhists::Array, peakstats::StructArray, th228_lines::
     end
 
     # create return and result dicts
-    result = Dict{T, NamedTuple}(th228_lines .=> v_result)
-    report = Dict{T, NamedTuple}(th228_lines .=> v_report)
+    result = OrderedDict{T, NamedTuple}(th228_lines .=> v_result)
+    report = OrderedDict{T, NamedTuple}(th228_lines .=> v_report)
 
     return result, report
 end
