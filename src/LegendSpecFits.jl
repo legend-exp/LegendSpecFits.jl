@@ -29,6 +29,7 @@ using LsqFit
 using Measurements
 using Measurements: value
 using Measurements: uncertainty
+using OrderedCollections
 using Optimization
 using OptimizationBBO
 using OptimizationNLopt

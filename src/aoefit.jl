@@ -142,8 +142,8 @@ function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray,
     end
 
     # create return and result dicts
-    result = Dict{T, NamedTuple}(compton_bands .=> v_result)
-    report = Dict{T, NamedTuple}(compton_bands .=> v_report)
+    result = OrderedDict{T, NamedTuple}(compton_bands .=> v_result)
+    report = OrderedDict{T, NamedTuple}(compton_bands .=> v_report)
 
     return result, report
 end

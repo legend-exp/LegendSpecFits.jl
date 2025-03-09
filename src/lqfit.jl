@@ -25,8 +25,8 @@ Fit the A/E Compton bands using the `f_lq_compton` function consisting of a gaus
 """
 function fit_lq_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; pars_lq::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
     # create return and result dicts
-    result = Dict{T, NamedTuple}()
-    report = Dict{T, NamedTuple}()
+    result = OrderedDict{T, NamedTuple}()
+    report = OrderedDict{T, NamedTuple}()
     # iterate throuh all peaks
     for (i, band) in enumerate(compton_bands)
         # get histogram and peakstats
