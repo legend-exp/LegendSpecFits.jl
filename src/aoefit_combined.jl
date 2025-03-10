@@ -235,8 +235,8 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         end
     end
 
-    result_bands = Dict{T, NamedTuple}(compton_bands .=> v_results)
-    report_bands = Dict{T, NamedTuple}(compton_bands .=> v_reports)
+    result_bands = OrderedDict{T, NamedTuple}(compton_bands .=> v_results)
+    report_bands = OrderedDict{T, NamedTuple}(compton_bands .=> v_reports)
 
     if uncertainty && converged
 

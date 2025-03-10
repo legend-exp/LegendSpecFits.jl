@@ -132,8 +132,8 @@ function get_peaks_survival_fractions(psd_parameter::Vector{<:Unitful.RealOrReal
     end
 
     # create result and report dict
-    result = Dict{Symbol, NamedTuple}(peak_names .=> v_result)
-    report = Dict{Symbol, NamedTuple}(peak_names .=> v_report)
+    result = OrderedDict{Symbol, NamedTuple}(peak_names .=> v_result)
+    report = OrderedDict{Symbol, NamedTuple}(peak_names .=> v_report)
     
     return result, report
 end
