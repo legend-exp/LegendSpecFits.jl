@@ -181,7 +181,7 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
             gof = NamedTuple()
         )
     end
-
+    
     # convert µ, centroid and sigma, fwhm back to [ADC]
     centroid = peak_centroid(result)/m_cal_simple
     result = merge(result, (µ = result.µ/m_cal_simple, fwhm = result.fwhm/m_cal_simple, σ = result.σ/m_cal_simple, centroid = centroid))
