@@ -49,7 +49,8 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
         peakfinder_σ_scaled = if peakfinder_σ <= 0.0
             round(Int, 2*(cuts_1pe.high - cuts_1pe.max) / bin_width_cut_scaled / (2 * sqrt(2 * log(2))) )
         else
-            rount(Int, peakfinder_σ)  
+            isinteger(peakfinder_σ) || throw(ArgumentError("Expected `peakfinder_σ` to be an integer, but received $peakfinder_σ."))
+            round(Int, peakfinder_σ)  
         end
         @debug "Peakfinder σ: $(peakfinder_σ_scaled)"
         try
@@ -78,7 +79,8 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
         peakfinder_σ_scaled = if peakfinder_σ <= 0.0
             round(Int, 2*(cuts_1pe.high - cuts_1pe.max) / bin_width_cut_scaled / (2 * sqrt(2 * log(2))) )
         else
-            rount(Int, peakfinder_σ)
+            isinteger(peakfinder_σ) || throw(ArgumentError("Expected `peakfinder_σ` to be an integer, but received $peakfinder_σ."))
+            round(Int, peakfinder_σ)
         end
         
         # use SavitzkyGolay filter to smooth the histogram
