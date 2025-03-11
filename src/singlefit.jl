@@ -11,20 +11,20 @@ Returns `report` and `result`` with:
     * `n`: number of counts in the peak
 """
 function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::NamedTuple{(:low, :high, :max), Tuple{<:T, <:T, <:T}}=(low = zero(first(x))*NaN, high = zero(first(x))*NaN, max = zero(first(x))*NaN); uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
-    @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) == unit(x[1]) "Units of min_x, max_x and x must be the same"
-    x_unit = unit(x[1])
-    x, cut_low, cut_high, cut_max = ustrip.(x), ustrip(cuts.low), ustrip(cuts.high), ustrip(cuts.max)
+    @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) == unit(first(x)) "Units of min_x, max_x and x must be the same"
+    x_unit = unit(first(x))
+    x, cut_low, cut_high, cut_max = ustrip.(x_unit, x), ustrip(x_unit, cuts.low), ustrip(x_unit, cuts.high), ustrip(x_unit, cuts.max)
     cut_low, cut_high = ifelse(isnan(cut_low), minimum(x), cut_low), ifelse(isnan(cut_high), maximum(x), cut_high)
 
-    bin_width = get_friedman_diaconis_bin_width(x[(x .> cut_low) .&& (x .< cut_high)])
-    x_min, x_max = minimum(x), maximum(x)
+    bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
+    x_min, x_max = extrema(x)
     x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
     ps = estimate_single_peak_stats_simple(h_nocut)
     @debug "Peak stats: $ps"
 
     # cut peak out of data
-    x = x[(x .> cut_low) .&& (x .< cut_high)]
+    x = x[cut_low .<= x .<= cut_high]
     h = fit(Histogram, x, cut_low:bin_width:cut_high)
     n = length(x)
 
@@ -51,7 +51,7 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
 
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
@@ -104,9 +104,11 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     end
 
     # create histogram of nocut data for normalization 20 sigma around peak
-    h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
+    # ensuring that the bin edges are identical to those of h (on which the fit was performed)
+    h_nocut = fit(Histogram, x_nocut, (cut_low + floor(((v_ml.μ-20*v_ml.σ) - cut_low) / bin_width) * bin_width):bin_width:(cut_low + ceil(((v_ml.μ+20*v_ml.σ) - cut_low) / bin_width) * bin_width))
+
     # normalize nocut histogram to PDF of cut histogram
-    h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(abs.(h.weights)) ./ step(h.edges[1]))
+    h_pdf = Histogram(first(h_nocut.edges), h_nocut.weights ./ sum(abs.(h.weights)) ./ step(first(h.edges)))
 
     report = (
         f_fit = t -> Base.Fix2(f_fit, v_ml)(t),
@@ -133,7 +135,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     x, cut_low, cut_high, cut_max, μ = ustrip.(x), ustrip(cuts.low), ustrip(cuts.high), ustrip(cuts.max), ustrip(μ)
 
     # get peak stats
-    bin_width = get_friedman_diaconis_bin_width(x[(x .> cut_low) .&& (x .< cut_high)])
+    bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
     x_min, x_max = minimum(x), maximum(x)
     x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
@@ -141,7 +143,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     @debug "Peak stats: $ps"
 
     # cut peak out of data
-    x = ifelse(left, x[(x .> cut_low) .&& (x .< cut_high) .&& x .< μ], x[(x .> cut_low) .&& (x .< cut_high) .&& x .> μ])
+    x = x[cut_low .<= x .<= cut_high .&& ifelse(left, x .<= μ, x .>= μ)]
     h = fit(Histogram, x, ifelse(left, cut_low, μ):bin_width:ifelse(left, μ, cut_high))
     n = length(x)
 
@@ -168,7 +170,7 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
 
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
@@ -221,7 +223,9 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
     end
 
     # create histogram of nocut data for normalization 20 sigma around peak
-    h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
+    # ensuring that the bin edges are identical to those of h (on which the fit was performed)
+    h_nocut = fit(Histogram, x_nocut, (ifelse(left, cut_low, μ) + floor(((v_ml.μ-20*v_ml.σ) - ifelse(left, cut_low, μ)) / bin_width) * bin_width):bin_width:(ifelse(left, cut_low, μ) + ceil(((v_ml.μ+20*v_ml.σ) - ifelse(left, cut_low, μ)) / bin_width) * bin_width))
+
     # normalize nocut histogram to PDF of cut histogram
     h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(abs.(h.weights)) ./ step(h.edges[1]))
 
@@ -252,7 +256,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     x, cut_low, cut_high, cut_max = ustrip.(x), ustrip(cuts.low), ustrip(cuts.high), ustrip(cuts.max)
 
     # get peak stats
-    bin_width = get_friedman_diaconis_bin_width(x[(x .> cut_low) .&& (x .< cut_high)])
+    bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
     x_min, x_max = minimum(x), maximum(x)
     x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
@@ -260,7 +264,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     @debug "Peak stats: $ps"
 
     # cut peak out of data
-    x = x[(x .> ifelse(left, cut_low, cut_max)) .&& (x .< ifelse(left, cut_max, cut_high))]
+    x = x[ifelse(left, cut_low, cut_max) .<= x .<= ifelse(left, cut_max, cut_high)]
     h = fit(Histogram, x, ifelse(left, cut_low, cut_max):bin_width:ifelse(left, cut_max, cut_high))
     n = length(x)
 
@@ -287,7 +291,7 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
 
     # MLE
     optf = OptimizationFunction((u, p) -> (f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
@@ -340,7 +344,8 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
     end
     
     # create histogram of nocut data for normalization 20 sigma around peak
-    h_nocut = fit(Histogram, x_nocut, v_ml.μ - 20*v_ml.σ:bin_width:v_ml.μ + 20*v_ml.σ)
+    h_nocut = fit(Histogram, x_nocut, (ifelse(left, cut_low, cut_max) + floor(((v_ml.μ-20*v_ml.σ) - ifelse(left, cut_low, cut_max)) / bin_width) * bin_width):bin_width:(ifelse(left, cut_low, cut_max) + ceil(((v_ml.μ+20*v_ml.σ) - ifelse(left, cut_low, cut_max)) / bin_width) * bin_width))
+
     # normalize nocut histogram to PDF of cut histogram
     h_pdf = Histogram(h_nocut.edges[1], h_nocut.weights ./ sum(abs.(h.weights)) ./ step(h.edges[1]))
 
@@ -418,7 +423,7 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
 
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
@@ -524,7 +529,7 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
 
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)

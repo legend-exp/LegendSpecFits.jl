@@ -84,7 +84,7 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
 
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optpro = OptimizationProblem(optf, v_init, [])
+    optpro = OptimizationProblem(optf, v_init, ())
     res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
