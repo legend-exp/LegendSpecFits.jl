@@ -138,9 +138,23 @@ function peak_search_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitfu
         quantile(e_uncal, quantile_perc), length(gamma_lines)
     end
 
-    @debug "Identified most prominent peak at $(round(peak_guess, digits = 2)) - literature value: $(gamma_lines[peak_idx])"
+    # 1) sort by ADC x value (accending)                 
+    sorted_peakpos     = peakpos[sortperm(peakpos)]           
+    sorted_cts_peakpos = cts_peakpos[sortperm(peakpos)]       
 
-    # get calibration constant for simple calibration
+    # 2) log
+    @info "=== Sorted detected peaks by ADC value ==="
+    for i in eachindex(sorted_peakpos)
+        @info "  Sorted Peak #$i: ADC=$(sorted_peakpos[i]), counts=$(sorted_cts_peakpos[i])"
+    end
+
+    # 3) peak used for calibration =  sorted index 1 
+    peak_guess = sorted_peakpos[1]   
+    peak_idx   = 1                   
+
+    @info "Using Lowest ADC Peak for calibration: ADC=$(peak_guess)"
+    @info "peak_idx => $(gamma_lines[peak_idx])"
+
     c = gamma_lines[peak_idx] / peak_guess
 
     result = (h_uncal = h_uncal, c = c, peak_guess = peak_guess)
