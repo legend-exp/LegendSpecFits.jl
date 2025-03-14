@@ -57,9 +57,9 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
         # calculate drift time corrected aoe
         aoe_ctc = aoe .+ PolCalFunc(0.0, fct...).(qdrift_e)
         # fit peak
-        h = fit(Histogram, aoe_ctc, minimum(aoe_ctc):bin_width:maximum(aoe_ctc))
+        h = fit(Histogram, aoe_ctc, hist_start:bin_width:maximum(aoe_ctc))
         ps = estimate_single_peak_stats_psd(h)
-        h = fit(Histogram, aoe_ctc, minimum(aoe_ctc):bin_width:ps.peak_pos+ps.peak_fwhm)
+        h = fit(Histogram, aoe_ctc, hist_start:bin_width:ps.peak_pos+ps.peak_fwhm)
         result_peak, report_peak = fit_single_aoe_compton(h, ps, fit_func=:aoe_two_bck, pseudo_prior=pseudo_prior, uncertainty=false) ### in ctc.jl uncertainty false is used (but I don't know why)
         # get σ and peak height
         μ = mvalue(result_peak.μ)
