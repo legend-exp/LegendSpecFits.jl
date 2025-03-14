@@ -1300,7 +1300,7 @@ end
     end
 end
 
-@recipe function f(report::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :aoe_peak, :aoe_ctc, :qdrift_peak, :h_before, :h_after, :σ_before, :σ_after, :report_before, :report_after)})
+@recipe function f(report::NamedTuple{(:peak, :window, :fct, :bin_width, :bin_width_qdrift, :aoe_peak, :aoe_ctc, :aoe_ctc_norm, :qdrift_peak, :h_before, :h_after, :h_after_norm, :σ_before, :σ_after, :σ_after_norm, :report_before, :report_after, :report_after_norm)})
     
     size --> (1000,1000)
     layout := @layout [a{0.4h}; b{0.6h}]
