@@ -132,11 +132,16 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
     modes = Vector{Float64}(undef, length(e_grid_ft))
     fts_success  = Bool.(zeros(length(e_grid_ft)))
     
-    Threads.@threads for f in eachindex(e_grid_ft)
+    # Threads.@threads 
+    for f in eachindex(e_grid_ft)
         # get ft
         ft = e_grid_ft[f]
         
         # get e values for this ft
+        if all(ismissing.(e_grid[f,:]))
+            @debug "All values are missing, skipping"
+            continue
+        end
         e_ft = Array{Float64}(flatview(e_grid)[f, :])
         e_ft = e_ft[isfinite.(e_ft)]
 

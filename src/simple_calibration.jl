@@ -129,16 +129,17 @@ function peak_search_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitfu
 
         # search all possible peak candidates
         h_decon, peakpos = RadiationSpectra.peakfinder(h_peaksearch, σ=peakfinder_σ, backgroundRemove = true, threshold = peakfinder_threshold)
-
         # find the most prominent peak in the deconvoluted histogram
+        sort!(peakpos)
         peakpos_idxs = StatsBase.binindex.(Ref(h_decon), peakpos)
         cts_peakpos = h_decon.weights[peakpos_idxs]
+        @debug "Peaks found at $peakpos with intensity $cts_peakpos - literature values: $(gamma_lines)"
         peakpos[argmax(cts_peakpos)], argmax(cts_peakpos)
     else
         quantile(e_uncal, quantile_perc), length(gamma_lines)
     end
 
-    @debug "Identified most prominent peak at $(round(peak_guess, digits = 2)) - literature value: $(gamma_lines[peak_idx])"
+    @info "Identified most prominent peak at $(round(peak_guess, digits = 2)) - literature value: $(gamma_lines[peak_idx])"
 
     # get calibration constant for simple calibration
     c = gamma_lines[peak_idx] / peak_guess
