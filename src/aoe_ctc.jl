@@ -19,7 +19,7 @@ Correct for the drift time dependence of A/E parameter
     * `func_generic`: generic function to correct aoe
 """
 
-function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQuantity}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.RealOrRealQuantity}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; aoe_expression::Union{Symbol, String}="aoe", qdrift_expression::Union{Symbol, String} = "qdrift / e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), pol_order::Int=1) # deleted m_cal since no calibration
+function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQuantity}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.RealOrRealQuantity}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; aoe_expression::Union{Symbol, String}="aoe", qdrift_expression::Union{Symbol, String} = "qdrift / e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), fit_func::Symbol=:aoe_two_bck, pol_order::Int=1) # deleted m_cal since no calibration
 
     # distribution compton band entries
     compton_start = ustrip.(compton_bands)
@@ -49,7 +49,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     h_before = fit(Histogram, aoe_cut, hist_start:bin_width:hist_end) ### the current values: hist_start -20 and hist_end 3
     ps_before = estimate_single_peak_stats_psd(h_before)
     h_before = fit(Histogram, aoe_cut, hist_start:bin_width:ps_before.peak_pos+ps_before.peak_fwhm) ### the current values: hist_start -20 and hist_end 3
-    result_before, report_before = fit_single_aoe_compton(h_before, ps_before, fit_func=:aoe_two_bck, pseudo_prior=pseudo_prior, uncertainty=true)
+    result_before, report_before = fit_single_aoe_compton(h_before, ps_before, fit_func=fit_func, pseudo_prior=pseudo_prior, uncertainty=true)
     @debug "Found Best σ before correction: $(round(result_before.σ, digits=2))"
 
     # create optimization function
@@ -60,7 +60,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
         h = fit(Histogram, aoe_ctc, hist_start:bin_width:maximum(aoe_ctc))
         ps = estimate_single_peak_stats_psd(h)
         h = fit(Histogram, aoe_ctc, hist_start:bin_width:ps.peak_pos+ps.peak_fwhm)
-        result_peak, report_peak = fit_single_aoe_compton(h, ps, fit_func=:aoe_two_bck, pseudo_prior=pseudo_prior, uncertainty=false) ### in ctc.jl uncertainty false is used (but I don't know why)
+        result_peak, report_peak = fit_single_aoe_compton(h, ps, fit_func=fit_func, pseudo_prior=pseudo_prior, uncertainty=false) ### in ctc.jl uncertainty false is used (but I don't know why)
         # get σ and peak height
         μ = mvalue(result_peak.μ)
         σ = mvalue(result_peak.σ)
@@ -105,7 +105,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     h_after = fit(Histogram, _aoe_ctc, hist_start:bin_width:hist_end) ### hard-coded values: should include some tolerance to higher values
     ps_after = estimate_single_peak_stats_psd(h_after)
     h_after = fit(Histogram, _aoe_ctc, hist_start:bin_width:ps_after.peak_pos+ps_after.peak_fwhm)
-    result_after, report_after = fit_single_aoe_compton(h_after, ps_after, fit_func=:aoe_two_bck, pseudo_prior = pseudo_prior_all, uncertainty=true)
+    result_after, report_after = fit_single_aoe_compton(h_after, ps_after, fit_func=fit_func, pseudo_prior = pseudo_prior_all, uncertainty=true)
     μ_norm = mvalue(result_after.μ)
     σ_norm = mvalue(result_after.σ)
     aoe_ctc = (_aoe_ctc .- μ_norm) ./ σ_norm
@@ -117,7 +117,7 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     h_after_norm = fit(Histogram, aoe_ctc, hist_start:bin_width:hist_end) ### hard-coded values: should include some tolerance to higher values
     ps_after_norm = estimate_single_peak_stats_psd(h_after_norm)
     h_after_norm = fit(Histogram, aoe_ctc, hist_start:bin_width:ps_after_norm.peak_pos+ps_after_norm.peak_fwhm) ### hard-coded values: should include some tolerance to higher values
-    result_after_norm, report_after_norm = fit_single_aoe_compton(h_after_norm, ps_after_norm, fit_func=:aoe_two_bck, pseudo_prior = pseudo_prior, uncertainty=true)
+    result_after_norm, report_after_norm = fit_single_aoe_compton(h_after_norm, ps_after_norm, fit_func=fit_func, pseudo_prior = pseudo_prior, uncertainty=true)
 
 
     ### maybe modify result and report (also depending on the recipe)
