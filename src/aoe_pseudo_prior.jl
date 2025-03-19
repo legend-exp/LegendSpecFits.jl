@@ -4,7 +4,7 @@ function get_aoe_standard_pseudo_prior(h::Histogram, ps::NamedTuple, fit_func::S
         σ = weibull_from_mx(ps.peak_sigma, 1.5*ps.peak_sigma),
         n = weibull_from_mx(ps.peak_counts, 1.5*ps.peak_counts),
         B = LogUniform(0.1*ps.mean_background, 10*ps.mean_background),
-        δ = LogUniform(0.1, 50.0),
+        δ = weibull_from_mx(2*ps.peak_fwhm, 3*ps.peak_fwhm),
         μ2 = Normal(-2, 5),
         σ2 = weibull_from_mx(4, 6),
         B2f = Uniform(0.001, 0.999),
