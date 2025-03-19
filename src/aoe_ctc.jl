@@ -53,37 +53,33 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     @debug "Found Best σ before correction: $(round(result_before.σ, digits=2))"
 
     # create optimization function
-    function f_optimize_ctc(fct, aoe, qdrift_e, bin_width)
+    function f_optimize_ctc(fct, aoe, qdrift_e)
         # calculate drift time corrected aoe
         aoe_ctc = aoe .+ PolCalFunc(0.0, fct...).(qdrift_e)
         # fit peak
-        h = fit(Histogram, aoe_ctc, hist_start:bin_width:maximum(aoe_ctc))
-        ps = estimate_single_peak_stats_psd(h)
-        h = fit(Histogram, aoe_ctc, hist_start:bin_width:ps.peak_pos+ps.peak_fwhm)
-        result_peak, report_peak = fit_single_aoe_compton(h, ps, fit_func=fit_func, pseudo_prior=pseudo_prior, uncertainty=false) ### in ctc.jl uncertainty false is used (but I don't know why)
-        # get σ and peak height
-        μ = mvalue(result_peak.μ)
-        σ = mvalue(result_peak.σ)
-        p_height = maximum(report_peak.f_fit.(μ-0.2*σ:0.001:μ+0.2*σ)) # hardcoded 0.001 for now
-        # use ratio of σ and peak height as optimization functional
-        return log(σ/p_height)
+        cuts_aoe = cut_single_peak(aoe_ctc, hist_start, eltype(hist_start)(10); n_bins=-1, relative_cut = 0.3)
+        result_after, _ = fit_half_trunc_gauss(aoe_ctc, cuts_aoe; left=false, uncertainty=false)
+        # h_aoe_ctc = fit(Histogram, aoe_ctc, hist_start:bin_width:hist_end)
+        # result_after, _ = fit_binned_half_trunc_gauss(h_aoe_ctc, cuts_aoe; left=false, uncertainty=false)
+        # get σ
+        return mvalue(result_after.σ)
     end
 
     # create function to minimize
-    f_minimize = let f_optimize=f_optimize_ctc, aoe=aoe_cut, qdrift_e=qdrift_e_cut, bin_width=bin_width
-        fct -> f_optimize(fct, aoe, qdrift_e, bin_width)
+    f_minimize = let f_optimize=f_optimize_ctc, aoe=aoe_cut, qdrift_e=qdrift_e_cut
+        fct -> f_optimize(fct, aoe, qdrift_e)
     end
 
     # minimize function
     qdrift_median = median(qdrift_e_cut)
     # upper bound
-    fct_lb = [(1e-4 / qdrift_median)^(i) for i in 1:pol_order]
+    fct_lb = [(1e-5 / qdrift_median)^(i) for i in 1:pol_order]
     @debug "Lower bound: $fct_lb"
     # lower bound
-    fct_ub = [(50.0 / qdrift_median)^(i) for i in 1:pol_order]
+    fct_ub = [(10.0 / qdrift_median)^(i) for i in 1:pol_order]
     @debug "Upper bound: $fct_ub"
     # start value
-    fct_start = [(1 / qdrift_median)^(i) for i in 1:pol_order]
+    fct_start = [(1.0 / qdrift_median)^(i) for i in 1:pol_order]
     @debug "Start value: $fct_start"
 
     # optimization
@@ -102,10 +98,9 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     _aoe_ctc = aoe_cut .+ PolCalFunc(0.0, fct...).(qdrift_e_cut)
     
     # normalize once again to μ = 0 and σ = 1
-    h_after = fit(Histogram, _aoe_ctc, hist_start:bin_width:hist_end) ### hard-coded values: should include some tolerance to higher values
-    ps_after = estimate_single_peak_stats_psd(h_after)
-    h_after = fit(Histogram, _aoe_ctc, hist_start:bin_width:ps_after.peak_pos+ps_after.peak_fwhm)
-    result_after, report_after = fit_single_aoe_compton(h_after, ps_after, fit_func=fit_func, pseudo_prior = pseudo_prior_all, uncertainty=true)
+    h_after = fit(Histogram, _aoe_ctc, hist_start:bin_width:hist_end)
+    cuts_aoe = cut_single_peak(_aoe_ctc, hist_start, eltype(hist_start)(10); n_bins=-1, relative_cut = 0.3)
+    result_after, report_after = fit_half_trunc_gauss(_aoe_ctc, cuts_aoe, uncertainty=true)
     μ_norm = mvalue(result_after.μ)
     σ_norm = mvalue(result_after.σ)
     aoe_ctc = (_aoe_ctc .- μ_norm) ./ σ_norm
@@ -126,9 +121,14 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
         window = window,
         func = aoe_ctc_func,
         fct = fct,
+        σ_start = f_minimize(0.0),
+        σ_optimal = f_minimize(fct),
         σ_before = result_before.σ,
         σ_after = result_after.σ,
         σ_after_norm = result_after_norm.σ,
+        before = result_before,
+        after = result_after,
+        after_norm = result_after_norm,
         converged = converged
     )
     report = (
