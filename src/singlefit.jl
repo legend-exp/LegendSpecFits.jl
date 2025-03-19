@@ -487,6 +487,130 @@ end
 export fit_binned_trunc_gauss
 
 
+
+"""
+    fit_binned_half_trunc_gauss(x::Array, cuts::NamedTuple{(:low, :high, :max), Tuple{Float64, Float64, Float64}})
+Fit a single truncated Gaussian to the data `x` between `cut.low` and `cut.high`. The peak center is fixed at `μ` and the peak is cut in half either in the left or right half.
+# Returns `report` and `result` with:
+    * `f_fit`: fitted function
+    * `μ`: mean of the Gaussian
+    * `σ`: standard deviation of the Gaussian
+"""
+function fit_binned_half_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :high, :max), Tuple{<:T, <:T, <:T}}=(low = NaN, high = NaN, max = NaN); left::Bool=false, uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity    
+    @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) "Units of min_x, max_x and x must be the same"
+    # get cut windows
+    @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) "Units of min_x, max_x and x must be the same"
+    cut_low, cut_high, cut_max = ustrip(cuts.low), ustrip(cuts.high), ustrip(cuts.max)
+    x_min, x_max, bin_width = first(h_nocut.edges[1]), last(h_nocut.edges[1]), step(h_nocut.edges[1])
+    cut_low, cut_high = ifelse(isnan(cut_low), x_min, cut_low), ifelse(isnan(cut_high), x_max, cut_high)
+    # get peak stats
+    ps = estimate_single_peak_stats_simple(h_nocut)
+    @debug "Peak stats: $ps"
+
+    # get edges and weights
+    edges = h_nocut.edges[1]
+    weights = h_nocut.weights
+
+    # truncate edges to specified range
+    low_idx = findfirst(x -> x >= cut_low, edges)
+    high_idx = findlast(x -> x <= cut_high, edges)
+
+    # Extract the edges and weights within the range
+    filtered_edges = edges[low_idx:high_idx]  
+    filtered_counts = weights[low_idx:high_idx-1] # Since edge vector is one longer than weights vector, we need to remove the last element
+
+    # create truncated histogram
+    h = Histogram(filtered_edges, filtered_counts)
+
+
+    # create fit function
+    f_fit(x, v) = v.n * gauss_pdf(x, v.μ, v.σ) * heaviside(x - ifelse(left, cut_low, cut_max)) * heaviside(ifelse(left, cut_max, cut_high) - x)
+    
+    # create pseudo priors
+    pseudo_prior = NamedTupleDist(
+                μ = Normal(ps.peak_pos, ps.peak_sigma/4),
+                σ = weibull_from_mx(ps.peak_sigma, 1.5*ps.peak_sigma),
+                n = weibull_from_mx(ps.peak_counts, 2.0*ps.peak_counts), 
+            )
+        
+    # transform back to frequency space
+    f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
+
+    # start values for MLE
+    v_init = Vector(mean(f_trafo.target_dist))
+    
+    # create loglikehood function
+    f_loglike = let f_fit=f_fit, h=h
+        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    end
+
+    # MLE
+    optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
+    optpro = OptimizationProblem(optf, v_init, ())
+    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
+
+    converged = (res.retcode == ReturnCode.Success)
+    if !converged @warn "Fit did not converge" end
+
+    # best fit results
+    v_ml = inverse(f_trafo)(res.u)
+    
+    if uncertainty && converged
+        f_loglike_array(v) = - f_loglike(array_to_tuple(v, v_ml))
+        # Calculate the Hessian matrix using ForwardDiff
+        H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
+
+        param_covariance = nothing
+        if !all(isfinite.(H)) || all(iszero.(H))
+            @warn "Hessian matrix is not finite"
+            param_covariance = zeros(length(v_ml), length(v_ml))
+        else
+            # Calculate the parameter covariance matrix
+            param_covariance = inv(H)
+        end
+        if ~isposdef(param_covariance)
+            param_covariance = nearestSPD(param_covariance)
+        end
+        # Extract the parameter uncertainties
+        v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
+
+        # get p-value
+        pval, chi2, dof = p_value(f_fit, h, v_ml)
+
+        # calculate normalized residuals
+        residuals, residuals_norm, _, bin_centers = get_residuals(f_fit, h, v_ml)
+
+        @debug "Best Fit values"
+        @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
+        @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
+        @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
+
+        result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
+                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, 
+                residuals = residuals, residuals_norm = residuals_norm, bin_centers = bin_centers),))
+    else
+        @debug "Best Fit values"
+        @debug "μ: $(v_ml.μ)"
+        @debug "σ: $(v_ml.σ)"
+        @debug "n: $(v_ml.n)"
+
+        result = merge(v_ml, )
+    end
+
+    report = (
+        f_fit = x -> Base.Fix2(f_fit, v_ml)(x) * bin_width,
+        h = h_nocut,
+        μ = result.μ,
+        σ = result.σ,
+        gof = get(result, :gof, NamedTuple())
+    )
+
+    return (result = result, report = report)
+end
+export fit_binned_half_trunc_gauss
+
+
+
 """
     fit_binned_double_gauss(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
 
