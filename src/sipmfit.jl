@@ -109,16 +109,17 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
     # get pe resolution (FWHM)
     get_pe_res = pe -> let sel = in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)
         model_parameters = [
-            view(μ_ml, sel),
-            view(σ_ml, sel),
-            view(w_ml, sel)
-        ]    
+            Vector(view(μ_ml, sel)),
+            Vector(view(σ_ml, sel)),
+            Vector(view(w_ml, sel))
+        ]
         
         # Find maximum of PDF in the expected range, step size depends on the maximum variance of the single gaussians
-        range_steps = maximum([μ[i].err for i in size(μ)]) / 100
+        range_steps = maximum(getfield.(view(μ, sel), :err)) / 100
         x_max = 0.0
         f_max = 0.0
-        for x_i in 0.8:range_steps:1.2
+        # Search range depends on the selection of gaussians
+        for x_i in minimum(view(μ_ml, sel)):range_steps:maximum(view(μ_ml, sel))
             if _gmm_pdf(x_i, model_parameters) > f_max
                 x_max = x_i
                 f_max = _gmm_pdf(x_i, model_parameters)
@@ -196,7 +197,7 @@ function _gmm_binned_loglike_func(
 end
 
 function _gmm_pdf(x::Real, μ::Vector{<:Real}, σ::Vector{<:Real}, w::Vector{<:Real})
-    return sum(w .* exp.(-0.5 .* ((x .- μ) ./ σ).^2) ./ (σ .* sqrt(2π)))
+    return sum(@. w * exp(-0.5 * ((x - μ) / σ)^2) / (σ * sqrt(2π)))
 end
 
-_gmm_pdf(x::Real, V::Vector{<:Vector{<:Real}}) = _gmm_pdf(x, V[1], V[2], V[3])
+_gmm_pdf(x::Real, V::Vector{<:Vector{<:Real}}) = _gmm_pdf(x, V...)
