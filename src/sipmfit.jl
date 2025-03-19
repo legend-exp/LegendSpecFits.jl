@@ -26,7 +26,6 @@ Fit a Gaussian Mixture Model to the given pe calibration data and return the fit
 function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Real=3.5;
     n_mixtures::Int=ceil(Int, (max_pe - min_pe) * 4), nIter::Int=25, nInit::Int=50, 
     method::Symbol=:kmeans, kind=:diag, Δpe_peak_assignment::Real=0.3, f_uncal::Function=identity, uncertainty::Bool=true)
-    
     # first filter peak positions out of amplitude vector
     amps_fit = filter(in(min_pe..max_pe), pe_cal)
     
@@ -106,9 +105,34 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
     get_pe_pos = pe -> let sel = in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)
         dot(view(μ, sel), view(w, sel)) / sum(view(w, sel))
     end
+
+    # get pe resolution (FWHM)
     get_pe_res = pe -> let sel = in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)
-        sqrt(dot(view(σ, sel).^2, view(w, sel).^2))
-    end 
+        model_parameters = [
+            view(μ_ml, sel),
+            view(σ_ml, sel),
+            view(w_ml, sel)
+        ]
+        
+        # Find maximum of PDF in the expected range, step size depends on the maximum variance of the single gaussians
+        range_steps = maximum(getfield.(view(μ, sel), :err)) / 100
+        x_max = 0.0
+        f_max = 0.0
+        # Search range depends on the selection of gaussians
+        for x_i in minimum(view(μ_ml, sel)):range_steps:maximum(view(μ_ml, sel))
+            if _gmm_pdf(x_i, model_parameters) > f_max
+                x_max = x_i
+                f_max = _gmm_pdf(x_i, model_parameters)
+            end
+        end
+        f_half_max = f_max / 2
+
+        # Find all the points where the half max is reached
+        roots = find_zeros(x -> f_half_max - _gmm_pdf(x, model_parameters), 0, 5)
+        return maximum(roots) - minimum(roots)
+    end
+
+
     n_pos_mixtures = [count(in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)) for pe in pes]
 
     pe_pos = get_pe_pos.(pes)
@@ -171,3 +195,9 @@ function _gmm_binned_loglike_func(
     )
     return f_loglike
 end
+
+function _gmm_pdf(x::Real, μ::AbstractVector{<:Real}, σ::AbstractVector{<:Real}, w::AbstractVector{<:Real})
+    return sum(@. w * exp(-0.5 * ((x - μ) / σ)^2) / (σ * sqrt(2π)))
+end
+
+_gmm_pdf(x::Real, V::Vector{<:AbstractVector{<:Real}}) = _gmm_pdf(x, V...)
