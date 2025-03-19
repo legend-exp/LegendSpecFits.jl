@@ -258,17 +258,17 @@ export double_gaussian
 function two_emg_aoe_compton_peakshape( # total fit function with two EMGs
     x::Real, 
     μ::Real, σ::Real, n::Real, background::Real, δ::Real, 
-    μ2::Real, σ2::Real, background2::Real, δ2::Real
+    μ2::Real, σ2::Real, background2_fraction::Real, δ2::Real
 )
-    return iszero(σ) || iszero(σ2) ? zero(x) : n * gauss_pdf(x, μ, σ) + background * ex_gauss_pdf(-x, -μ, σ, δ) + background2 * ex_gauss_pdf(-x, -μ2, σ2, δ2)
+    return iszero(σ) || iszero(σ2) ? zero(x) : n * gauss_pdf(x, μ, σ) + background * ( (1 - background2_fraction) * ex_gauss_pdf(-x, -μ, σ, δ) + background2_fraction * ex_gauss_pdf(-x, -μ2, σ2, δ2))
 end
 export two_emg_aoe_compton_peakshape
 
 function two_emg_aoe_compton_background_peakshape( # background function with two EMGs
     x::Real, 
     μ::Real, σ::Real, background::Real, δ::Real,
-    μ2::Real, σ2::Real, background2::Real, δ2::Real
+    μ2::Real, σ2::Real, background2_fraction::Real, δ2::Real
 )
-    return background * ex_gauss_pdf(-x, -μ, σ, δ) + background2 * ex_gauss_pdf(-x, -μ2, σ2, δ2)
+    return background * ( (1 - background2_fraction) * ex_gauss_pdf(-x, -μ, σ, δ) + background2_fraction * ex_gauss_pdf(-x, -μ2, σ2, δ2))
 end
 export two_aoe_compton_background_peakshape
