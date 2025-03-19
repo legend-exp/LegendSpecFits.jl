@@ -168,6 +168,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
 
     # start values for MLE
     v_init = Vector(mean(f_trafo.target_dist))
+    @debug "Initial values: $(inverse(f_trafo)(v_init))"
 
     # get fit function with background center
     fit_function = get_aoe_fit_functions(; )[fit_func]
@@ -214,15 +215,34 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         # calculate normalized residuals
         residuals, residuals_norm, _, bin_centers = get_residuals(fit_function, h, v_ml)
 
+        # get fwhm of peak
+        fwhm, fwhm_err = 
+            try
+                get_peak_fwhm_aoe_compton(v_ml, param_covariance, Base.Fix2(fit_function, v_ml))
+            catch e
+                get_peak_fwhm_aoe_compton(v_ml, v_ml_err, Base.Fix2(fit_function, v_ml))
+            end
+
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ) ± $(v_ml_err.μ)"
         @debug "σ: $(v_ml.σ) ± $(v_ml_err.σ)"
         @debug "n: $(v_ml.n) ± $(v_ml_err.n)"
         @debug "B: $(v_ml.B) ± $(v_ml_err.B)"
         @debug "p: $pval , chi2 = $(chi2) with $(dof) dof"
+        @debug "FWHM: $(fwhm) ± $(fwhm_err)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (gof = (pvalue = pval, chi2 = chi2, dof = dof, covmat = param_covariance, residuals = residuals, residuals_norm = residuals_norm, converged = converged),))
+                (fwhm = measurement(fwhm, fwhm_err), fit_func = fit_func, 
+                    gof = (pvalue = pval, 
+                            chi2 = chi2, 
+                            dof = dof, 
+                            covmat = param_covariance, 
+                            mean_residuals = mean(residuals_norm),
+                            median_residuals = median(residuals_norm),
+                            std_residuals = std(residuals_norm),
+                            converged = converged),
+                        )
+                    )
         report = (
             v = v_ml,
             h = h,
@@ -230,14 +250,18 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
             f_components = aoe_compton_peakshape_components(fit_func, v_ml),
             gof = merge(result.gof, (residuals = residuals, residuals_norm = residuals_norm,))        )
     else
+        # get fwhm of peak
+        fwhm, fwhm_err = get_peak_fwhm_aoe_compton(v_ml, v_ml, Base.Fix2(fit_function, v_ml), false)
+
         @debug "Best Fit values"
         @debug "μ: $(v_ml.μ)"
         @debug "σ: $(v_ml.σ)"
         @debug "n: $(v_ml.n)"
         @debug "B: $(v_ml.B)"
+        @debug "fwhm: $(fwhm)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], NaN) for k in keys(v_ml)]...),
-                    (gof = (converged = converged,) ,))
+                    (fwhm = measurement(fwhm, NaN), fit_func = fit_func, ), (gof = (converged = converged,),))
         report = (
             v = v_ml,
             h = h,
@@ -249,3 +273,65 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     
     return result, report
 end
+
+
+
+"""
+    estimate_fwhm_aoe_compton(v::NamedTuple, f_fit::Function)
+Get the FWHM of a peak from the fit parameters.
+
+# Returns
+    * `fwhm`: the FWHM of the peak
+"""
+function estimate_fwhm_aoe_compton(v::NamedTuple, f_fit::Function)
+    try
+        aoe_low, aoe_high = (v.μ - v.σ, v.μ + v.σ)
+        
+        max_sig = -Inf
+        for aoe in aoe_low:0.001:aoe_high
+            fe = f_fit(aoe)
+            if fe > max_sig
+                max_sig = fe
+            else
+                # if the maximum is reached,
+                # no need to further continue
+                break
+            end
+        end
+        half_max_sig = max_sig/2
+        
+        tmp = x -> f_fit(x) - half_max_sig
+        roots_low = find_zero(tmp, aoe_low, maxiter=100)
+        roots_high = find_zero(tmp, aoe_high, maxiter=100)
+        return roots_high - roots_low
+    catch
+        return NaN
+    end
+end
+
+"""
+    get_peak_fwhm_aoe_compton(v_ml::NamedTuple, v_ml_err::NamedTuple)
+Get the FWHM of a peak from the fit parameters while performing a MC error propagation.
+
+# Returns
+    * `fwhm`: the FWHM of the peak
+    * `fwhm_err`: the uncertainty of the FWHM of the peak
+"""
+function get_peak_fwhm_aoe_compton(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple}, f_fit::Function, uncertainty::Bool=true)
+    # get fwhm for peak fit
+    fwhm = estimate_fwhm_aoe_compton(v_ml, f_fit)
+    if !uncertainty
+        return fwhm, NaN
+    end
+
+    # get MC for FWHM err
+    if isa(v_ml_err, Matrix)# use correlated fit parameter uncertainties 
+        v_mc = get_mc_value_shapes(v_ml, v_ml_err, 10000)
+    elseif isa(v_ml_err, NamedTuple) # use uncorrelated fit parameter uncertainties 
+        v_mc = get_mc_value_shapes(v_ml, v_ml_err, 1000)
+    end
+    fwhm_mc = estimate_fwhm_aoe_compton.(v_mc, Ref(f_fit))
+    fwhm_err = std(fwhm_mc[isfinite.(fwhm_mc)])
+    return fwhm, fwhm_err
+end
+export get_peak_fwhm_aoe_compton
