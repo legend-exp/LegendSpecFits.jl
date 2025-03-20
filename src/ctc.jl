@@ -40,11 +40,9 @@ function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real},
         # fit peak
         h = fit(Histogram, e_ctc, minimum(e_ctc):bin_width:maximum(e_ctc))
         ps = estimate_single_peak_stats(h)
-        @info ps.peak_fwhm
         result_peak, report_peak = fit_single_peak_th228(h, ps; uncertainty=false)
         # get fwhm and peak height
         fwhm = mvalue(result_peak.fwhm)
-        @info "FWHM: $fwhm"
         p_height = maximum(report_peak.f_fit.(mvalue(result_peak.μ-0.2*result_peak.σ):0.01:mvalue(result_peak.μ+0.2*result_peak.σ)))
         # use ratio of fwhm and peak height as optimization functional
         return log(fwhm/p_height)
