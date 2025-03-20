@@ -59,10 +59,10 @@ function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real},
     fct_lb = [(ustrip(e_unit, 1e-4u"keV") / qdrift_median)^(i) for i in 1:pol_order] .* e_unit
     @debug "Lower bound: $fct_lb"
     # lower bound
-    fct_ub = [(ustrip(e_unit, 5u"keV") / qdrift_median)^(i) for i in 1:pol_order] .* e_unit
+    fct_ub = [(ustrip(e_unit, 7u"keV") / qdrift_median)^(i) for i in 1:pol_order] .* e_unit
     @debug "Upper bound: $fct_ub"
     # start value
-    fct_start = [(ustrip(e_unit, 0.1u"keV") / qdrift_median)^(i) for i in 1:pol_order] .* e_unit
+    fct_start = [(ustrip(e_unit, i*1.0u"keV") / qdrift_median)^(i) for i in 1:pol_order] .* e_unit
     @debug "Start value: $fct_start"
 
     # optimization
