@@ -42,7 +42,7 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     end
     bin_width_cut = get_friedman_diaconis_bin_width(filter(in(bin_width_cut_min..quantile(pe_uncal, initial_max_bin_width_quantile)), pe_uncal))
     peakpos = []
-    for bin_width_scale in exp10.(range(0, stop=-3, length=50))
+    for bin_width_scale in exp10.(range(0, stop=-3, length=10))
         bin_width_cut_scaled = bin_width_cut * bin_width_scale
         @debug "Using bin width: $(bin_width_cut_scaled)"
         h_uncal_cut = fit(Histogram, pe_uncal, bin_width_cut_min:bin_width_cut_scaled:initial_max_amp)
