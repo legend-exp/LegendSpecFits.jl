@@ -172,7 +172,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
     
     # start values for MLE
-    v_init = Vector(mean(f_trafo.target_dist)) 
+    v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function
     f_loglike = pars -> begin
@@ -297,13 +297,13 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
         # sum chi2 and dof of individual fits to compute the p-value for the combined fits
-        chi2 = reduce((acc, x) -> acc + x.gof.chi2, values(result_bands), init = 0.)
-        dof  = reduce((acc, x) -> acc + x.gof.dof, values(result_bands), init = 0.)
+        chi2 = reduce((acc, x) -> if x.gof.converged acc + x.gof.chi2 else acc end, values(result_bands), init = 0.)
+        dof  = reduce((acc, x) -> if x.gof.converged acc + x.gof.dof else acc end, values(result_bands), init = 0.)
         pval = ccdf(Chisq(dof), chi2)
 
         # concatenate the normalized residuals of all individual fits
-        residuals      = vcat(getproperty.(getproperty.(values(report_bands), :gof), :residuals)...)
-        residuals_norm = vcat(getproperty.(getproperty.(values(report_bands), :gof), :residuals_norm)...)
+        residuals      = vcat(get.(getproperty.(values(report_bands), :gof), :residuals, Ref([]))...)
+        residuals_norm = vcat(get.(getproperty.(values(report_bands), :gof), :residuals_norm, Ref([]))...)
 
         @debug "Best Fit values"
         @debug "μA: $(v_ml.μA) ± $(v_ml_err.μA)"
