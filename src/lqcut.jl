@@ -156,7 +156,7 @@ export lq_ctc_correction
 
 """
 function lq_cut(
-    dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5, uncertainty::Bool=true
+    dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5, uncertainty::Bool=true, lq_class_expression::Union{String,Symbol}="lq / e  - (slope * qdrift / e + y_inter)"
     )
 
     # define sidebands; different for low and high energy resolution detectors to avoid sb reaching into 212-Bi FEP
@@ -214,9 +214,13 @@ function lq_cut(
     # final cutoff value defined by "cut_sigma"
     cut_3σ = fit_result.μ + cut_sigma * fit_result.σ
 
+    # normalize lq classifier
+    lq_norm_func = " ( " * lq_class_expression * " - $(mvalue(fit_result.μ)) ) / $(lq_class_expression)"
+
     result = (
         cut = cut_3σ,
         cut_fit_result = fit_result,
+        lq_norm_func = lq_norm_func,
     )
 
     report = (
