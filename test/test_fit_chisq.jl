@@ -20,4 +20,9 @@ using Test
     y = f_lin.(x,par_true...) .+ 0.5.*randn(10)
     @info "chisq fit with uncertainties on x and y"
     result, report       = chi2fit(1, x, y; pull_t = [(mean = par_true[1], std= 0.1),(mean = par_true[2],std= 0.1)], uncertainty=true) 
+
+    x = [1,2]
+    y = f_lin.(x,par_true...) .+ 0.5.*randn(2)
+    @info "chisq fit with 2 fit parameter on 2 data points (test of gof)"
+    result, report       = chi2fit(1, x, y; pull_t = [(mean = par_true[1], std= 0.1),(mean = par_true[2],std= 0.1)], uncertainty=true) 
 end
