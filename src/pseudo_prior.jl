@@ -33,6 +33,8 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
         NamedTupleDist(; μ, σ, n, skew_fraction, skew_width, background, step_amplitude, background_slope)
     elseif fit_func == :gamma_bckExp
         NamedTupleDist(; μ, σ, n, skew_fraction, skew_width, background, step_amplitude, background_exp)
+    elseif fit_func == :gamma_minimal
+        NamedTupleDist(; μ, σ, n, background)
     else
         throw(ArgumentError("Unknown fit function: $fit_func"))
     end
@@ -268,6 +270,20 @@ function get_subpeaks_v_ml(v::NamedTuple, fit_func::Symbol)
                 step_amplitude = v.step_amplitude * (1 - v.sasf),
                 background_exp = v.background_exp_cut,
             )
+        v_survived, v_cut
+    elseif fit_func == :gamma_minimal 
+        v_survived = (
+            μ = v.μ, 
+            σ = v.σ_survived, 
+            n = v.n * v.sf, 
+            background = v.background * v.bsf,
+        )
+        v_cut = (
+            μ = v.μ, 
+            σ = v.σ_cut, 
+            n = v.n * (1 - v.sf), 
+            background = v.background * (1 - v.bsf),
+        )
         v_survived, v_cut
     else
         throw(ArgumentError("Unknown fit function: $fit_func"))
