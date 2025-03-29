@@ -194,7 +194,11 @@ export fit_single_peak_th228
 calculate centroid of gamma peak from fit parameters
 """
 function peak_centroid(v::NamedTuple)
-    centroid = v.μ - v.skew_fraction * (v.µ * v.skew_width)
+    centroid = if haskey(v, :skew_fraction)
+       v.μ - v.skew_fraction * (v.µ * v.skew_width)
+    else
+        v.μ
+    end 
     if haskey(v, :skew_fraction_highE)
         centroid += v.skew_fraction_highE * (v.µ * v.skew_width_highE)
     end
