@@ -18,7 +18,8 @@ include("test_utils.jl")
     result_simple, report_simple = simple_calibration(ustrip.(energy_test), th228_lines, window_sizes, n_bins=10000,; calib_type=:th228, quantile_perc=0.995)
 
     # fit 
-    result, report = fit_peaks(result_simple.peakhists, result_simple.peakstats, ustrip.(th228_lines),; uncertainty=true,calib_type = :th228);
+    result, report = fit_peaks(result_simple.peakhists, result_simple.peakstats, ustrip.(th228_lines),; uncertainty=true,calib_type = :th228, fit_func = [:gamma_def, :gamma_tails, :gamma_bckExp, :gamma_tails_bckFlat, :gamma_bckSlope, :gamma_minimal, :gamma_bckFlat]);
+    @test all([isapprox(mvalue(result[peak].µ), ustrip(th228_lines[i]), atol = 0.2*ustrip(th228_lines[i])) for (i, peak) in enumerate(keys(result))])
 end
 
 @testset "fit_subpeaks_th228" begin

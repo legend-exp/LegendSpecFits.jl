@@ -8,6 +8,7 @@ This function defines the gamma peakshape fit functions used in the calibration 
 * gamma_bckExp: default gamma peakshape + exponential background 
 * gamma_bckFlat: default gamma peakshape - step background (only flat component!)
 * gamma_tails_bckFlat: default gamma peakshape + high-energy tail - step background (only flat component!)
+* gamma_minimal: only Gaussian signal and flat background
 """
 function get_th228_fit_functions(; background_center::Union{Real,Nothing} = nothing)
     merge( 
@@ -16,6 +17,7 @@ function get_th228_fit_functions(; background_center::Union{Real,Nothing} = noth
         gamma_sigWithTail = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction) + lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
         gamma_bckFlat = (x, v) -> gamma_peakshape(x, v.μ, v.σ, v.n, 0.0, v.skew_fraction, v.skew_width, v.background),
         gamma_tails_bckFlat = (x, v) -> gamma_peakshape(x, v.μ, v.σ, v.n, 0.0, v.skew_fraction, v.skew_width , v.background; skew_fraction_highE = v.skew_fraction_highE, skew_width_highE = v.skew_width_highE),
+        gamma_minimal = (x, v) -> gamma_peakshape(x, v.μ, v.σ, v.n, 0.0, 0.0, 0.0, v.background),
         ),
     if isnothing(background_center)
         (gamma_bckSlope = (x, v) -> gamma_peakshape(x, v.μ, v.σ, v.n, v.step_amplitude, v.skew_fraction, v.skew_width, v.background; background_slope =  v.background_slope, background_center = v.μ),
@@ -60,6 +62,10 @@ function peakshape_components(fit_func::Symbol; background_center::Union{Real,No
         funcs = (f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, (v.skew_fraction + v.skew_fraction_highE)),
             f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction, v.skew_width),
             f_highEtail = (x, v) -> highEtail_peakshape(x, v.μ, v.σ, v.n, v.skew_fraction_highE, v.skew_width_highE), 
+            f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, 0.0, v.background))
+    elseif fit_func == :gamma_minimal
+            funcs = (f_sig = (x, v) -> signal_peakshape(x, v.μ, v.σ, v.n, 0.0),
+            f_lowEtail = (x, v) -> lowEtail_peakshape(x, v.μ, v.σ, v.n, 0.0, 0.0),
             f_bck = (x, v) -> background_peakshape(x, v.μ, v.σ, 0.0, v.background))
     end 
     labels = (f_sig = "Signal", f_lowEtail = "Low-energy tail", f_bck = "Background", f_highEtail = "High-energy tail")
