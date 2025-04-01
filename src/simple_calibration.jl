@@ -39,7 +39,7 @@ end
 simple_calibration(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = simple_calibration(e_uncal, th228_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
 
 
-function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; peaksearch_type::Symbol = :most_prominent, quantile_perc::Float64=NaN, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV", peakfinder_gamma::Int = 1, kwargs...)
+function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; peaksearch_type::Symbol = :most_prominent, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV", peakfinder_gamma::Int = 1, kwargs...)
     if peaksearch_type == :most_prominent
         # use most prominent peak in spectrum and use that one. This relies on the peakfinder to find all peaks in gamma_lines!
        result_peak = peak_search_gamma(e_uncal, gamma_lines; kwargs...)
