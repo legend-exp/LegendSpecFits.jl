@@ -145,10 +145,14 @@ function peak_search_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitfu
         peakpos_idxs = StatsBase.binindex.(Ref(h_decon), peakpos)
         cts_peakpos = h_decon.weights[peakpos_idxs]
         @debug "Peaks found at $peakpos with intensity $cts_peakpos - literature values: $(gamma_lines)"
+        if length(gamma_lines) != length(peakpos)
+            error("Number of gamma lines expected: $(length(gamma_lines)) vs. number of peaks foundL $(length(peak_guess)) -->  do not match \n try to adjust the peakfinder parameters: peakfinder_σ, peakfinder_threshold, or binning")
+        end
         peakpos[argmax(cts_peakpos)], argmax(cts_peakpos)
     else
         quantile(e_uncal, quantile_perc), length(gamma_lines)
     end
+
     if length(gamma_lines) == 1 && peak_idx > 1
         peak_idx = 1 # assume that most prominent peak is the one we are looking for
     end
