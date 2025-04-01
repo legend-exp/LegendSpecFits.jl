@@ -26,4 +26,10 @@ using Test
     result, report       = chi2fit(1, x, y; pull_t = [(mean = par_true[1], std= 0.1),(mean = par_true[2],std= 0.1)], uncertainty=true) 
     @test isapprox(result.par[1], par_true[1], atol = 0.2*par_true[1])
     @test isapprox(result.par[2], par_true[2], atol = 0.2*par_true[2])
+
+    x = [1,2]
+    y = f_lin.(x,par_true...) .+ 0.5.*randn(2)
+    @info "chisq fit with 2 fit parameter on 2 data points (test of gof)"
+    @test_logs (:warn,) result, report       = chi2fit(1, x, y; pull_t = [(mean = par_true[1], std= 0.1),(mean = par_true[2],std= 0.1)], uncertainty=true) 
+    @test isnan(report.gof.pvalue) # check that the p-value is NaN
 end
