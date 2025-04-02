@@ -36,7 +36,7 @@ function simple_calibration(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitf
         error("Calibration type not supported")
     end
 end
-simple_calibration(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = simple_calibration(e_uncal, th228_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
+simple_calibration(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = simple_calibration(e_uncal, gamma_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
 
 
 function simple_calibration_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; peaksearch_type::Symbol = :most_prominent, binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV", peakfinder_gamma::Int = 1, kwargs...)
@@ -145,8 +145,8 @@ function peak_search_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitfu
         peakpos_idxs = StatsBase.binindex.(Ref(h_decon), peakpos)
         cts_peakpos = h_decon.weights[peakpos_idxs]
         @debug "Peaks found at $peakpos with intensity $cts_peakpos - literature values: $(gamma_lines)"
-        if length(gamma_lines) != length(peakpos)
-            error("Number of gamma lines expected: $(length(gamma_lines)) vs. number of peaks foundL $(length(peak_guess)) -->  do not match \n try to adjust the peakfinder parameters: peakfinder_σ, peakfinder_threshold, or binning")
+        if length(gamma_lines) > 1 && (length(gamma_lines) != length(peakpos))
+            error("Number of gamma lines expected: $(length(gamma_lines)) vs. number of peaks found: $(length(peakpos)) -->  do not match \n try to adjust the peakfinder parameters: peakfinder_σ, peakfinder_threshold, or binning")
         end
         peakpos[argmax(cts_peakpos)], argmax(cts_peakpos)
     else
@@ -154,7 +154,8 @@ function peak_search_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitfu
     end
 
     if length(gamma_lines) == 1 && peak_idx > 1
-        peak_idx = 1 # assume that most prominent peak is the one we are looking for
+        @debug "Found more than one gamma lines - assume that  most prominent peak is the one we are looking for" 
+        peak_idx = 1 
     end
     @debug "Identified most prominent peak at $(round(peak_guess, digits = 2)) - literature value: $(gamma_lines[peak_idx])"
 
