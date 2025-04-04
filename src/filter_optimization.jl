@@ -29,7 +29,7 @@ function fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{<:Quantit
         # get enc for this rt
         enc_rt = flatview(enc_grid)[r, :]
         # sanity check
-        if all(enc_rt .== 0.0)
+        if all(enc_rt .== 0.0) || all(!isfinite, enc_rt)
             continue
         end
         # get cut value
