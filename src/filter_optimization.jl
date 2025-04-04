@@ -26,6 +26,7 @@ function fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{<:Quantit
     Threads.@threads for r in eachindex(enc_grid_rt)
         # get rt
         rt = enc_grid_rt[r]
+        
         # get enc for this rt
         enc_rt = flatview(enc_grid)[r, :]
         # sanity check
