@@ -215,7 +215,7 @@ function lq_cut(
     cut_3σ = fit_result.μ + cut_sigma * fit_result.σ
 
     # normalize lq classifier
-    lq_norm_func = " ( " * lq_class_expression * " - $(mvalue(fit_result.μ)) ) / $(lq_class_expression)"
+    lq_norm_func = " ( $(lq_class_expression)  - $(mvalue(fit_result.μ)) ) / ( $(mvalue(fit_result.σ)) )"
 
     result = (
         cut = cut_3σ,
