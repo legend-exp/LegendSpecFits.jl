@@ -37,7 +37,7 @@ function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_
         end
         # determine cut
         if !(cut_low < cut_max < cut_high)
-            @warn "Cut window not found, trying again"
+            i > 1 && @warn "Cut window not found, trying again"
             
             # find peak
             cts_argmax = mapslices(argmax, h.weights, dims=1)[1]
