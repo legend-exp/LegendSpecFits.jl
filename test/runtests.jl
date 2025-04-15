@@ -4,6 +4,7 @@ import Test
 
 Test.@testset "Package LegendSpecFits" begin
     #include("test_aqua.jl")
+    include("test_filter_optimization.jl")
     include("test_specfit.jl")
     include("test_fit_chisq.jl")
     include("test_singlefit.jl")
