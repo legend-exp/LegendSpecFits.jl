@@ -220,7 +220,7 @@ function lq_cut(
     result = (
         cut = cut_3σ,
         cut_fit_result = fit_result,
-        lq_norm_func = lq_norm_func,
+        func = lq_norm_func,
     )
 
     report = (
