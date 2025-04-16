@@ -12,5 +12,6 @@ Test.@testset "Package LegendSpecFits" begin
     include("test_docs.jl")
     include("test_lq.jl")
     include("test_aoe.jl")
+    include("test_sipm.jl")
     isempty(Test.detect_ambiguities(LegendSpecFits))
 end # testset
