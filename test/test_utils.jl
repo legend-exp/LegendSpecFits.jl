@@ -26,7 +26,7 @@ function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpe
         (μ = 583.191,   σ = 0.701544,   n = 1865.52,    step_amplitude = 17.9,      skew_fraction = 0.1,    skew_width = 0.1,   background = 16),
         (μ = 1592.53,   σ = 2.09123,    n = 206.827,    step_amplitude = 1e-21,     skew_fraction = 0.005,  skew_width = 0.1,   background = 17),
         (μ = 2614.5,   σ = 1.51289,    n = 3130.43,    step_amplitude = 1e-101,    skew_fraction = 0.1,    skew_width = 0.003, background = 1)
-]
+    ]
     # calculate pdf and cdf functions 
     bin_centers_all     =  Array{StepRangeLen,1}(undef, length(th228_lines))
     model_counts_all    =  Array{Array{Float64},1}(undef, length(th228_lines))
@@ -66,3 +66,50 @@ function generate_mc_spectrum(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpe
     return energy_mc, th228_lines
 end
 
+function generate_mc_spectrum_co60(n_tot::Int=200000,; f_fit::Base.Callable=LegendSpecFits.get_th228_fit_functions().gamma_def)
+
+    gamma_lines =  [1173.24, 1332.55]
+
+    v = [ 
+        (μ = 1173.24,   σ = 2.1,    n = 900,    step_amplitude = 1e-242,    skew_fraction = 0.005,  skew_width = 0.1,   background = 55),
+        (μ = 1332.55,   σ = 2.2,    n = 1000,   step_amplitude = 1.2,       skew_fraction = 0.005,  skew_width = 0.099, background = 35)
+        ]
+
+    # calculate pdf and cdf functions 
+    bin_centers_all     =  Array{StepRangeLen,1}(undef, length(gamma_lines))
+    model_counts_all    =  Array{Array{Float64},1}(undef, length(gamma_lines))
+    model_cdf_all       =  Array{Array{Float64},1}(undef, length(gamma_lines))
+    energy_mc_all       =  Array{Array{Float64},1}(undef, length(gamma_lines))
+    PeakMax             = zeros(length(gamma_lines))#u"keV"
+
+    for i=1:length(gamma_lines)  # get fine binned model function to estimate pdf 
+        n_step = 10000 # fine binning 
+        bin_centers_all[i] = range(v[i].µ-50, stop=v[i].µ+50, length=n_step)
+        bw = Float64(bin_centers_all[i].step)
+        bin_widths = range(bw,bw, length=n_step) 
+
+        # save as intermediate result 
+        model_counts_all[i] = LegendSpecFits._get_model_counts(f_fit, v[i], bin_centers_all[i], bin_widths)
+        PeakMax[i] = maximum(model_counts_all[i])
+
+        # create CDF
+        model_cdf_all[i] = cumsum(model_counts_all[i])
+        model_cdf_all[i] = model_cdf_all[i]./maximum(model_cdf_all[i])
+    end
+
+    # weights each peak with amplitude 
+    PeakMaxRel = PeakMax./sum(PeakMax)
+    n_i = round.(Int,PeakMaxRel.*n_tot)
+
+    # do the sampling: drawn from uniform distribution 
+    for i=1:length(gamma_lines)
+        bandwidth = maximum(model_cdf_all[i])-minimum(model_cdf_all[i])
+        rand_i = minimum(model_cdf_all[i]).+bandwidth.*rand(n_i[i]); # make sure sample is within model range 
+        interp_cdf_inv = _linear_interpolation(model_cdf_all[i], bin_centers_all[i]) # inverse cdf
+        energy_mc_all[i] = interp_cdf_inv.(rand_i) 
+    end
+
+    energy_mc = fast_flatten(map(x-> x .* u"keV",energy_mc_all))
+    gamma_lines = gamma_lines .* u"keV"
+    return energy_mc, gamma_lines
+end
