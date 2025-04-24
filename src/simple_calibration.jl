@@ -1,4 +1,3 @@
-const e_unit=u"keV" # unit for calibrated energies. All energy values will be convert to this unit
 """
     simple_calibration(e_uncal::Array, th228_lines::Array, window_size::Float64=25.0, n_bins::Int=15000, calib_type::String="th228")
 

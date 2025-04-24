@@ -48,6 +48,7 @@ using Unitful
 using ValueShapes
 
 MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
+const e_unit=u"keV"
 
 include("utils.jl")
 include("memory_utils.jl")

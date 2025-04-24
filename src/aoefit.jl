@@ -21,7 +21,6 @@ the binning is only done in the area around the peak. The peak parameters are es
 """
 function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton_bands::Vector{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
     @assert length(aoe) == length(e) "A/E and Energy arrays must have the same length"
-    e_unit = u"keV"
     # get aoe values in compton bands
     aoe_compton_bands = [aoe[c .< e .< c + compton_window .&& aoe .> 0.0] for c in compton_bands]
 

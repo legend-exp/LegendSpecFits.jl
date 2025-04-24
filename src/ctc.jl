@@ -20,7 +20,6 @@ function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real},
     cut = peak - first(window) .< e .< peak + last(window)
     @debug "Cut window: $(peak - first(window)) < e < $(peak + last(window))"
     e_cut, qdrift_cut = e[cut], qdrift[cut]
-    e_unit = u"keV"
     # calculate optimal bin width
     bin_width_window = 5.0u"keV"
     bin_width        = get_friedman_diaconis_bin_width(e[peak - bin_width_window .< e .< peak + bin_width_window])
