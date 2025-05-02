@@ -86,7 +86,7 @@ end
 
     # Test the normalization
     lq_table = Table(lq = lq_classifier_peak1)
-    lq_norm = ljl_propfunc(result.func).(lq_table)
-    @test isapprox(mean(lq_norm), 0.0, atol=0.05)
-    @test isapprox(std(lq_norm), 1.0, atol=0.05)
+    lq_normalized = ljl_propfunc(result.func).(lq_table)
+    @test isapprox(mean(lq_normalized), 0.0, atol=0.05)
+    @test isapprox(std(lq_normalized), 1.0, atol=0.05)
 end
