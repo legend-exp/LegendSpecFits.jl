@@ -74,20 +74,15 @@ end
     lq_classifier_combined = vcat(lq_classifier_peak1, lq_classifier_peak2, lq_classifier_below, lq_classifier_above)
 
     # Call the LQ_cut function
-    result, report = lq_cut(dep_µ, dep_σ, e_cal, lq_classifier_combined; lq_class_expression = :lq)
-
-    # Extract the cutoff value
-    cut_3σ = result.cut
+    result, report = lq_norm(dep_µ, dep_σ, e_cal, lq_classifier_combined; lq_class_expression = :lq)
   
     # Calculate the expected mean, sigma and cutoff value
     expected_mean = mean(lq_classifier_peak1)
     expected_sigma = std(lq_classifier_peak1)
-    expected_cut = expected_mean + 3 * expected_sigma
 
     # Test the parameters
     @test isapprox(report.fit_result.μ, expected_mean, atol=0.05)
     @test isapprox(report.fit_result.σ, expected_sigma, atol=0.05)
-    @test isapprox(cut_3σ, expected_cut, atol=0.1)
 
     # Test the normalization
     lq_table = Table(lq = lq_classifier_peak1)
