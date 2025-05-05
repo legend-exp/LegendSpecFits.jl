@@ -1,6 +1,6 @@
 """
     lq_ctc_correction(lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
-    ctc_dep_edgesigma::Float64=3.0 , ctc_lq_precut_relative_cut::Float64=0.5, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) )
+    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="lq / e", dt_eff_expression::Union{String,Symbol}="qdrift / e", ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1, uncertainty::Bool=false)
 
     Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a polynomial fit on the remaining data. The data is Corrected by subtracting the polynomial fit from the lq data.
 
@@ -24,13 +24,13 @@
     * `pol_fit_order`: Order of the polynomial fit used for the drift time correction
 
 # Returns
-    * `result`: NamedTuple of the function used for the drift time correction
+    * `result`: NamedTuple of the function used for the drift time correction, the polynomial fit result and the box constraints
     * `report`: NamedTuple of the histograms used for the fit, the cutoff values and the DEP edges
 
 """
 function lq_ctc_correction(
     lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
-    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="lq / e", dt_eff_expression::Union{String,Symbol}="qdrift / e" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1, uncertainty::Bool=false) 
+    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="lq / e", dt_eff_expression::Union{String,Symbol}="qdrift / e", ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1, uncertainty::Bool=false) 
 
     # calculate DEP edges
     dep_left = dep_µ - ctc_dep_edgesigma * dep_σ
@@ -152,7 +152,7 @@ export lq_ctc_correction
     * `lq_class_expression`: Expression for the used LQ classifier
 
 # Returns
-    * `result`: NamedTuple of the normalization function
+    * `result`: NamedTuple of the fit result and normalization function
     * `report`: NamedTuple of the fit result, fit report and temporary histograms
 
 """
