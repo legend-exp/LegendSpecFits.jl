@@ -51,19 +51,14 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
         fct -> f_optimize(fct, lq_cut, qdrift_cut)
     end
 
-    # minimize function
-    qdrift_median = median(qdrift_cut)
     # lower bound
-    #fct_lb = [(-10.0 / qdrift_median)^(i) for i in 1:pol_order]
-    fct_lb = [-0.1]
+    fct_lb = [-0.1 for i in 1:pol_order]
     @debug "Lower bound: $fct_lb"
     # upper bound
-    #fct_ub = [(2.0 / qdrift_median)^(i) for i in 1:pol_order]
-    fct_ub = [0.1]
+    fct_ub = [0.1 for i in 1:pol_order]
     @debug "Upper bound: $fct_ub"
     # start value
-    #fct_start = [(-1.0 / qdrift_median)^(i) for i in 1:pol_order]
-    fct_start = [0.0]
+    fct_start = [0.0 for i in 1:pol_order]
     @debug "Start value: $fct_start"
 
 
