@@ -1,6 +1,6 @@
 """
     lq_ctc_correction(lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
-    ctc_dep_edgesigma::Float64=3.0 , ctc_lq_precut_relative_cut::Float64=0.5, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1) )
+    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="lq / e", dt_eff_expression::Union{String,Symbol}="qdrift / e", ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1, uncertainty::Bool=false)
 
     Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a polynomial fit on the remaining data. The data is Corrected by subtracting the polynomial fit from the lq data.
 
@@ -24,13 +24,13 @@
     * `pol_fit_order`: Order of the polynomial fit used for the drift time correction
 
 # Returns
-    * `result`: NamedTuple of the function used for the drift time correction
+    * `result`: NamedTuple of the function used for the drift time correction, the polynomial fit result and the box constraints
     * `report`: NamedTuple of the histograms used for the fit, the cutoff values and the DEP edges
 
 """
 function lq_ctc_correction(
     lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
-    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="(lq / e)", dt_eff_expression::Union{String,Symbol}="(qdrift / e)" ,ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1, uncertainty::Bool=false) 
+    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="lq / e", dt_eff_expression::Union{String,Symbol}="qdrift / e", ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1, uncertainty::Bool=false) 
 
     # calculate DEP edges
     dep_left = dep_µ - ctc_dep_edgesigma * dep_σ
@@ -109,8 +109,8 @@ function lq_ctc_correction(
     pol_fit_func = report_µ.f_fit
 
     # property function for drift time correction
-    lq_class_func = "$lq_e_corr_expression - " * join(["$(par[i]) * ($dt_eff_expression)^$(i-1)" for i in eachindex(par)], " - ")
-    lq_class_func_generic = "lq / e  - (slope * qdrift / e + y_inter)"
+    lq_class_func = "( $lq_e_corr_expression ) - " * join(["$(par[i]) * ($dt_eff_expression)^$(i-1)" for i in eachindex(par)], " - ")
+    lq_class_func_generic = "( lq / e ) - (slope * qdrift / e + y_inter)"
 
     # create result and report
     result = (
@@ -135,28 +135,29 @@ end
 export lq_ctc_correction
 
 """
-    lq_cut(dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=2.0) )
+    lq_norm(dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=2.0,  uncertainty::Bool=true, lq_class_expression::Union{String,Symbol}="lq / e  - (slope * qdrift / e + y_inter)" )
 
-    Evaluates the cutoff value for the LQ cut. The function performs a binned gaussian fit on the sidebandsubtracted LQ histogram and evaluates the cutoff value difined at 3σ of the fit.
+    Performs normalization of the charge-trapping-corrected LQ classifier using the double-escape peak (DEP) region of the Th calibration. It subtracts sidebands around the DEP, fits a truncated Gaussian to the resulting histogram, and generates a normalization expression so that a numerical value of one corresponds to one standard deviation (σ) of the fitted Gaussian.
 
 # Arguments
     * `dep_µ`: Mean of the DEP peak
     * `dep_σ`: Standard deviation of the DEP peak
-    * `e_cal`: Energy
-    * `lq_classifier`: LQ classifier
+    * `e_cal`: Vector of Energy values
+    * `lq_classifier`: LQ classifier (typically charge-trapping-corrected)
 
 # Keywords
-    * `cut_sigma`: Number of standard deviations used to define the final cutoff value
     * `dep_sideband_sigma`: Number of standard deviations used to define the sideband edges
     * `cut_truncation_sigma`: Number of standard deviations used for the precut of sideband subtracted histogram
+    * `uncertainty`: Boolean flag to include uncertainty in the fit (default: true)
+    * `lq_class_expression`: Expression for the used LQ classifier
 
 # Returns
-    * `result`: NamedTuple of the cutoff value
+    * `result`: NamedTuple of the fit result and normalization function
     * `report`: NamedTuple of the fit result, fit report and temporary histograms
 
 """
-function lq_cut(
-    dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; cut_sigma::Float64=3.0, dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5, uncertainty::Bool=true
+function lq_norm(
+    dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5, uncertainty::Bool=true, lq_class_expression::Union{String,Symbol}="lq / e  - (slope * qdrift / e + y_inter)"
     )
 
     # define sidebands; different for low and high energy resolution detectors to avoid sb reaching into 212-Bi FEP
@@ -211,16 +212,15 @@ function lq_cut(
     # fit the sideband subtracted histogram
     fit_result, fit_report = fit_binned_trunc_gauss(hist_corrected, (low=lq_start, high=lq_stop, max=NaN); uncertainty)
 
-    # final cutoff value defined by "cut_sigma"
-    cut_3σ = fit_result.μ + cut_sigma * fit_result.σ
+    # normalize lq classifier
+    lq_norm_func = " ( ($(lq_class_expression))  - $(mvalue(fit_result.μ)) ) / ( $(mvalue(fit_result.σ)) )"
 
     result = (
-        cut = cut_3σ,
-        cut_fit_result = fit_result,
+        fit_result = fit_result,
+        func = lq_norm_func,
     )
 
     report = (
-        cut = cut_3σ,
         fit_result = fit_result,
         temp_hists = temp_hists,
         fit_report = fit_report,
@@ -230,4 +230,4 @@ function lq_cut(
 
     return result, report
 end
-export lq_cut
+export lq_norm
