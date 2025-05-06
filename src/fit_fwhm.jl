@@ -15,7 +15,6 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     @assert pol_order >= 1 "The polynomial order must be greater than 0"
     
     # fit FWHM fit function
-    e_unit = u"keV"
     _linear_intercept(x1::Float64, x2::Float64, y1::Float64, y2::Float64) = y1 - ((y2 - y1) / (x2 - x1)) * x1
     intercept_first_two_points = _linear_intercept(mvalue.(ustrip.(e_unit,sort(peaks)[1:2]))..., mvalue.(ustrip.(e_unit, fwhm[sortperm(peaks)[1:2]]))...)
     intercept_guess = if intercept_first_two_points > 0.1
