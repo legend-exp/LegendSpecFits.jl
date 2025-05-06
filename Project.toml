@@ -1,6 +1,6 @@
 name = "LegendSpecFits"
 uuid = "18221496-77af-46cf-bab8-820da09f7f97"
-version = "0.4.1"
+version = "0.4.2"
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
