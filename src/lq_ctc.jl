@@ -14,8 +14,9 @@ Correct for the drift time dependence of the LQ parameter
 """
 
 
-function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdrift::Vector{<:Real}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity, hist_start::Real = -0.5, hist_end::Real = 2.5, bin_width::Real = 0.01; 
-    ctc_dep_edgesigma::Float64=3.0, lq_expression::Union{Symbol, String}="lq", qdrift_expression::Union{Symbol, String} = "qdrift / e", pol_order::Int=1)
+function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdrift::Vector{<:Real}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity;
+    hist_start::Real = -0.5, hist_end::Real = 2.5, bin_width::Real = 0.01, relative_cut::Float64 = 0.4, 
+    ctc_dep_edgesigma::Float64=3.0, lq_expression::Union{Symbol, String}="lq / e", qdrift_expression::Union{Symbol, String} = "qdrift / e", pol_order::Int=1)
 
     # calculate DEP edges
     dep_left = dep_µ - ctc_dep_edgesigma * dep_σ
@@ -31,7 +32,7 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
 
     # get σ before correction
     # fit peak
-    cut_peak = cut_single_peak(lq_cut, -10, 20; n_bins=-1, relative_cut = 0.4)
+    cut_peak = cut_single_peak(lq_cut, -10, 20; n_bins=-1, relative_cut)
     println("cut_peak: ", cut_peak)
     result_before, report_before = fit_single_trunc_gauss(lq_cut, cut_peak; uncertainty=false)
     @debug "Found Best σ before correction: $(round(result_before.σ, digits=2))"
@@ -41,7 +42,7 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
         # calculate drift time corrected lq
         lq_ctc =  lq_cut .+ PolCalFunc(0.0, fct...).(qdrift_cut)
         # fit peak
-        cuts_lq = cut_single_peak(lq_ctc, -10, 20; n_bins=-1, relative_cut = 0.4)
+        cuts_lq = cut_single_peak(lq_ctc, -10, 20; n_bins=-1, relative_cut)
         result_after, _ = fit_single_trunc_gauss(lq_ctc, cuts_lq; uncertainty=false)
         return mvalue(result_after.σ)
     end
@@ -89,7 +90,7 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
     # normalize once again to μ = 0 and σ = 1
     h_after = fit(Histogram, lq_ctc_corrected, hist_start:bin_width:hist_end)
     
-    _cuts_lq = cut_single_peak(lq_ctc_corrected, hist_start, eltype(hist_start)(10); n_bins=-1, relative_cut = 0.4)
+    _cuts_lq = cut_single_peak(lq_ctc_corrected, hist_start, eltype(hist_start)(10); n_bins=-1, relative_cut)
     result_after, report_after = fit_single_trunc_gauss(lq_ctc_corrected, _cuts_lq, uncertainty=true)
     μ_norm = mvalue(result_after.μ)
     σ_norm = mvalue(result_after.σ)
@@ -99,7 +100,7 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
     lq_ctc_func = "( ( $(lq_expression) ) + " * join(["$(fct[i]) * ( $(qdrift_expression) )^$(i)" for i in eachindex(fct)], " + ") * " - $(μ_norm) ) / $(σ_norm) "
 
     # create final histograms after normalization
-    cuts_lq = cut_single_peak(lq_ctc_normalized, hist_start, eltype(hist_start)(10); n_bins=-1, relative_cut = 0.4)
+    cuts_lq = cut_single_peak(lq_ctc_normalized, hist_start, eltype(hist_start)(10); n_bins=-1, relative_cut)
     result_after_norm, report_after_norm = fit_single_trunc_gauss(lq_ctc_normalized, cuts_lq, uncertainty=true)
 
     h_after_norm = fit(Histogram, lq_ctc_normalized, -5:bin_width:10)
