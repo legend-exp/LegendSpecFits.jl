@@ -31,4 +31,4 @@ jobs:
           skip: Pkg,TOML,TypedTables
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
-        continue-on-error: ${{ matrix.version == 'pre' }}
+        # continue-on-error: ${{ matrix.version == 'pre' }}
