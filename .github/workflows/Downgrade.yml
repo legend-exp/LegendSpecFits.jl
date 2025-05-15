@@ -29,7 +29,7 @@ jobs:
       - uses: julia-actions/julia-downgrade-compat@v1
         if: matrix.version == 'pre'
         with:
-          skip: Pkg,TOML,TypedTables,Unitful
+          skip: Pkg,TOML,TypedTables,Unitful,Measurements
       - uses: julia-actions/julia-downgrade-compat@v1
         if: matrix.version != 'pre'
         with:
