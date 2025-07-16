@@ -45,7 +45,12 @@ function qc_window_cut(x::Vector{<:Unitful.RealOrRealQuantity}, min::T, max::T, 
     @assert unit(result.low_cut) == unit(result.high_cut) "The units of the low and high cuts must be the same"
     
     # QC string to be used as a PropertyFunction
-    qc_string = "$(mvalue(ustrip(result.low_cut)))$(unit(result.low_cut) == NoUnits ? "" : string(unit(result.low_cut))) < $col_expression && $col_expression < $(mvalue(ustrip(result.high_cut)))$(unit(result.high_cut) == NoUnits ? "" : string(unit(result.high_cut)))"
+    low_cut_value = mvalue(ustrip(result.low_cut))
+    low_cut_unit = unit(result.low_cut) == NoUnits ? "" : string(unit(result.low_cut))
+    high_cut_value = mvalue(ustrip(result.high_cut))
+    high_cut_unit = unit(result.high_cut) == NoUnits ? "" : string(unit(result.high_cut))
+
+    qc_string = "$low_cut_value$low_cut_unit < $col_expression && $col_expression < $high_cut_value$high_cut_unit"
     
     return merge((qc = qc_string,), result), report
 end
