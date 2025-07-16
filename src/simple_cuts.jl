@@ -72,7 +72,7 @@ The `center` and side of the fit can be specified with `left` and `center` varia
 """
 function get_centered_gaussian_window_cut(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T, n_σ::Real,; center::T=zero(min_x), n_bins::Int=500, relative_cut::Float64=0.2, left::Bool=false, fixed_center::Bool=true) where T<:Unitful.RealOrRealQuantity
     # prepare data
-    x_unit = unit(T)
+    x_unit = unit(min_x)
     x, min_x, max_x, center = ustrip.(x_unit, x), ustrip(x_unit, min_x), ustrip(x_unit, max_x), ustrip(x_unit, center)
 
     # get cut window around peak
