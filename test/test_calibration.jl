@@ -5,6 +5,9 @@ using Test
 using Measurements: value as mvalue
 using Distributions
 using Unitful
+using Logging
+
+logger = ConsoleLogger(stderr, Logging.Info)
 
 @testset "Energy calibration" begin
     ecal = filter(x -> x <= 265_000, vcat(rand(Distributions.Exponential(70_000),97_000), 261_450 .+ 200 .* randn(2_000), 210_350 .+ 185 .* randn(500), 159_300 .+ 170 .* randn(500)))
@@ -15,7 +18,9 @@ using Unitful
     result_simple, report_simple = LegendSpecFits.simple_calibration(ecal, energies, [25, 25, 35]u"keV", [25, 25, 30]u"keV", calib_type = :th228)
     @test isapprox(result_simple.c, 0.01 * u"keV", rtol = 0.01)
     m_cal_simple = result_simple.c
-    @test_nowarn result_ctc, report_ctc = LegendSpecFits.ctc_energy(ecal .* m_cal_simple, rand(length(ecal)), 2614.5u"keV", (5u"keV", 5u"keV"), m_cal_simple)
+    with_logger(logger) do
+        @test_nowarn result_ctc, report_ctc = LegendSpecFits.ctc_energy(ecal .* m_cal_simple, rand(length(ecal)), 2614.5u"keV", (5u"keV", 5u"keV"), m_cal_simple)
+    end
     result_fit, report_fit = LegendSpecFits.fit_peaks(result_simple.peakhists, result_simple.peakstats, lines; e_unit=result_simple.unit, calib_type=:th228, m_cal_simple=m_cal_simple)
     @test result_fit isa AbstractDict || report_fit isa AbstractDict
     @test length(lines) == length(report_fit)

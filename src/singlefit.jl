@@ -11,7 +11,6 @@ Returns `report` and `result`` with:
     * `n`: number of counts in the peak
 """
 function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::NamedTuple{(:low, :high, :max), Tuple{<:T, <:T, <:T}}=(low = zero(first(x))*NaN, high = zero(first(x))*NaN, max = zero(first(x))*NaN); uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
-    @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) == unit(first(x)) "Units of min_x, max_x and x must be the same"
     x_unit = unit(first(x))
     x, cut_low, cut_high, cut_max = ustrip.(x_unit, x), ustrip(x_unit, cuts.low), ustrip(x_unit, cuts.high), ustrip(x_unit, cuts.max)
     cut_low, cut_high = ifelse(isnan(cut_low), minimum(x), cut_low), ifelse(isnan(cut_high), maximum(x), cut_high)
@@ -130,7 +129,6 @@ Fit a single truncated Gaussian to the data `x` between `cut.low` and `cut.high`
     * `σ`: standard deviation of the Gaussian
 """
 function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, μ::T, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}; left::Bool=false, uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
-    @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) == unit(x[1]) == unit(μ) "Units of min_x, max_x and x must be the same"
     x_unit = unit(x[1])
     x, cut_low, cut_high, cut_max, μ = ustrip.(x), ustrip(cuts.low), ustrip(cuts.high), ustrip(cuts.max), ustrip(μ)
 
@@ -251,7 +249,6 @@ Fit a single truncated Gaussian to the data `x` between `cut.low` and `cut.high`
     * `σ`: standard deviation of the Gaussian
 """
 function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::NamedTuple{(:low, :high, :max), Tuple{T, T, T}}; left::Bool=false, uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity
-    @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) == unit(x[1]) "Units of min_x, max_x and x must be the same"
     x_unit = unit(x[1])
     x, cut_low, cut_high, cut_max = ustrip.(x), ustrip(cuts.low), ustrip(cuts.high), ustrip(cuts.max)
 
@@ -499,7 +496,6 @@ Fit a single truncated Gaussian to the data `x` between `cut.low` and `cut.high`
 function fit_binned_half_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :high, :max), Tuple{<:T, <:T, <:T}}=(low = NaN, high = NaN, max = NaN); left::Bool=false, uncertainty::Bool=true) where T<:Unitful.RealOrRealQuantity    
     @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) "Units of min_x, max_x and x must be the same"
     # get cut windows
-    @assert unit(cuts.low) == unit(cuts.high) == unit(cuts.max) "Units of min_x, max_x and x must be the same"
     cut_low, cut_high, cut_max = ustrip(cuts.low), ustrip(cuts.high), ustrip(cuts.max)
     x_min, x_max, bin_width = first(h_nocut.edges[1]), last(h_nocut.edges[1]), step(h_nocut.edges[1])
     cut_low, cut_high = ifelse(isnan(cut_low), x_min, cut_low), ifelse(isnan(cut_high), x_max, cut_high)
