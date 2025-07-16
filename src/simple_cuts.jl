@@ -11,7 +11,7 @@ The relative cut is the fraction of the maximum counts to use for the cut.
     * `high`: upper edge of the cut peak
 """
 function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T,; n_bins::Int=-1, relative_cut::Float64=0.5, n_tries::Int=5) where T<:Unitful.RealOrRealQuantity
-    x_unit = unit(T)
+    x_unit = unit(min_x)
     x, min_x, max_x = ustrip.(x_unit, x), ustrip(x_unit, min_x), ustrip(x_unit, max_x)
 
     # cut out window of interest
