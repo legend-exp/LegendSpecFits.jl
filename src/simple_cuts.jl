@@ -91,8 +91,8 @@ function get_centered_gaussian_window_cut(x::Vector{<:Unitful.RealOrRealQuantity
         μ = result_fit.μ*x_unit,
         σ = result_fit.σ*x_unit,
         gof = result_fit.gof,
-        low_cut_fit = ifelse(left, cuts.low, result_fit.μ), 
-        high_cut_fit = ifelse(left, result_fit.μ, cuts.high),
+        low_cut_fit = ifelse(left, cuts.low, result_fit.μ*x_unit),
+        high_cut_fit = ifelse(left, result_fit.μ*x_unit, cuts.high),
         max_cut_fit = cuts.max
     )
     report = (
