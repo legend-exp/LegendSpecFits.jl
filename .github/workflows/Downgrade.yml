@@ -26,11 +26,11 @@ jobs:
       - name: Add LegendJuliaRegistry
         run: julia -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url = "https://github.com/legend-exp/LegendJuliaRegistry"))'
         shell: bash
-      - uses: julia-actions/julia-downgrade-compat@v1
+      - uses: julia-actions/julia-downgrade-compat@v2
         if: matrix.version == 'pre'
         with:
           skip: Pkg,TOML,GaussianMixtures,Measurements,TypedTables,Unitful
-      - uses: julia-actions/julia-downgrade-compat@v1
+      - uses: julia-actions/julia-downgrade-compat@v2
         if: matrix.version != 'pre'
         with:
           skip: Pkg,TOML,TypedTables
