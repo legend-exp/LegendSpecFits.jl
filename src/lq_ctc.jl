@@ -1,22 +1,32 @@
 """
-    ctc_lq(lq_all::Array{T}, ecal_all::Array{T}, qdrift_e_all::Array{T}, compton_bands::Array{T}, peak::T, window::T) where T<:Real
-
-Correct for the drift time dependence of the LQ parameter
-
-# Returns (but may change):
-    * `peak`: peak position
-    * `window`: window size
-    * `fct`: correction factor
-    * `σ_before`: σ before correction
-    * `σ_after`: σ after correction
-    * `func`: function to correct lq
-    * `func_generic`: generic function to correct lq
-"""
-
-
-function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdrift::Vector{<:Real}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity;
+    ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity;
     hist_start::Real = -0.5, hist_end::Real = 2.5, bin_width::Real = 0.01, relative_cut::Float64 = 0.4, 
-    ctc_dep_edgesigma::Float64=3.0, lq_expression::Union{Symbol, String}="lq / e", qdrift_expression::Union{Symbol, String} = "qdrift / e", pol_order::Int=1)
+    ctc_dep_edgesigma::Float64=3.0, lq_e_corr_expression::Union{Symbol, String}="lq / e", qdrift_expression::Union{Symbol, String} = "qdrift / e", pol_order::Int=1)
+
+Corrects the drift-time dependence of the LQ (Liquid-Quench) parameter for a given energy peak (typically DEP). 
+Selects LQ values in a DEP window, minimizes the width (σ) of the LQ distribution with a polynomial drift-time correction, and normalizes to μ=0, σ=1. Supports linear and quadratic corrections.
+
+# Arguments
+- `lq` : Vector of LQ values (Float64 or Float32).
+- `e` : Vector of event energies (Unitful quantities).
+- `qdrift` : Vector of drift times.
+- `dep_µ` : DEP peak mean (Unitful quantity).
+- `dep_σ` : DEP peak standard deviation (Unitful quantity).
+
+# Keyword Arguments
+- `hist_start`, `hist_end`, `bin_width` : Histogram settings.
+- `relative_cut` : Fractional cut around the peak for fitting.
+- `ctc_dep_edgesigma` : σ range around DEP to define energy window.
+- `lq_e_corr_expression`, `qdrift_expression` : Expressions used in the final correction function.
+- `pol_order` : Polynomial order for drift-time correction (1=linear, 2=quadratic).
+
+# Returns
+- `result` : NamedTuple containing main fit results (`fct`, `σ_before`, `σ_after`, `σ_after_norm`, `func`).
+- `report` : NamedTuple containing arrays, histograms, and optional visualization, intended for plotting.
+"""
+function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity;
+    hist_start::Real = -0.5, hist_end::Real = 2.5, bin_width::Real = 0.01, relative_cut::Float64 = 0.4, 
+    ctc_dep_edgesigma::Float64=3.0, lq_e_corr_expression::Union{Symbol, String}="lq / e", qdrift_expression::Union{Symbol, String} = "qdrift / e", pol_order::Int=1)
 
     # calculate DEP edges
     dep_left = dep_µ - ctc_dep_edgesigma * dep_σ
@@ -40,7 +50,7 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
     # create optimization function
     function f_optimize_ctc(fct, lq_cut, qdrift_cut)
         # calculate drift time corrected lq
-        lq_ctc =  lq_cut .+ PolCalFunc(0.0, fct...).(qdrift_cut)
+        lq_ctc =  lq_cut .- PolCalFunc(0.0, fct...).(qdrift_cut)
         # fit peak
         cuts_lq = cut_single_peak(lq_ctc, -10, 20; n_bins=-1, relative_cut)
         result_after, _ = fit_single_trunc_gauss(lq_ctc, cuts_lq; uncertainty=false)
@@ -55,15 +65,15 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
     qdrift_median = median(qdrift_cut)
     # lower bound
     #fct_lb = [- 0.1^i for i in 1:pol_order]
-    fct_lb = [-(1 / qdrift_median)^(i) for i in 1:pol_order]
+    fct_lb = [(0.0 / qdrift_median)^(i) for i in 1:pol_order]
     @debug "Lower bound: $fct_lb"
     # upper bound
     #fct_ub = [0.1^i for i in 1:pol_order]
-    fct_ub = [(0.1 / qdrift_median)^(i) for i in 1:pol_order]
+    fct_ub = [(1.0 / qdrift_median)^(i) for i in 1:pol_order]
     @debug "Upper bound: $fct_ub"
     # start value
     #fct_start = [0.0 for i in 1:pol_order]
-    fct_start = [-(0.001 / qdrift_median)^(i) for i in 1:pol_order]
+    fct_start = [(0.2 / qdrift_median)^(i) for i in 1:pol_order]
     @debug "Start value: $fct_start"
 
     opt_bounds = (lower = fct_lb, upper = fct_ub, start = fct_start, qdrift_median = qdrift_median)
@@ -75,7 +85,7 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
     # optimization
     optf = OptimizationFunction((u, p) -> f_minimize(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, fct_start, (), lb=fct_lb, ub=fct_ub)
-    res = solve(optpro, NLopt.LN_BOBYQA(), maxiters = 3000, maxtime=optim_time_limit)
+    res = solve(optpro, NLopt.LN_BOBYQA(), maxiters = 5000, maxtime=optim_time_limit)
     converged = (res.retcode == ReturnCode.Success)
 
     # get optimal correction factor
@@ -85,7 +95,7 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
     if !converged @warn "CTC did not converge" end
 
     # calculate drift time corrected lq
-    lq_ctc_corrected = lq_cut .+ PolCalFunc(0.0, fct...).(qdrift_cut)
+    lq_ctc_corrected = lq_cut .- PolCalFunc(0.0, fct...).(qdrift_cut)
     
     # normalize once again to μ = 0 and σ = 1
     h_after = fit(Histogram, lq_ctc_corrected, hist_start:bin_width:hist_end)
@@ -97,13 +107,21 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
     lq_ctc_normalized = (lq_ctc_corrected .- μ_norm) ./ σ_norm
 
     # get cal PropertyFunctions
-    lq_ctc_func = "( ( $(lq_expression) ) + " * join(["$(fct[i]) * ( $(qdrift_expression) )^$(i)" for i in eachindex(fct)], " + ") * " - $(μ_norm) ) / $(σ_norm) "
+    lq_ctc_func = "( ( $(lq_e_corr_expression) ) - (" * join(["$(fct[i]) * ( $(qdrift_expression) )^$(i)" for i in eachindex(fct)], " + ") * ") - $(μ_norm) ) / $(σ_norm) "
 
     # create final histograms after normalization
     cuts_lq = cut_single_peak(lq_ctc_normalized, hist_start, eltype(hist_start)(10); n_bins=-1, relative_cut)
     result_after_norm, report_after_norm = fit_single_trunc_gauss(lq_ctc_normalized, cuts_lq, uncertainty=true)
 
     h_after_norm = fit(Histogram, lq_ctc_normalized, -5:bin_width:10)
+
+    # used for visualization plot
+    vis = (
+        kind = pol_order == 1 ? :_1D : pol_order == 2 ? :_2D : :unknown,
+        pol_order = pol_order,
+        opt_bounds = opt_bounds,
+        f_minimize = f_minimize
+    )
 
     result = (
         dep_left = dep_left,
@@ -139,7 +157,8 @@ function ctc_lq(lq::Vector{<:Real}, e::Vector{<:Unitful.RealOrRealQuantity}, qdr
         σ_after_norm = result.σ_after_norm,
         report_before = report_before,
         report_after = report_after,
-        report_after_norm = report_after_norm
+        report_after_norm = report_after_norm,
+        vis = vis,
     )
     return result, report
 end
@@ -257,7 +276,7 @@ function lq_ctc_lin_fit(
     pol_fit_func = report_µ.f_fit
 
     # property function for drift time correction
-    lq_class_func = "( $lq_e_corr_expression ) - " * join(["$(par[i]) * ($dt_eff_expression)^$(i-1)" for i in eachindex(par)], " - ")
+    lq_class_func = "( $lq_e_corr_expression ) - (" * join(["$(par[i]) * ($dt_eff_expression)^$(i-1)" for i in eachindex(par)], " + ") *")"
     lq_class_func_generic = "( lq / e ) - (slope * qdrift / e + y_inter)"
 
     # create result and report
@@ -282,3 +301,8 @@ function lq_ctc_lin_fit(
 end
 export lq_ctc_lin_fit
 
+function lq_ctc_correction(lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; kwargs...)
+    Base.depwarn("`lq_ctc_correction` is deprecated. There exist now two different versions. Use `ctc_lq` or `lq_ctc_lin_fit` instead. This deprecation uses `lq_ctc_lin_fit`", :lq_ctc_correction)
+    return lq_ctc_lin_fit(lq, dt_eff, e_cal, dep_µ, dep_σ; kwargs...)
+end
+export lq_ctc_correction
