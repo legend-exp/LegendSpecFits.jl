@@ -41,7 +41,7 @@ function advanced_time_and_memory_control( ; start_time::Float64=time(), start_m
     if mem_limit < 0
         mem_limit = optim_max_mem
     end
-    function callback(x::Optimization.OptimizationState)
+    function callback(x::OptimizationState)
         # @debug " * Iteration:       $(x.iteration)"
         so_far =  time() - start_time
         # @debug " * Time so far:     $so_far"
