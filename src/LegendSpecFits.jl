@@ -30,10 +30,11 @@ using Measurements
 using Measurements: value
 using Measurements: uncertainty
 using OrderedCollections
-using Optimization
+using Optimization: solve, OptimizationFunction, OptimizationProblem, OptimizationState
 using OptimizationBBO
 using OptimizationNLopt
 using OptimizationOptimJL
+import OptimizationLBFGSB
 using PropDicts
 using RadiationSpectra
 using RadiationSpectra: peakfinder
