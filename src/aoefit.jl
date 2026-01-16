@@ -239,6 +239,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
                             mean_residuals = mean(residuals_norm),
                             median_residuals = median(residuals_norm),
                             std_residuals = std(residuals_norm),
+                            residuals_norm = residuals_norm,
                             converged = converged),
                         )
                     )
@@ -247,7 +248,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
             h = h,
             f_fit = x -> Base.Fix2(fit_function, v_ml)(x),
             f_components = aoe_compton_peakshape_components(fit_func, v_ml),
-            gof = merge(result.gof, (residuals = residuals, residuals_norm = residuals_norm,))        )
+            gof = merge(result.gof, (residuals = residuals,))        )
     else
         # get fwhm of peak
         fwhm, fwhm_err = get_peak_fwhm_aoe_compton(v_ml, v_ml, Base.Fix2(fit_function, v_ml), false)
