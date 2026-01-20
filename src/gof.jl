@@ -51,7 +51,7 @@ function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{Na
     chi2 = sum((model_counts[counts .> 0] - counts[counts .> 0]) .^ 2 ./ model_counts[counts .> 0])
     npar = length(v_ml)
     dof = length(counts[counts .> 0]) - npar
-    if dof<0
+    if dof<=0
         pval = NaN # tbd 
     else
         pval = ccdf(Chisq(dof),chi2)
