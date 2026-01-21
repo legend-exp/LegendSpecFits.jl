@@ -14,5 +14,6 @@ Test.@testset "Package LegendSpecFits" begin
     include("test_lq.jl")
     include("test_aoe.jl")
     include("test_simplecal.jl")
+    include("test_par_grid_binned_mc_result.jl")
     isempty(Test.detect_ambiguities(LegendSpecFits))
 end # testset
