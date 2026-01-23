@@ -50,12 +50,12 @@ function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{Na
     # calculate chi2
     chi2 = sum((model_counts[counts .> 0] - counts[counts .> 0]) .^ 2 ./ model_counts[counts .> 0])
     npar = length(v_ml)
-    dof = length(counts[counts .> 0]) - npar
-    if dof<=0
-        pval = NaN # tbd 
-    else
-        pval = ccdf(Chisq(dof),chi2)
+    n_bins = length(counts[counts .> 0])
+    dof = n_bins - npar
+    if dof <= 0
+        throw(ErrorException("Insufficient statistics for p-value: $n_bins bins with counts > 0, but $npar fit parameters (need > $npar bins)"))
     end
+    pval = ccdf(Chisq(dof), chi2)
     if any(counts .<= 5)
         @debug "Bin width <= $(round(minimum(counts), digits=0)) counts - Chi2 test might be not valid"
     else
@@ -81,12 +81,12 @@ function p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml
     chi2 = -2*(loglikelihood_ml - loglikelihood_null) # likelihood ratio. this quantity should follow chi2 distribution. 
 
     npar = length(v_ml)
-    dof = length(counts[counts .> 0]) - npar
-    pval = if dof <= 0
-        0.0
-    else
-        ccdf(Chisq(dof), chi2)
+    n_bins = length(counts[counts .> 0])
+    dof = n_bins - npar
+    if dof <= 0
+        throw(ErrorException("Insufficient statistics for p-value: $n_bins bins with counts > 0, but $npar fit parameters (need > $npar bins)"))
     end
+    pval = ccdf(Chisq(dof), chi2)
 
     return pval, chi2, dof
 end
