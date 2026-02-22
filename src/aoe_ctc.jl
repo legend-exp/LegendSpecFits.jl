@@ -25,10 +25,13 @@ function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQ
     compton_start = ustrip.(compton_bands)
     compton_end = compton_start .+ 20
     # create mask (make sure everything is unitless)
+    # also filter out NaN/Inf values in aoe and qdrift
+    finite_mask = isfinite.(aoe_all) .&& isfinite.(qdrift_e_all)
     mask = falses(length(ustrip.(ecal_all)))
     for i in 1:length(compton_start)
         mask .|= compton_start[i] .<= ustrip.(ecal_all) .<= compton_end[i]
     end
+    mask .&= finite_mask
     # Filter the energies, aoe and qdrift values based on the mask
     aoe = aoe_all[mask]
     qdrift_e = qdrift_e_all[mask]
