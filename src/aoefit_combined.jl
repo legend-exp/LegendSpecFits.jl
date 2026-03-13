@@ -299,7 +299,7 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
         # sum chi2 and dof of individual fits to compute the p-value for the combined fits
         chi2 = reduce((acc, x) -> if x.gof.converged acc + x.gof.chi2 else acc end, values(result_bands), init = 0.)
         dof  = reduce((acc, x) -> if x.gof.converged acc + x.gof.dof else acc end, values(result_bands), init = 0.)
-        pval = ccdf(Chisq(dof), chi2)
+        pval = dof <= 0 ? NaN : ccdf(Chisq(dof), chi2)
 
         # concatenate the normalized residuals of all individual fits
         residuals      = vcat(get.(getproperty.(values(report_bands), :gof), :residuals, Ref([]))...)
