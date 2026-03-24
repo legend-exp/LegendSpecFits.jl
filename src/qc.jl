@@ -15,7 +15,9 @@ function qc_window_cut end
 export qc_window_cut
 
 function qc_window_cut(tab::Table, config::AbstractDict)
-    cols = keys(config)
+    cols = collect(keys(config))
+
+    @assert all([typeof(col) == Symbol && col in propertynames(tab) for col in cols]) "All columns specified in the config must be present in the table"
 
     # create return and result dicts
     v_result = Vector{NamedTuple}(undef, length(cols))
@@ -26,13 +28,13 @@ function qc_window_cut(tab::Table, config::AbstractDict)
     Threads.@threads for i in eachindex(cols)
         col = cols[i]
         col_config = get(config, col, nothing)
-        result_col, report_col = qc_window_cut(getproperty(tab, Symbol(col)), col_config[:min], col_config[:max], col_config[:sigma], ; col_expression=Symbol(col), NamedTuple(col_config[:kwargs])...)
+        result_col, report_col = qc_window_cut(getproperty(tab, col), col_config[:min], col_config[:max], col_config[:sigma], ; col_expression=Symbol(col), NamedTuple(col_config[:kwargs])...)
         v_result[i] = result_col
         v_report[i] = report_col
         @debug "$col cut surrival fraction: $(round(mean(result_col.low_cut .< getproperty(tab, col) .< result_col.high_cut) * 100, digits=2))%"
     end
 
-    result = merge((qc = join(getproperty.(v_result, :qc), " && "),), NamedTuple{cols}(v_result))
+    result = merge((qc = join(getproperty.(v_result, :qc), " && "),), NamedTuple{Tuple(cols)}(v_result))
     report = OrderedDict{Symbol, NamedTuple}(cols .=> v_report)
 
     return result, report
