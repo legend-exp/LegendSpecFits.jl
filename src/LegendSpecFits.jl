@@ -34,7 +34,6 @@ using Optimization
 using OptimizationBBO
 using OptimizationNLopt
 using OptimizationOptimJL
-using PropDicts
 using RadiationSpectra
 using RadiationSpectra: peakfinder
 using Roots

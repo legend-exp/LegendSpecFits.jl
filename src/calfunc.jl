@@ -22,28 +22,5 @@ function (f::PolCalFunc{N,T})(x::U) where {N,T,U}
 end
 
 
-function Base.convert(::Type{PolCalFunc{N,T}}, p::PropDict) where {N,T}
-    funcstr = p.func
-    if !(funcstr in ("pol1", "[0]+[1]*x", "pol2"))
-        error("Unsupported function \"$funcstr\" for $(PolCalFunc{N,T})")
-    end
-
-    coeffs = zeros(T, N)
-    for (i,v) in p.params
-        coeffs[i + 1] = v
-    end
-    PolCalFunc(coeffs...)
-end
-
-
-function Base.convert(::Type{Dict{Int, PolCalFunc{N,T}}}, p::PropDict) where {N,T}
-    calfuncs = Dict{Int, PolCalFunc{N,T}}()
-    for (ch, caldict) in p
-        calfuncs[ch] = convert(PolCalFunc{2,Float64}, caldict)
-    end
-    calfuncs
-end
-
-
 const CalFuncDict = Dict{Int,PolCalFunc{2,Float64}}
 export CalFuncDict

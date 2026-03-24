@@ -80,7 +80,7 @@ with_logger(logger) do
             :kwargs => PropDict(:relative_cut => 0.01, :n_bins => -1, :fixed_center => false, :left => true)
         ))
         
-        result, report = @test_nowarn qc_window_cut(t, config, (:x1, :x2))
+        result, report = @test_nowarn qc_window_cut(t, config)
 
         @test isapprox(mvalue(result.x2.low_cut), -2.0; atol= 0.05)
         @test isapprox(mvalue(result.x2.high_cut), 2.0; atol= 0.05)
@@ -100,7 +100,7 @@ with_logger(logger) do
             :sigma => 1.0,
             :kwargs => PropDict(:relative_cut => 0.01, :n_bins => -1, :fixed_center => false, :left => true)
         )
-        result, report = @test_nowarn qc_window_cut(t, config, (:x1, :x2,))
+        result, report = @test_nowarn qc_window_cut(t, config)
 
         @test unit(result.x1.low_cut) == unit(result.x1.high_cut) == u"s"
         @test unit(result.x2.low_cut) == unit(result.x2.high_cut) == u"s"
