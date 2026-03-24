@@ -14,9 +14,8 @@ The `config` is a `PropDict` containing the configuration for each column to be 
 function qc_window_cut end
 export qc_window_cut
 
-function qc_window_cut(tab::Table, config::PropDict, cols::NTuple{<:Any, Symbol})
-    @assert all(hasproperty.(Ref(tab), cols)) "Not all columns found in the data"
-    @assert all(hasproperty.(Ref(config), cols)) "Not all columns found in the config"
+function qc_window_cut(tab::Table, config::AbstractDict)
+    cols = keys(config)
 
     # create return and result dicts
     v_result = Vector{NamedTuple}(undef, length(cols))
@@ -26,7 +25,8 @@ function qc_window_cut(tab::Table, config::PropDict, cols::NTuple{<:Any, Symbol}
 
     Threads.@threads for i in eachindex(cols)
         col = cols[i]
-        result_col, report_col = qc_window_cut(getproperty(tab, col), config[col].min, config[col].max, config[col].sigma, ; col_expression=col, NamedTuple(config[col].kwargs)...)
+        col_config = get(config, col, nothing)
+        result_col, report_col = qc_window_cut(getproperty(tab, Symbol(col)), col_config[:min], col_config[:max], col_config[:sigma], ; col_expression=Symbol(col), NamedTuple(col_config[:kwargs])...)
         v_result[i] = result_col
         v_report[i] = report_col
         @debug "$col cut surrival fraction: $(round(mean(result_col.low_cut .< getproperty(tab, col) .< result_col.high_cut) * 100, digits=2))%"
