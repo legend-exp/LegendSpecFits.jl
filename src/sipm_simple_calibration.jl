@@ -26,6 +26,15 @@ Returns
 function sipm_simple_calibration end
 export sipm_simple_calibration
 
+function sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real}; initial_min_amp::Real=0.0, initial_max_amp::Real=50.0, relative_cut_noise_cut::Real=0.5, n_fwhm_noise_cut::Real=5.0, kwargs...)
+    pe_flat = filter(isfinite, reduce(vcat, pe_uncal_vov))
+    cuts_1pe = cut_single_peak(pe_flat, initial_min_amp, initial_max_amp, relative_cut=relative_cut_noise_cut)
+    noise_threshold = n_fwhm_noise_cut == 0.0 ? initial_min_amp : cuts_1pe.max + n_fwhm_noise_cut * (cuts_1pe.high - cuts_1pe.max)
+    pe_uncal = reduce(vcat, [trigs for trigs in pe_uncal_vov if count(t -> isfinite(t) && t > noise_threshold, trigs) == 1])
+    filter!(isfinite, pe_uncal)
+    return sipm_simple_calibration(pe_uncal; initial_min_amp=initial_min_amp, initial_max_amp=initial_max_amp, relative_cut_noise_cut=relative_cut_noise_cut, n_fwhm_noise_cut=n_fwhm_noise_cut, kwargs...)
+end
+
 function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     min_pe_peak::Int=1, max_pe_peak::Int=5, relative_cut_noise_cut::Real=0.5, n_fwhm_noise_cut::Real=5.0,
     initial_min_amp::Real=0.0, initial_max_amp::Real=50.0, initial_max_bin_width_quantile::Real=0.9, 
