@@ -37,7 +37,19 @@ function _find_noise_threshold(pe_data, cuts_1pe, n_fwhm_noise_cut, initial_min_
         _noise_hw = max(cuts_1pe.high - cuts_1pe.max, 0.1)
         _search_end = min(cuts_1pe.max + n_fwhm_noise_cut * _noise_hw, initial_max_amp)
         _h = fit(Histogram, filter(x -> cuts_1pe.high ≤ x ≤ _search_end, pe_data), cuts_1pe.high:_noise_hw:_search_end)
-        return length(_h.weights) > 0 ? _h.edges[1][argmin(_h.weights) + 1] : cuts_1pe.high
+        if length(_h.weights) == 0
+            return cuts_1pe.high
+        end
+        # find first local minimum: first bin where counts start rising again
+        _w = _h.weights
+        _min_idx = argmin(_w)
+        for i in 2:length(_w)
+            if _w[i] > _w[i-1]
+                _min_idx = i - 1
+                break
+            end
+        end
+        return _h.edges[1][_min_idx + 1]
     end
 end
 
@@ -122,6 +134,25 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
 
     # simple calibration
     sort!(peakpos)
+
+    # Merge close peaks for SiPM arrays with split PE peaks (e.g. multi-channel arrays)
+    # If sub-peaks of the same PE level are closer than 60% of the estimated gain, merge them
+    if length(peakpos) >= 3
+        _diffs = diff(peakpos)
+        _gain_est = maximum(_diffs)
+        _merged = [peakpos[1]]
+        for i in 2:length(peakpos)
+            if peakpos[i] - _merged[end] < 0.6 * _gain_est
+                _merged[end] = (_merged[end] + peakpos[i]) / 2
+            else
+                push!(_merged, peakpos[i])
+            end
+        end
+        if length(_merged) >= 2
+            peakpos = _merged
+        end
+    end
+
     @debug "Found $(min_pe_peak) PE Peak positions: $(peakpos[1])"
     @debug "Found $(min_pe_peak+1) PE Peak positions: $(peakpos[2])"
     gain = peakpos[2] - peakpos[1]
