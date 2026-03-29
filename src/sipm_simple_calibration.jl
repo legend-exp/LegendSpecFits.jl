@@ -37,17 +37,19 @@ function _find_noise_threshold(pe_data, cuts_1pe, n_fwhm_noise_cut, initial_min_
         _noise_hw = max(cuts_1pe.high - cuts_1pe.max, 0.1)
         _search_end = min(cuts_1pe.max + n_fwhm_noise_cut * _noise_hw, initial_max_amp)
         _h = fit(Histogram, filter(x -> cuts_1pe.high ≤ x ≤ _search_end, pe_data), cuts_1pe.high:_noise_hw:_search_end)
-        return length(_h.weights) > 0 ? StatsBase.midpoints(_h.edges[1])[argmin(_h.weights)] : cuts_1pe.high
+        return length(_h.weights) > 0 ? _h.edges[1][argmin(_h.weights) + 1] : cuts_1pe.high
     end
 end
 
 function sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real}; initial_min_amp::Real=0.0, initial_max_amp::Real=50.0, relative_cut_noise_cut::Real=0.5, n_fwhm_noise_cut::Real=5.0, kwargs...)
+    # 1. Find noise peak and valley on all triggers
     pe_flat = filter(isfinite, reduce(vcat, pe_uncal_vov))
     cuts_1pe = cut_single_peak(pe_flat, initial_min_amp, initial_max_amp, relative_cut=relative_cut_noise_cut)
     noise_threshold = _find_noise_threshold(pe_flat, cuts_1pe, n_fwhm_noise_cut, initial_min_amp, initial_max_amp)
-    pe_uncal = reduce(vcat, [trigs for trigs in pe_uncal_vov if count(t -> isfinite(t) && t > noise_threshold, trigs) == 1])
-    filter!(isfinite, pe_uncal)
-    return sipm_simple_calibration(pe_uncal; initial_min_amp=initial_min_amp, initial_max_amp=initial_max_amp, relative_cut_noise_cut=relative_cut_noise_cut, n_fwhm_noise_cut=n_fwhm_noise_cut, kwargs...)
+    # 2. Keep only above-threshold triggers from waveforms with exactly 1 trigger above threshold
+    pe_uncal = [t for trigs in pe_uncal_vov if count(t -> isfinite(t) && t > noise_threshold, trigs) == 1 for t in trigs if isfinite(t) && t > noise_threshold]
+    # 3. Pass to Vector method with noise cut already applied (n_fwhm_noise_cut=0, initial_min_amp=noise_threshold)
+    return sipm_simple_calibration(pe_uncal; initial_min_amp=noise_threshold, initial_max_amp=initial_max_amp, relative_cut_noise_cut=relative_cut_noise_cut, n_fwhm_noise_cut=0.0, kwargs...)
 end
 
 function sipm_simple_calibration(pe_uncal::Vector{<:Real};
