@@ -10,27 +10,34 @@ Fit the FWHM of the peaks to a quadratic function.
 function fit_fwhm end
 export fit_fwhm
 
-function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true)
+function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true, fano_term::Unitful.Energy{<:Real}=2.96e-2*0.11u"keV")
     @assert length(peaks) == length(fwhm) "Peaks and FWHM must have the same length"
-    @assert pol_order >= 1 "The polynomial order must be greater than 0"
+    @assert pol_order != 1 || pol_order != 2 "Only 1, 2 order polynominal calibration is supported"
     
-    # fit FWHM fit function
-    _linear_intercept(x1::Float64, x2::Float64, y1::Float64, y2::Float64) = y1 - ((y2 - y1) / (x2 - x1)) * x1
-    intercept_first_two_points = _linear_intercept(mvalue.(ustrip.(e_unit,sort(peaks)[1:2]))..., mvalue.(ustrip.(e_unit, fwhm[sortperm(peaks)[1:2]]))...)
-    intercept_guess = if intercept_first_two_points > 0.1
-        intercept_first_two_points
+
+    # pre-fit linear model to get a better initial guess for the intercept
+    X = hcat(ones(length(peaks)), mvalue.(ustrip.(e_unit, peaks))) # Creates a matrix where column 1 is all 1s, column 2 is x
+    β = X \ mvalue.(ustrip.(e_unit, fwhm)).^2
+    intercept = β[1]
+
+    enc_guess = if intercept > 0.1
+        β[1]
     else
-        0.9*mvalue(ustrip(e_unit, fwhm[argmin(peaks)]))
+        mvalue(ustrip(e_unit, fwhm[argmin(peaks)]))
     end
+    fano_guess = ustrip(e_unit, fano_term)
+    # fit FWHM fit function
     @debug "Fit resolution curve with $(pol_order)-order polynominal function"
-    p_start = append!([intercept_guess, 2.96e-3*0.11], fill(0.0, pol_order-1))
+    p_start = append!([enc_guess, fano_guess], fill(0.0, pol_order-1))
     @debug "Initial parameters: $p_start"
-    pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, intercept_guess)
+    pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, enc_guess, fano_guess)
     @debug "Pseudo prior: $pseudo_prior"
 
     # fit FWHM fit function as a square root of a polynomial
-    result_chi2, report_chi2 = chi2fit(x -> LegendSpecFits.heaviside(x)*sqrt(abs(x)), pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm); v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
-    
+    # result_chi2, report_chi2 = chi2fit(x -> LegendSpecFits.heaviside(x)*sqrt(abs(x)), pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm); v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
+    result_chi2, report_chi2_linear = chi2fit(pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm).^2; v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
+    report_chi2 = NamedTuple{keys(report_chi2_linear)}(merge(report_chi2_linear, (y = ustrip.(e_unit, fwhm), f_fit = x -> sqrt(report_chi2_linear.f_fit(x)))))
+
     # get pars and apply unit
     par =  result_chi2.par
     par_unit = par .* [e_unit^i for i in pol_order:-1:0]
@@ -51,19 +58,19 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
 end
 fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = fit_fwhm(1, peaks, fwhm; kwargs...)
 
-function get_fit_fwhm_pseudo_prior(pol_order::Int, intercept_guess::Real; fano_term::Float64=2.96e-3*0.11)
+function get_fit_fwhm_pseudo_prior(pol_order::Int, enc_guess::Real, fano_term::Real)
     unshaped(if pol_order == 1
         NamedTupleDist(
-            enc = weibull_from_mx(intercept_guess, 1.2*intercept_guess),
-            fano = Normal(fano_term, 0.33*fano_term)
+            enc = weibull_from_mx(enc_guess, 1.5*enc_guess),
+            fano = weibull_from_mx(fano_term, 1.33*fano_term)
         )
     elseif pol_order == 2
         NamedTupleDist(
-            enc = weibull_from_mx(intercept_guess, 1.2*intercept_guess),
-            fano = Normal(fano_term, 0.2*fano_term),
-            ct = weibull_from_mx((0.01*fano_term)^2, (0.05*fano_term)^2)
+            enc = weibull_from_mx(enc_guess, 1.2*enc_guess),
+            fano = weibull_from_mx(fano_term, 1.2*fano_term),
+            ct = Uniform(0, fano_term)
         )
     else
-        throw(ArgumentError("Only 0, 1, 2 order polynominal calibration is supported"))
+        throw(ArgumentError("Only 1, 2 order polynominal calibration is supported"))
     end)
 end
