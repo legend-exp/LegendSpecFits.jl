@@ -68,7 +68,8 @@ function get_fit_fwhm_pseudo_prior(pol_order::Int, enc_guess::Real, fano_term::R
         NamedTupleDist(
             enc = weibull_from_mx(enc_guess, 1.2*enc_guess),
             fano = weibull_from_mx(fano_term, 1.2*fano_term),
-            ct = Uniform(0, fano_term)
+            # for a √ of a quadratic function, the function is concave if fano^2/(4*enc) < ct, and convex if fano^2/(4*enc) >  ct, so let's take 0.5 as a conservative guess for the upper limit of ct, and 0 as the lower limit
+            ct = Uniform(0, fano_term^2/(4*enc_guess)/2)
         )
     else
         throw(ArgumentError("Only 1, 2 order polynominal calibration is supported"))
