@@ -71,7 +71,6 @@ function _simple_linear_fit(x::Vector{<:Real}, y::Vector{<:Real})
 
     # Calculate the Variance-Covariance matrix
     # We need the inverse of (X' * X). We can do this by solving (X' * X) \\ I
-    # Let's manually create an identity matrix to stay strictly package-free
     I_mat = [i == j ? 1.0 : 0.0 for i in 1:p, j in 1:p]
 
     cov_matrix = sigma_sq * ((X' * X) \ I_mat)
@@ -89,7 +88,7 @@ function _get_enc_fano_guess(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vect
     enc_guess, fano_guess = if enc_guess < 0 # if the ENC is negative, set it to a small positive value (e.g. 0.01) to avoid issues with the fit function
         @warn "ENC is negative in initial guess, trying different intial guess strategy"
         enc_guess, fano_guess_non_squared = _simple_linear_fit(mvalue.(ustrip.(e_unit, peaks)), mvalue.(ustrip.(e_unit, fwhm)))
-        if enc_guess < 0 # if the ENC is still negative, set it to first FWHM value as very rough estimate
+        if enc_guess < 0.0 # if the ENC is still negative, set it to first FWHM value as very rough estimate
             @warn "ENC is still negative in initial guess lowest FWHM"
             measurement(mvalue(ustrip(e_unit, fwhm[sortperm(peaks)])), mvalue(ustrip(e_unit, fwhm[sortperm(peaks)]*0.8))), fano_guess_non_squared
         else
@@ -112,7 +111,7 @@ function get_fit_fwhm_pseudo_prior(pol_order::Int, enc_guess::Measurement, fano_
     # create pseudo prior for fit parameters using initial fit pars for pseudo priors
     # fano_guess = 2.96e-2*0.11
     pprior_base = NamedTupleDist(
-        enc = truncated(weibull_from_mx(mvalue(enc_guess), mvalue(enc_guess) + ifelse(muncert(enc_guess) > 0.05, muncert(enc_guess), 1.2*mvalue(enc_guess))).untruncated, 0.3, Inf),
+        enc = truncated(weibull_from_mx(mvalue(enc_guess), mvalue(enc_guess) + ifelse(muncert(enc_guess) > 0.05, muncert(enc_guess), 1.2*mvalue(enc_guess))).untruncated, ifelse(mvalue(enc_guess) < 0.3, 0.3*mvalue(enc_guess), 0.3), Inf),
         fano = weibull_from_mx(mvalue(fano_guess), 10*mvalue(fano_guess)),
         # for a √ of a quadratic function, the function is concave if fano^2/(4*enc) < ct, and convex if fano^2/(4*enc) >  ct, so let's take 0.5 as a conservative guess for the upper limit of ct, and 0 as the lower limit
         ct = Uniform(0, mvalue(fano_guess^2/(4*enc_guess)/2))
