@@ -2,116 +2,117 @@
     sipm_simple_calibration(pe_uncal::AbstractVector{<:Real})
     sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real})
 
-Perform a simple calibration for the uncalibrated p.e. spectrum array `pe_uncal`
-using the 1 p.e. and 2 p.e. peak positions estimated by a peakfinder.
+Simple SiPM calibration from the 1 PE and 2 PE peak positions found by a
+peakfinder. The noise/1PE cut is auto-detected at the centroid of the first
+valley after the noise peak.
 
-The noise-1PE threshold is auto-detected as the first local minimum (valley) of
-the amplitude histogram between the noise peak and the upper search bound.
-`n_fwhm_noise_cut` caps the search window in units of the noise-peak
-half-width above its center; if no valley is found within this window, the
-window cap itself is returned (legacy FWHM formula). A value of `0.0` skips
-valley detection and uses `initial_min_amp` directly. Negative values force the
-legacy FWHM formula `cuts_1pe.max + n_fwhm_noise_cut * fwhm_noise` (kept for
-backward-compatibility with configs that intentionally dip into the noise peak).
+`n_fwhm_noise_cut` caps the valley search window in units of the noise-peak
+half-width above its center. `0.0` skips valley detection and uses
+`initial_min_amp`. Negative values force the legacy formula
+`cuts_1pe.max + n_fwhm_noise_cut * fwhm_noise` (kept for backward-compatibility
+with configs that dip into the noise peak).
 
-When called with a `VectorOfVectors{<:Real}` (per-waveform trigger amplitudes),
-an optional second-stage QC keeps only waveforms with exactly one trigger above
-the detected noise threshold (`single_trigger_only=true`, default). Set to
-`false` to use all triggers above threshold without per-waveform multiplicity
-filtering.
+For VoV input, an optional second-stage QC (`single_trigger_only=true`) keeps
+only waveforms with exactly one trigger above the detected threshold.
 
-Inputs:
-    * `pe_uncal`: vector of uncalibrated peak amplitudes, or VoV per-waveform
 kwargs:
-    * `initial_min_amp`, `initial_max_amp`: initial histogram bounds for the noise/peak search
-    * `relative_cut_noise_cut`: passed to `cut_single_peak` for the noise peak
+    * `initial_min_amp`, `initial_max_amp`: histogram bounds for the noise/peak search
+    * `relative_cut_noise_cut`: passed to `cut_single_peak`
     * `n_fwhm_noise_cut`: see above
-    * `single_trigger_only` (VoV only): if `true`, keep only single-trigger-above-threshold waveforms
+    * `single_trigger_only` (VoV only)
     * `min_pe_peak`, `max_pe_peak`, `peakfinder_*`: peakfinder controls
 
-Returns
-    * `result`: NamedTuple with `pe_simple_cal`, `peakpos`, `f_simple_calib`,
-      `f_simple_uncal`, `c`, `offset`, `noisepeakpos`, `noisepeakwidth`,
-      `noise_threshold`, `noise_threshold_cal`
-    * `report`: NamedTuple with `peakpos`, `peakpos_cal`, `h_uncal`,
-      `h_calsimple`, `noise_threshold`, `noise_threshold_cal`, `valley_found`
+Returns `(result, report)`. `result` carries the calibration (`f_simple_calib`,
+`c`, `offset`, `peakpos`, `noisepeakpos`, `noisepeakwidth`, `noise_threshold`,
+`noise_threshold_cal`). `report` carries plotting data (`peakpos*`, `h_uncal`,
+`h_calsimple`, `h_*_full` for the unfiltered all-trigger spectra,
+`noise_threshold*`, `valley_found`).
 """
 function sipm_simple_calibration end
 export sipm_simple_calibration
 
-# Auto-detect the *first* valley between the noise peak and the 1 PE peak.
-# Returns `(threshold, valley_found::Bool)`. Walks the smoothed histogram from
-# left to right and exits at the first local minimum that lies sufficiently
-# below the start of the search window — so multi-channel SiPMs with split 1PE
-# sub-peaks return the noise/sub-peak valley, not the deeper 1PE/2PE valley.
+# Detects the noise/1PE valley by walking a smoothed 40-bin histogram,
+# tracking the running minimum, and exiting once the curve clearly rises
+# again. The cut is placed at the centroid of the plateau at the minimum, so
+# wide empty valleys land mid-region rather than at the leftmost zero bin.
 function _find_noise_threshold(pe_data, cuts_1pe, n_fwhm_noise_cut, initial_min_amp, initial_max_amp)
-    if n_fwhm_noise_cut == 0.0
-        return initial_min_amp, false
-    elseif n_fwhm_noise_cut < 0.0
-        # Legacy: explicit FWHM formula, no valley search.
-        return cuts_1pe.max + n_fwhm_noise_cut * (cuts_1pe.high - cuts_1pe.max), false
-    end
+    n_fwhm_noise_cut == 0.0 && return initial_min_amp, false
+    n_fwhm_noise_cut < 0.0 && return cuts_1pe.max + n_fwhm_noise_cut * (cuts_1pe.high - cuts_1pe.max), false
+
     fwhm_noise = max(cuts_1pe.high - cuts_1pe.max, 0.1)
     search_end = min(cuts_1pe.max + n_fwhm_noise_cut * fwhm_noise, initial_max_amp)
-    if search_end ≤ cuts_1pe.high
-        return cuts_1pe.high, false
-    end
-    # ~40 bins across the search window — decoupled from the noise-peak width.
-    nbins = 40
-    edges = range(cuts_1pe.high, search_end; length=nbins + 1)
+    search_end ≤ cuts_1pe.high && return cuts_1pe.high, false
+
+    edges = range(cuts_1pe.high, search_end; length=41)
     h = fit(Histogram, filter(x -> cuts_1pe.high ≤ x ≤ search_end, pe_data), edges)
-    w = h.weights
-    sg_window = 5  # odd, ≥ degree + 1 for quadratic Savitzky–Golay
-    if length(w) < sg_window + 2
-        return search_end, false
-    end
-    # Smooth to suppress Poisson fluctuations on the falling noise tail.
-    w_s = savitzky_golay(w, sg_window, 2).y
-    # Depth gate: only accept a valley once we've descended to at most 50% of
-    # the start of the search window. The reference is the max of the first
-    # few bins to avoid being thrown by a single low first bin.
+    length(h.weights) < 7 && return search_end, false
+    w_s = savitzky_golay(h.weights, 5, 2).y
+
+    rise_factor = 1.5
     descent_threshold = 0.5 * maximum(@view w_s[1:min(3, length(w_s))])
-    for i in 2:length(w_s)-1
-        if w_s[i] ≤ descent_threshold && w_s[i] ≤ w_s[i-1] && w_s[i] < w_s[i+1]
-            return edges[i+1], true
+    running_min, running_min_idx, exit_idx = w_s[1], 1, 0
+    for i in 2:length(w_s)
+        if w_s[i] < running_min
+            running_min, running_min_idx = w_s[i], i
+        # `+ 2.0` floor handles near-empty valleys where `rise_factor * 0 == 0`.
+        elseif w_s[i] > max(rise_factor * running_min, running_min + 2.0) && running_min ≤ descent_threshold
+            exit_idx = i
+            break
         end
     end
-    return search_end, false
+    exit_idx == 0 && return search_end, false
+
+    # Centroid the cut over the bins from where `running_min` was first reached
+    # up to the rise — i.e. the actual flat region. Bins still on the descent
+    # before reaching `running_min` are excluded so the cut isn't biased left.
+    plateau_floor = max(rise_factor * running_min, running_min + 1.0)
+    plateau_idxs = findall(j -> w_s[j] ≤ plateau_floor, running_min_idx:exit_idx-1)
+    # Plateau too short → no real valley (e.g. noise tail blends into the 1PE
+    # rising flank). Fall back to N×FWHM above the noise peak.
+    length(plateau_idxs) < 4 && return cuts_1pe.max + 3.0 * fwhm_noise, false
+    idx = running_min_idx - 1 + (first(plateau_idxs) + last(plateau_idxs)) ÷ 2
+    return edges[idx + 1], true
 end
 
 function sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real};
     initial_min_amp::Real=0.0, initial_max_amp::Real=50.0,
     relative_cut_noise_cut::Real=0.5, n_fwhm_noise_cut::Real=5.0,
-    single_trigger_only::Bool=true, kwargs...
+    single_trigger_only::Bool=true, cut_pool_max_mult::Int=3, kwargs...
 )
-    # Detect the noise threshold globally on the flat trigger distribution.
-    pe_flat = filter(isfinite, reduce(vcat, pe_uncal_vov))
-    cuts_1pe = cut_single_peak(pe_flat, initial_min_amp, initial_max_amp, relative_cut=relative_cut_noise_cut)
-    noise_threshold, valley_found = _find_noise_threshold(pe_flat, cuts_1pe, n_fwhm_noise_cut, initial_min_amp, initial_max_amp)
+    # Cut-detection pool: low-multiplicity waveforms (≤ `cut_pool_max_mult`
+    # triggers). Excludes heavily contaminated multi-trig waveforms while
+    # keeping enough statistics for the noise peak and valley to be visible.
+    cut_pool = if single_trigger_only
+        [t for trigs in pe_uncal_vov if length(trigs) ≤ cut_pool_max_mult
+              for t in trigs if isfinite(t)]
+    else
+        filter(isfinite, reduce(vcat, pe_uncal_vov))
+    end
+    cuts_1pe = cut_single_peak(cut_pool, initial_min_amp, initial_max_amp, relative_cut=relative_cut_noise_cut)
+    noise_threshold, valley_found = _find_noise_threshold(cut_pool, cuts_1pe, n_fwhm_noise_cut, initial_min_amp, initial_max_amp)
 
-    # Optional second-stage QC: keep only above-threshold triggers from waveforms
-    # with exactly one trigger above the noise threshold.
+    # Calibration pool: triggers from waveforms with exactly one trigger above
+    # the cut. Looser than 1-trig-total → more statistics for the peakfinder.
     pe_uncal = if single_trigger_only
         [t for trigs in pe_uncal_vov
               if count(t -> isfinite(t) && t > noise_threshold, trigs) == 1
               for t in trigs if isfinite(t) && t > noise_threshold]
     else
-        filter(x -> x > noise_threshold, pe_flat)
+        filter(x -> x > noise_threshold, cut_pool)
     end
 
-    # Threshold already applied → tell the Vector method to skip its own valley detection.
+    # Threshold already applied → skip the Vector method's own valley detection.
     result, report = sipm_simple_calibration(pe_uncal;
         initial_min_amp=noise_threshold, initial_max_amp=initial_max_amp,
         relative_cut_noise_cut=relative_cut_noise_cut, n_fwhm_noise_cut=0.0,
         kwargs...)
 
-    # Override the threshold/valley fields with the values detected at the VoV level.
     noise_threshold_cal = result.f_simple_calib(noise_threshold)
-    result = merge(result, (noise_threshold = noise_threshold,
-                            noise_threshold_cal = noise_threshold_cal))
-    report = merge(report, (noise_threshold = noise_threshold,
-                            noise_threshold_cal = noise_threshold_cal,
-                            valley_found = valley_found))
+    h_uncal_full = fit(Histogram, cut_pool, first(report.h_uncal.edges))
+    h_calsimple_full = fit(Histogram, result.f_simple_calib.(cut_pool), first(report.h_calsimple.edges))
+    result = merge(result, (; noise_threshold, noise_threshold_cal))
+    report = merge(report, (; noise_threshold, noise_threshold_cal, valley_found,
+                              h_uncal_full, h_calsimple_full))
     return result, report
 end
 
@@ -223,27 +224,14 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     h_calsimple = fit(Histogram, pe_simple_cal, 0.0:bin_width_cal:max_pe_peak + 1)
     h_uncal = fit(Histogram, pe_uncal, 0.0:bin_width_uncal:f_simple_uncal(max_pe_peak + 1))
 
-    noise_threshold_cal = f_simple_calib(bin_width_cut_min)
-    result = (
-        pe_simple_cal = pe_simple_cal,
-        peakpos = peakpos,
-        f_simple_calib = f_simple_calib,
-        f_simple_uncal = f_simple_uncal,
-        c = c,
-        offset = offset,
-        noisepeakpos = cuts_1pe.max,
-        noisepeakwidth = cuts_1pe.high - cuts_1pe.low,
-        noise_threshold = bin_width_cut_min,
-        noise_threshold_cal = noise_threshold_cal,
-    )
-    report = (
-        peakpos = peakpos,
-        peakpos_cal = peakpos_cal,
-        h_uncal = h_uncal,
-        h_calsimple = h_calsimple,
-        noise_threshold = bin_width_cut_min,
-        noise_threshold_cal = noise_threshold_cal,
-        valley_found = valley_found,
-    )
+    noise_threshold = bin_width_cut_min
+    noise_threshold_cal = f_simple_calib(noise_threshold)
+    noisepeakpos, noisepeakwidth = cuts_1pe.max, cuts_1pe.high - cuts_1pe.low
+    result = (; pe_simple_cal, peakpos, f_simple_calib, f_simple_uncal, c, offset,
+                noisepeakpos, noisepeakwidth, noise_threshold, noise_threshold_cal)
+    # The VoV method overwrites `h_*_full` with the unfiltered all-trigger spectra.
+    report = (; peakpos, peakpos_cal, h_uncal, h_calsimple,
+                h_uncal_full = h_uncal, h_calsimple_full = h_calsimple,
+                noise_threshold, noise_threshold_cal, valley_found)
     return result, report
 end
