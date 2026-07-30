@@ -32,6 +32,7 @@ using Measurements: uncertainty
 using OrderedCollections
 using Optimization
 using OptimizationBBO
+using OptimizationLBFGSB: LBFGSB
 using OptimizationNLopt
 using OptimizationOptimJL
 using RadiationSpectra

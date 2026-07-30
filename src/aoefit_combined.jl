@@ -32,7 +32,7 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
     # MLE
     optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
     optpro = OptimizationProblem(optf, v_init, ())
-    res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
+    res = solve(optpro, LBFGSB(), maxiters = 3000)#, maxtime=optim_time_limit)
 
     converged = (res.retcode == ReturnCode.Success)
     if !converged @warn "Fit did not converge" end
@@ -129,7 +129,7 @@ function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram
     if optimize
         optf = OptimizationFunction((u, p) -> ((-) ∘ f_loglike ∘ inverse(f_trafo))(u), AutoForwardDiff())
         optpro = OptimizationProblem(optf, v_init, ())
-        res = solve(optpro, Optimization.LBFGS(), maxiters = 3000)#, maxtime=optim_time_limit)
+        res = solve(optpro, LBFGSB(), maxiters = 3000)#, maxtime=optim_time_limit)
 
         converged = (res.retcode == ReturnCode.Success)
         if !converged @warn "Fit did not converge" end
