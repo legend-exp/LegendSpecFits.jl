@@ -10,6 +10,7 @@ using Interpolations
 using Unitful
 using TypedTables
 using PropDicts
+using Random
 include("test_utils.jl")
 
 
@@ -17,17 +18,21 @@ logger = ConsoleLogger(stderr, Logging.Info)
 
 with_logger(logger) do
     @testset "cuts" begin
-        # compose dummy data 
+        # compose dummy data
         dist = Normal(0.0, 1.0)
-        x = rand(dist, 1000000)
+        x = rand(Xoshiro(1234), dist, 1000000)
         @testset "cut_single_peak" begin
+            # The peak position is the position of the highest bin. The density
+            # is flat near the peak, so with automatic (fine) binning the
+            # highest bin scatters by about 0.1:
+            atol_max = 0.3
             x_cut = @test_nowarn cut_single_peak(x, -10.0, 10.0; relative_cut = 0.5, n_bins = -1)
-            @test isapprox(x_cut.max, 0.0; atol=0.1)
+            @test isapprox(x_cut.max, 0.0; atol=atol_max)
             @test isapprox(x_cut.high - x_cut.low, 2.355; atol=0.1)
-            
+
             x_cut_unit = @test_nowarn cut_single_peak(x .*u"s", -10.0u"s", 10.0u"s"; relative_cut = 0.5, n_bins = -1)
             @test unit(x_cut_unit.max) == u"s"
-            @test isapprox(x_cut_unit.max, 0.0u"s"; atol=0.1u"s")
+            @test isapprox(x_cut_unit.max, 0.0u"s"; atol=atol_max*u"s")
             @test isapprox(x_cut_unit.high - x_cut_unit.low, 2.355u"s"; atol=0.1u"s")
         end
 
