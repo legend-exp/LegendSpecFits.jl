@@ -60,9 +60,10 @@ with_logger(logger) do
 
     @testset "qc" begin
         # compose dummy data
+        rng = Xoshiro(1234)
         dist1 = Normal(0.0, 1.0)
-        
-        result, report = @test_nowarn qc_window_cut(rand(dist1, 1000000), -10.0, 10.0, 2.0; NamedTuple(PropDict(:relative_cut => 0.01, :n_bins => -1, :fixed_center => false, :left => false))...)
+
+        result, report = @test_nowarn qc_window_cut(rand(rng, dist1, 1000000), -10.0, 10.0, 2.0; NamedTuple(PropDict(:relative_cut => 0.01, :n_bins => -1, :fixed_center => false, :left => false))...)
 
         @test isapprox(mvalue(result.low_cut), -2.0; atol=0.05)
         @test isapprox(mvalue(result.high_cut), 2.0; atol=0.05)
@@ -70,7 +71,7 @@ with_logger(logger) do
         @test isapprox(mvalue(result.σ), 1.0; atol=0.05)
         
         dist2 = Normal(0.0, 2.0)
-        t = Table(x1 = rand(dist1, 1000000), x2 = rand(dist2, 1000000))
+        t = Table(x1 = rand(rng, dist1, 1000000), x2 = rand(rng, dist2, 1000000))
 
         config = PropDict(:x1 => PropDict(
             :min => -10.0,
@@ -92,7 +93,7 @@ with_logger(logger) do
         @test isapprox(mvalue(result.x2.μ), 0.0; atol= 0.05)
         @test isapprox(mvalue(result.x2.σ), 2.0; atol= 0.05)
 
-        t = Table(x1 = rand(dist1, 1000000) .* u"s", x2 = rand(dist2, 1000000) .* u"s")
+        t = Table(x1 = rand(rng, dist1, 1000000) .* u"s", x2 = rand(rng, dist2, 1000000) .* u"s")
         config.x1 = PropDict(
             :min => -10.0u"s",
             :max => 10.0u"s",
