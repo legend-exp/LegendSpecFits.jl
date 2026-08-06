@@ -183,6 +183,8 @@ function ex_step_gauss(
     x::Real, l::Real, k::Real, 
     t::Real, d::Real
 )
+    # `+ l` as published in GERDA Eq. (1), EPJC 73 (2013) 2583 (l ≈ 1 in
+    # normalized A/E, so nearly identical to a logistic-style `+ 1`):
     return (exp(k*(x-l)) + d) / (exp((x-l)/t) + l)
 end
 export ex_step_gauss
