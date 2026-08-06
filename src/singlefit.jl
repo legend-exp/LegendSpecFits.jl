@@ -16,6 +16,8 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     cut_low, cut_high = ifelse(isnan(cut_low), minimum(x), cut_low), ifelse(isnan(cut_high), maximum(x), cut_high)
 
     bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
+    # degenerate input (single value or fits piling up on one value) cannot be binned
+    bin_width > 0 || throw(ArgumentError("degenerate distribution in ($(cut_low*x_unit), $(cut_high*x_unit)): IQR = 0 over $(count(cut_low .<= x .<= cut_high)) entries"))
     # bound the range: single diverging outliers (e.g. tail-fit τ → ±Inf) would explode the bin count
     x_min, x_max = max(minimum(x), cut_low - 100*bin_width), min(maximum(x), cut_high + 100*bin_width)
     x_nocut = copy(x)
