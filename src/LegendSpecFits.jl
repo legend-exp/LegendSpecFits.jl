@@ -15,6 +15,7 @@ using ArgCheck
 using ArraysOfArrays
 using BAT
 using DensityInterface
+using DensityInterface: densityof
 using Distributions
 using FillArrays
 using Format
@@ -26,6 +27,8 @@ using IrrationalConstants
 using LaTeXStrings
 using LogExpFunctions
 using LsqFit
+using MeasureBase: massof, smf, weightedmeasure
+import MeasureBase
 using Measurements
 using Measurements: value
 using Measurements: uncertainty
@@ -53,6 +56,7 @@ const e_unit=u"keV"
 include("utils.jl")
 include("memory_utils.jl")
 include("peakshapes.jl")
+include("shape_measures.jl")
 include("likelihoods.jl")
 include("priors.jl")
 include("peakstats.jl")
