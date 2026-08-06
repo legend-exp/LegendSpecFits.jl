@@ -145,6 +145,7 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
         # sanity check
         if count(min_e .< e_ft .< max_e) < 100
             @debug "Not enough data points for FT $ft, skipping"
+            skip_reason[f] = "fewer than 100 events in the (min_e, max_e) window"
             continue
         end
         # cut around peak to increase performance
@@ -256,6 +257,7 @@ function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vecto
         # sanity check
         if count(min_e .< e_ft .< max_e) < 100
             @debug "Not enough data points for FT $ft, skipping"
+            skip_reason[f] = "fewer than 100 events in the (min_e, max_e) window"
             continue
         end
         # cut around peak to increase performance
