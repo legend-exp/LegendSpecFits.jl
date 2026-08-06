@@ -16,7 +16,8 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
     cut_low, cut_high = ifelse(isnan(cut_low), minimum(x), cut_low), ifelse(isnan(cut_high), maximum(x), cut_high)
 
     bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
-    x_min, x_max = extrema(x)
+    # bound the range: single diverging outliers (e.g. tail-fit τ → ±Inf) would explode the bin count
+    x_min, x_max = max(minimum(x), cut_low - 100*bin_width), min(maximum(x), cut_high + 100*bin_width)
     x_nocut = copy(x)
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
     ps = estimate_single_peak_stats_simple(h_nocut)
