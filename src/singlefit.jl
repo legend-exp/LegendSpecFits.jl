@@ -102,7 +102,8 @@ function fit_single_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::N
         @debug "μ: $(v_ml.μ)"
         @debug "σ: $(v_ml.σ)"
 
-        result = merge(v_ml, )
+        # attach units like the uncertainty branch does — callers get a consistent API
+        result = NamedTuple{keys(v_ml)}([v_ml[k] * x_unit for k in keys(v_ml)])
     end
 
     # create histogram of nocut data for normalization 20 sigma around peak
