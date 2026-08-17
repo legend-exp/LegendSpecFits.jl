@@ -86,7 +86,8 @@ function sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real};
         [t for trigs in pe_uncal_vov if length(trigs) ≤ cut_pool_max_mult
               for t in trigs if isfinite(t)]
     else
-        filter(isfinite, reduce(vcat, pe_uncal_vov))
+        # flatview is the flat backing vector of the VoV - linear, no pairwise vcat copies
+        filter(isfinite, flatview(pe_uncal_vov))
     end
     cuts_1pe = cut_single_peak(cut_pool, initial_min_amp, initial_max_amp, relative_cut=relative_cut_noise_cut)
     noise_threshold, valley_found = _find_noise_threshold(cut_pool, cuts_1pe, n_fwhm_noise_cut, initial_min_amp, initial_max_amp)
