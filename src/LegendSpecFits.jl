@@ -14,8 +14,10 @@ using Random
 using ArgCheck
 using ArraysOfArrays
 using BAT
+using BAT: batmeasure
 using DensityInterface
 using DensityInterface: densityof
+using FunctionChains: ffcomp
 using Distributions
 using FillArrays
 using Format
@@ -27,7 +29,7 @@ using IrrationalConstants
 using LaTeXStrings
 using LogExpFunctions
 using LsqFit
-using MeasureBase: massof, smf, weightedmeasure
+using MeasureBase: AbstractMeasure, massof, smf, weightedmeasure, likelihoodof
 import MeasureBase
 using Measurements
 using Measurements: value
@@ -57,6 +59,7 @@ include("utils.jl")
 include("memory_utils.jl")
 include("peakshapes.jl")
 include("shape_measures.jl")
+include("poisson_process.jl")
 include("likelihoods.jl")
 include("priors.jl")
 include("peakstats.jl")

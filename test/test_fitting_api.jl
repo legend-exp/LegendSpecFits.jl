@@ -4,6 +4,7 @@ using LegendSpecFits
 using Test
 
 using BAT, DensityInterface, Distributions, MeasureBase
+using StatsBase
 using SpecialFunctions: erfc
 import ForwardDiff, LinearAlgebra
 
@@ -71,6 +72,76 @@ using LegendSpecFits: GaussPeak, LowETailPeak, HighETailPeak, GaussianStep, Poly
     @test densityof(model, x) ≈ 90 * densityof(GaussPeak(2.0, 0.5), x) +
         10 * densityof(LowETailPeak(2.0, 0.5, 0.3), x) +
         densityof(PolynomialShape(5.0, 0.1), x) + 20 * densityof(GaussianStep(2.0, 0.5), x)
+end
+
+
+@testset "poisson_process" begin
+    edges = 0.0:0.5:4.0
+    d = Normal(2.0, 0.7)
+    masses = LegendSpecFits._bin_masses(BAT.batmeasure(d), collect(edges))
+
+    # Simpson's rule bin masses against exact CDF differences:
+    @test masses ≈ diff(cdf.(d, collect(edges))) rtol = 1e-3
+
+    # Bin masses distribute over the measure tree:
+    m1 = GaussPeak(2.0, 0.5)
+    m2 = PolynomialShape(5.0, 0.1)
+    @test LegendSpecFits._bin_masses(2.0 * m1 + m2, collect(edges)) ≈
+        2.0 * LegendSpecFits._bin_masses(m1, collect(edges)) + LegendSpecFits._bin_masses(m2, collect(edges))
+
+    # Shapes are integrated via analytic smf differences, so a peak far
+    # narrower than a bin keeps its full mass (Simpson returned zero here):
+    @test LegendSpecFits._bin_masses(GaussPeak(0.25, 0.001), [0.0, 1.0]) ≈ [1.0]
+    @test sum(LegendSpecFits._bin_masses(GaussPeak(2.0, 0.005), collect(1.9:0.01:2.1))) ≈ 1.0
+    @test smf(GaussPeak(2.0, 0.5), 2.35) ≈ cdf(Normal(2.0, 0.5), 2.35)
+    # smf differences match resolved Simpson quadrature for all shapes:
+    edges_f = collect(1.8:0.001:2.2)
+    for m in (LowETailPeak(2.0, 0.05, 0.03), HighETailPeak(2.0, 0.05, 0.03),
+              GaussianStep(2.0, 0.5), ExpDecay(2.0, 1.5))
+        @test LegendSpecFits._bin_masses(m, edges_f) ≈ LegendSpecFits._simpson_bin_masses(m, edges_f) rtol = 1e-6
+    end
+    # EMG tail-peak masses: near-unit total, and mirror symmetry about μ:
+    @test smf(LowETailPeak(2.0, 0.05, 0.03), 3.0) - smf(LowETailPeak(2.0, 0.05, 0.03), 1.0) ≈ 1.0
+    @test smf(HighETailPeak(2.0, 0.05, 0.03), 2.1) - smf(HighETailPeak(2.0, 0.05, 0.03), 1.9) ≈
+        smf(LowETailPeak(2.0, 0.05, 0.03), 2.1) - smf(LowETailPeak(2.0, 0.05, 0.03), 1.9)
+    # Analytic checks for the background shapes:
+    @test LegendSpecFits._bin_masses(PolynomialShape(1.0, 0.5, 0.1, x0 = 2.0), [1.0, 3.0]) ≈ [2 + 0.2 / 3]
+    @test LegendSpecFits._bin_masses(ExpDecay(2.0, Inf), [0.0, 0.5, 1.0]) ≈ [0.5, 0.5]
+    @test only(LegendSpecFits._bin_masses(GaussianStep(2.0, 0.5), [-100.0, -99.0])) ≈ 1.0
+    # AD through the exact bin masses:
+    @test isfinite(ForwardDiff.derivative(σ -> only(LegendSpecFits._bin_masses(GaussPeak(2.0, σ), [1.9, 2.0])), 0.05))
+    @test isfinite(ForwardDiff.derivative(θ -> only(LegendSpecFits._bin_masses(LowETailPeak(2.0, 0.05, θ), [1.8, 2.0])), 0.03))
+
+    # Binned Poisson process against an explicit computation, the variates
+    # are the vectors of bin counts:
+    h = Histogram(edges, fill(3, length(edges) - 1))
+    bpp = BinnedPoissonProcess(100.0 * m1 + m2, edges)
+    λ = LegendSpecFits._bin_masses(100.0 * m1 + m2, collect(edges))
+    @test logdensityof(bpp, h.weights) ≈ sum(logpdf.(Poisson.(λ), h.weights))
+
+    # Negative rates are invalid, empty bins must not reward them (regression):
+    @test LegendSpecFits._poisson_logpdf(-1.0, 0.0) == -Inf
+    @test LegendSpecFits._poisson_logpdf(-1.0, 2.0) == -Inf
+    @test LegendSpecFits._poisson_logpdf(0.0, 0.0) == 0.0
+    @test LegendSpecFits._poisson_logpdf(0.0, 1.0) == -Inf
+
+    # Distribution intensities are converted to measures:
+    @test BinnedPoissonProcess(d, edges) isa BinnedPoissonProcess{<:BAT.BATMeasure}
+
+    # Binned likelihood from a model kernel and from a fixed intensity:
+    ℒ = binned_poisson_likelihood(p -> p.a * m1 + m2, h)
+    @test logdensityof(ℒ, (a = 100.0,)) ≈ logdensityof(bpp, h.weights)
+    @test isfinite(ForwardDiff.derivative(a -> logdensityof(ℒ, (a = a,)), 100.0))
+    ℒ0 = binned_poisson_likelihood(100.0 * m1 + m2, h)
+    @test logdensityof(ℒ0, NamedTuple()) ≈ logdensityof(bpp, h.weights)
+
+    # Only non-negative integer counts are valid Poisson observations,
+    # integer-valued floating-point counts are accepted:
+    n_bins = length(edges) - 1
+    @test_throws ArgumentError binned_poisson_likelihood(100.0 * m1 + m2, Histogram(edges, [1.5; fill(3.0, n_bins - 1)]))
+    @test_throws ArgumentError binned_poisson_likelihood(100.0 * m1 + m2, Histogram(edges, [-1; fill(3, n_bins - 1)]))
+    ℒf = binned_poisson_likelihood(100.0 * m1 + m2, Histogram(edges, fill(3.0, n_bins)))
+    @test logdensityof(ℒf, NamedTuple()) ≈ logdensityof(bpp, h.weights)
 end
 
 
