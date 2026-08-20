@@ -3,10 +3,11 @@
 using LegendSpecFits
 using Test
 
-using BAT, DensityInterface, Distributions, MeasureBase
-using StatsBase
+using BAT, DensityInterface, Distributions, FunctionChains, MeasureBase, PropertyFunctions
+using StatsBase, ValueShapes
+using Random
 using SpecialFunctions: erfc
-import ForwardDiff, LinearAlgebra
+import ForwardDiff, LinearAlgebra, Optim
 
 using LegendSpecFits: GaussPeak, LowETailPeak, HighETailPeak, GaussianStep, PolynomialShape, ExpDecay
 
@@ -145,3 +146,60 @@ end
 end
 
 
+@testset "fitting_api_end_to_end" begin
+    Random.seed!(7)
+    mu_t, sigma_t, theta_t, alpha_t = 2.0, 0.05, 0.03, 0.1
+    n_t, sp_t, b_t = 5000.0, 0.7, 40.0
+
+    model_at(a, b, mu, sigma, theta, alpha) =
+        a * ((1 - alpha) * GaussPeak(mu, sigma) + alpha * LowETailPeak(mu, sigma, theta)) +
+        PolynomialShape(b) + (b / 2) * GaussianStep(mu, sigma)
+
+    edges = 1.0:0.01:3.0
+    function sample_hist(m)
+        λ = LegendSpecFits._bin_masses(m, collect(edges))
+        Histogram(edges, [rand(Poisson(l)) for l in λ])
+    end
+    h1 = sample_hist(model_at(n_t * sp_t, b_t, mu_t, sigma_t, theta_t, alpha_t))
+    h2 = sample_hist(model_at(n_t * (1 - sp_t), b_t, mu_t, sigma_t, theta_t, alpha_t))
+
+    model1 = @pf model_at($a_1, $b_1, $mu, $sigma, $theta, $alpha)
+    model2 = @pf model_at($a_2, $b_2, $mu, $sigma, $theta, $alpha)
+
+    like1 = binned_poisson_likelihood(model1, h1)
+    like2 = binned_poisson_likelihood(model2, h2)
+    # Function fusion absorbs the binned-process construction into the @pf model:
+    @test like2.k isa PropertyFunction
+    jlike = joint_likelihood(like1, like2)
+
+    like = ffchain(
+        @pf((a_1 = $n * $sp, a_2 = $n * (1 - $sp), b_1 = $b_1, b_2 = $b_2,
+             mu = $mu, sigma = $sigma, theta = $theta, alpha = $alpha)),
+        jlike
+    )
+
+    prior = distprod(
+        n = Uniform(100, 50000), sp = Uniform(0, 1),
+        b_1 = Uniform(1, 500), b_2 = Uniform(1, 500),
+        mu = Uniform(1.5, 2.5), sigma = Uniform(0.005, 0.5),
+        theta = Uniform(0.005, 0.5), alpha = Uniform(0.001, 0.5)
+    )
+    pstr = PosteriorMeasure(like, prior)
+    @test BAT.getlikelihood(pstr) isa BAT.JointLikelihood
+
+    context = BATContext(ad = ForwardDiff)
+    init = ExplicitInit([(n = 4000.0, sp = 0.6, b_1 = 60.0, b_2 = 60.0, mu = 2.1, sigma = 0.08, theta = 0.05, alpha = 0.2)])
+    algo = OptimAlg(optalg = Optim.LBFGS(), init = init, maxiters = 2000)
+
+    r_mll = bat_bgml(like, prior, algo, context)
+    @test r_mll.result.n ≈ n_t rtol = 0.05
+    @test r_mll.result.sp ≈ sp_t rtol = 0.05
+    @test r_mll.result.mu ≈ mu_t rtol = 0.005
+    @test r_mll.result.sigma ≈ sigma_t rtol = 0.05
+    @test r_mll.result.b_1 ≈ b_t rtol = 0.2
+    @test r_mll.result.b_2 ≈ b_t rtol = 0.2
+
+    # With flat priors the maximum a posteriori estimate matches:
+    r_map = bat_findmode(pstr, algo, context)
+    @test r_map.result.mu ≈ r_mll.result.mu atol = 1e-6
+end
