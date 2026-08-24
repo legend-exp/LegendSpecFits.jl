@@ -74,7 +74,7 @@ function p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml
     counts, bin_widths, bin_centers = _prepare_data(h) # prepare data
     model_func = Base.Fix2(fit_func, v_ml) # fix the fit parameters to ML best-estimate
 
-    bin_ll(x, bw, k) = logpdf(Poisson(bw * model_func(x)), k) # loglikelihood per bin, evaluated for best-fit parameters (v_ml)
+    bin_ll(x, bw, k) = poisson_binll(bw * model_func(x), k) # loglikelihood per bin, evaluated for best-fit parameters (v_ml)
     loglikelihood_ml = sum(Base.Broadcast.broadcasted(bin_ll, bin_centers, bin_widths, counts)) # joint loglikelihood, evaluated for best-fit parameters (v_ml)
 
     loglikelihood_null = sum(logpdf.(Poisson.(counts), counts))  # joint loglikelihood, evaluate for data only
@@ -98,7 +98,7 @@ function likelihood_ratio(f_fit::Base.Callable, h::Histogram{<:Real,1})
     counts = h.weights
     bin_centers = (bin_edges[begin:end-1] .+ bin_edges[begin+1:end]) ./ 2
     bin_widths = bin_edges[begin+1:end] .- bin_edges[begin:end-1]
-    bin_ll(x, bw, k) = logpdf(Poisson(bw * f_fit(x)), k)
+    bin_ll(x, bw, k) = poisson_binll(bw * f_fit(x), k)
     loglikelihood_ml = sum(Base.Broadcast.broadcasted(bin_ll, bin_centers, bin_widths, counts))
     loglikelihood = sum(logpdf.(Poisson.(counts), counts))
     -2*(loglikelihood_ml - loglikelihood)
