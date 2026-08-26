@@ -57,7 +57,7 @@ LegendSpecFitsRecipesBaseExt = ["RecipesBase", "Plots"]
 
 [compat]
 ArgCheck = "1, 2"
-ArraysOfArrays = "0.5, 0.6"
+ArraysOfArrays = "0.5, 0.6, 1"
 BAT = "4.2"
 ChangesOfVariables = "0.1.3"
 DensityInterface = "0.4"
