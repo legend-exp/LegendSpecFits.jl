@@ -80,6 +80,8 @@ function estimate_single_peak_stats_th228(h::Histogram{T}) where T<:Real
         peak_fwhm = 2.0
     end
     # peak_area = peak_amplitude * peak_sigma * sqrt(2*π)
+    # the 7-bin sidebands overlap the peak (and underflow) with <= 14 bins - fail with a speaking error
+    length(W) > 14 || throw(ArgumentError("peak histogram has only $(length(W)) bins - too few events in the peak window for a background estimate"))
     # calculate mean background and step
     idx_bkg_left = something(findfirst(x -> x >= peak_pos - 15*peak_sigma, E[2:end]), 7)
     idx_bkg_right = something(findfirst(x -> x >= peak_pos + 15*peak_sigma, E[2:end]), length(W) - 7)
