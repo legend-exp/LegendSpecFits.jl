@@ -217,18 +217,8 @@ function estimate_fwhm(v::NamedTuple)
         f_sigWithTail = Base.Fix2(get_th228_fit_functions().gamma_sigWithTail,v)
         try
             e_low, e_high = v.skew_fraction <= 0.5 ? (v.μ - v.σ, v.μ + v.σ) : (v.μ * (1 - v.skew_width), v.μ * (1 + v.skew_width))
-            
-            max_sig = -Inf
-            for e in e_low:0.001:e_high
-                fe = f_sigWithTail(e)
-                if fe > max_sig
-                    max_sig = fe
-                else
-                    # if the maximum is reached,
-                    # no need to further continue
-                    break
-                end
-            end
+            # the maximum is the zero of the derivative inside the bracket
+            max_sig = f_sigWithTail(find_zero(x -> ForwardDiff.derivative(f_sigWithTail, x), (e_low, e_high), Bisection()))
             half_max_sig = max_sig/2
             
             tmp = x -> f_sigWithTail(x) - half_max_sig
