@@ -13,7 +13,9 @@ export fit_fwhm
 function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true)
     @assert length(peaks) == length(fwhm) "Peaks and FWHM must have the same length"
     @assert pol_order >= 1 "The polynomial order must be greater than 0"
-    
+    # needs pol_order+1 points and the intercept guess uses the first two (BoundsError with a single peak)
+    length(peaks) >= max(2, pol_order + 1) || throw(ArgumentError("FWHM fit with pol_order $pol_order needs at least $(max(2, pol_order + 1)) peaks, got $(length(peaks)) - not enough peaks passed the fit QC"))
+
     # fit FWHM fit function
     _linear_intercept(x1::Float64, x2::Float64, y1::Float64, y2::Float64) = y1 - ((y2 - y1) / (x2 - x1)) * x1
     intercept_first_two_points = _linear_intercept(mvalue.(ustrip.(e_unit,sort(peaks)[1:2]))..., mvalue.(ustrip.(e_unit, fwhm[sortperm(peaks)[1:2]]))...)
