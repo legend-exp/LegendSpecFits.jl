@@ -14,16 +14,15 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     @assert length(peaks) == length(fwhm) "Peaks and FWHM must have the same length"
     @assert pol_order >= 1 "The polynomial order must be greater than 0"
     
-    # fit FWHM fit function
-    _linear_intercept(x1::Float64, x2::Float64, y1::Float64, y2::Float64) = y1 - ((y2 - y1) / (x2 - x1)) * x1
-    intercept_first_two_points = _linear_intercept(mvalue.(ustrip.(e_unit,sort(peaks)[1:2]))..., mvalue.(ustrip.(e_unit, fwhm[sortperm(peaks)[1:2]]))...)
-    intercept_guess = if intercept_first_two_points > 0.1
-        intercept_first_two_points
-    else
-        0.9*mvalue(ustrip(e_unit, fwhm[argmin(peaks)]))
-    end
+    # start value and prior mode of the ENC term from weighted least squares of fwhm² = enc + fano * e: the fit parameter is
+    # fwhm² (keV²); a FWHM intercept (keV) is off by a factor FWHM and the optimizer then sticks at the prior mode (χ²/ndf ≫ 1)
+    e_val, f_val, f_err = mvalue.(ustrip.(e_unit, peaks)), mvalue.(ustrip.(e_unit, fwhm)), muncert.(ustrip.(e_unit, fwhm))
+    w = all(>(0), f_err) ? (2 .* f_val .* f_err) .^ -2 : ones(length(f_val))
+    X = hcat(ones(length(e_val)), e_val)
+    enc_wls, fano_wls = (X' * (w .* X)) \ (X' * (w .* f_val .^ 2))
+    intercept_guess = enc_wls > 0.1 ? enc_wls : 0.9 * minimum(f_val)^2
     @debug "Fit resolution curve with $(pol_order)-order polynominal function"
-    p_start = append!([intercept_guess, 2.96e-3*0.11], fill(0.0, pol_order-1))
+    p_start = append!([intercept_guess, max(fano_wls, 2.96e-3*0.11)], fill(0.0, pol_order-1))
     @debug "Initial parameters: $p_start"
     pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, intercept_guess)
     @debug "Pseudo prior: $pseudo_prior"
