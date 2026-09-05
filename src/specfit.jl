@@ -217,9 +217,12 @@ function estimate_fwhm(v::NamedTuple)
         f_sigWithTail = Base.Fix2(get_th228_fit_functions().gamma_sigWithTail,v)
         try
             e_low, e_high = v.skew_fraction <= 0.5 ? (v.μ - v.σ, v.μ + v.σ) : (v.μ * (1 - v.skew_width), v.μ * (1 + v.skew_width))
-            
+
+            # cap the scan at 1e5 steps - a huge MC σ would otherwise make this loop run for hours
+            step = max(0.001, (e_high - e_low) / 100_000)
+
             max_sig = -Inf
-            for e in e_low:0.001:e_high
+            for e in e_low:step:e_high
                 fe = f_sigWithTail(e)
                 if fe > max_sig
                     max_sig = fe
