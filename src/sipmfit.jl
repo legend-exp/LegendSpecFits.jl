@@ -47,7 +47,8 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
     pes = ceil(Int, min_pe):1:floor(Int, max_pe)
 
     # calculate bin width for histogram
-    bin_width = get_friedman_diaconis_bin_width(filter(in((-Δpe_peak_assignment..Δpe_peak_assignment) .+ first(pes)), pe_cal))
+    # explicit endpoints: broadcasting `(-Δ..Δ) .+ pe` over an interval is not supported by IntervalSets
+    bin_width = get_friedman_diaconis_bin_width(filter(in((first(pes) - Δpe_peak_assignment)..(first(pes) + Δpe_peak_assignment)), pe_cal))
 
     # create gof NamedTuple
     gof, gof_report = NamedTuple(), NamedTuple()
@@ -102,12 +103,12 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
     end
 
     # get pe_pos
-    get_pe_pos = pe -> let sel = in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)
+    get_pe_pos = pe -> let sel = in.(μ, Ref((pe - Δpe_peak_assignment)..(pe + Δpe_peak_assignment)))
         dot(view(μ, sel), view(w, sel)) / sum(view(w, sel))
     end
 
     # get pe resolution (FWHM)
-    get_pe_res = pe -> let sel = in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)
+    get_pe_res = pe -> let sel = in.(μ, Ref((pe - Δpe_peak_assignment)..(pe + Δpe_peak_assignment)))
         model_parameters = [
             view(μ_ml, sel),
             view(σ_ml, sel),
@@ -133,7 +134,7 @@ function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Rea
     end
 
 
-    n_pos_mixtures = [count(in.(μ, (-Δpe_peak_assignment..Δpe_peak_assignment) .+ pe)) for pe in pes]
+    n_pos_mixtures = [count(in((pe - Δpe_peak_assignment)..(pe + Δpe_peak_assignment)), μ) for pe in pes]
 
     pe_pos = get_pe_pos.(pes)
     pe_res = get_pe_res.(pes)
