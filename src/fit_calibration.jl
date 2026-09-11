@@ -9,9 +9,17 @@ Fit the calibration lines with polynomial function of pol_order order
         * `gof`: godness of fit
     * `report`: 
 """
+# an empty peak list (nothing passed the fit QC) arrives as an untyped Vector{Any} - fail readably
+function fit_calibration(pol_order::Int, µ::AbstractVector, peaks::AbstractVector; kwargs...)
+    isempty(µ) && throw(ArgumentError("calibration fit needs at least one peak position - no peak passed the fit QC"))
+    throw(MethodError(fit_calibration, (pol_order, µ, peaks)))
+end
+
 function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e", m_cal_simple::Union{MaybeWithEnergyUnits, Nothing} = nothing, uncertainty::Bool=true)
     @assert length(peaks) == length(μ) "Number of calibration points does not match the number of energies"
     @assert pol_order >= 1 "The polynomial order must be greater than 0"
+    # empty typed vectors (Vector{Union{}} from an empty comprehension) pass the untyped guard
+    isempty(µ) && throw(ArgumentError("calibration fit needs at least one peak position - no peak passed the fit QC"))
 
     e_unit = unit(first(peaks))
     # make all inputs unitless with the dimension e_unit

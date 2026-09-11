@@ -131,6 +131,8 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
     fwhm = Vector{Measurement}(undef, length(e_grid_ft))
     modes = Vector{Float64}(undef, length(e_grid_ft))
     fts_success  = Bool.(zeros(length(e_grid_ft)))
+    # per-gridpoint skip reason, surfaced in the error message if no point survives
+    skip_reason  = fill("", length(e_grid_ft))
     
     Threads.@threads for f in eachindex(e_grid_ft)
         # get ft
@@ -143,6 +145,7 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
         # sanity check
         if count(min_e .< e_ft .< max_e) < 100
             @debug "Not enough data points for FT $ft, skipping"
+            skip_reason[f] = "fewer than 100 events in the (min_e, max_e) window"
             continue
         end
         # cut around peak to increase performance
@@ -153,6 +156,7 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
         # create histogram from it
         if isempty(e_ft)
             @debug "Invalid energy vector, skipping"
+            skip_reason[f] = "empty peak-cut energy vector"
             continue
         end
         bin_width = 2 * (quantile(e_ft, 0.75) - quantile(e_ft, 0.25)) / ∛(length(e_ft))
@@ -163,6 +167,7 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
         # check if ps guess is valid
         if any(tuple_to_array(ps) .<= 0)
             @debug "Invalid guess for peakstats, skipping"
+            skip_reason[f] = "invalid peak-stats guess (smeared/missing peak)"
             continue
         end
         # fit peak 
@@ -182,7 +187,7 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
     # get minimal fwhm and rt
     if isempty(fwhm)
         @error "No valid FWHM found."
-        throw(ErrorException("No valid FWHM found, could not determine optimal FT"))
+        throw(ErrorException("No valid FWHM on any of the $(length(e_grid_ft)) FT grid points ($(join(["$(count(==(r), skip_reason))x $r" for r in unique(filter(!isempty, skip_reason))], ", "))) — check the FEP peak shape of this channel; a det-specific optimization override or usability change may be needed"))
     else
         # calibration constant from mean of modes
         c = peak ./ mean(modes)
@@ -236,6 +241,8 @@ function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vecto
     fwhm = Vector{Measurement}(undef, length(e_grid_ft))
     modes = Vector{Float64}(undef, length(e_grid_ft))
     fts_success  = Bool.(zeros(length(e_grid_ft)))
+    # per-gridpoint skip reason, surfaced in the error message if no point survives
+    skip_reason  = fill("", length(e_grid_ft))
     
     Threads.@threads for f in eachindex(e_grid_ft)
         # get ft
@@ -250,6 +257,7 @@ function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vecto
         # sanity check
         if count(min_e .< e_ft .< max_e) < 100
             @debug "Not enough data points for FT $ft, skipping"
+            skip_reason[f] = "fewer than 100 events in the (min_e, max_e) window"
             continue
         end
         # cut around peak to increase performance
@@ -267,6 +275,7 @@ function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vecto
         # check if ps guess is valid
         if any(tuple_to_array(ps) .<= 0)
             @debug "Invalid guess for peakstats, skipping"
+            skip_reason[f] = "invalid peak-stats guess (smeared/missing peak)"
             continue
         end
         # fit peak
@@ -287,7 +296,7 @@ function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vecto
     # get minimal fwhm and rt
     if isempty(fwhm)
         @error "No valid FWHM found."
-        throw(ErrorException("No valid FWHM found, could not determine optimal FT"))
+        throw(ErrorException("No valid FWHM on any of the $(length(e_grid_ft)) FT grid points ($(join(["$(count(==(r), skip_reason))x $r" for r in unique(filter(!isempty, skip_reason))], ", "))) — check the FEP peak shape of this channel; a det-specific optimization override or usability change may be needed"))
     else
         # calibration constant from mean of modes
         c = peak ./ mean(modes)

@@ -16,6 +16,8 @@ function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_
 
     # cut out window of interest
     x = x[(x .> min_x) .&& (x .< max_x)]
+    # fail clearly instead of an obscure reduce-empty error deep inside the histogram fit
+    isempty(x) && throw(ArgumentError("no entries in ($(min_x*x_unit), $(max_x*x_unit)), cannot locate a peak"))
 
     # fit histogram
     if n_bins < 0
@@ -44,7 +46,8 @@ function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_
 
             # find left and right edge of peak
             cut_low_arg  = findfirst(w -> w >= relative_cut*cts_max, h.weights[1:cts_argmax])
-            cut_high_arg = findfirst(w -> w <= relative_cut*cts_max, h.weights[cts_argmax:end]) + cts_argmax - 1
+            # a peak flush against the window edge never drops below the relative cut: use the last edge
+            cut_high_arg = something(findfirst(w -> w <= relative_cut*cts_max, h.weights[cts_argmax:end]), length(h.weights) - cts_argmax + 2) + cts_argmax - 1
             cut_low, cut_high, cut_max = Array(h.edges[1])[cut_low_arg] * x_unit, Array(h.edges[1])[cut_high_arg] * x_unit, Array(h.edges[1])[cts_argmax] * x_unit
         else
             @debug "Cut window: [$cut_low, $cut_high]"

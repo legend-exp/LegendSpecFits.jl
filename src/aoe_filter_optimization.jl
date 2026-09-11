@@ -61,6 +61,8 @@ function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
     fts_success = Bool.(zeros(length(a_grid_wl_sg)))
     sep_sfs = Vector{Quantity}(undef, length(a_grid_wl_sg))
     wls = Vector{eltype(a_grid_wl_sg)}(undef, length(a_grid_wl_sg))
+    # per-gridpoint failure reason, surfaced in the error message if the scan comes up empty
+    skip_reason = fill("", length(a_grid_wl_sg))
 
     # for each window lenght, calculate the survival fraction in the SEP
     Threads.@threads for i_aoe in eachindex(a_grid_wl_sg)
@@ -90,6 +92,7 @@ function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
             fts_success[i_aoe] = true
         catch e
             @warn "Couldn't process window length $wl"
+            skip_reason[i_aoe] = first(sprint(showerror, e), 80)
         end
         yield()
     end
@@ -98,11 +101,14 @@ function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
     sep_sfs = sep_sfs[fts_success]
     wls = wls[fts_success]
 
-    # get minimal survival fraction and window length
+    # get minimal survival fraction and window length; a single point is no optimization (report consumers assume a grid)
     sep_sfs_cut = 1.0u"percent" .< sep_sfs .< 100u"percent"
-    if isempty(sep_sfs[sep_sfs_cut])
+    if count(sep_sfs_cut) < 2
+        reasons = join(["$(count(==(r), skip_reason))x $r" for r in unique(filter(!isempty, skip_reason))], ", ")
         @error "No valid SEP SF found"
-        throw(ErrorException("No valid SF found, could not determine optimal window length"))
+        throw(ErrorException("only $(count(sep_sfs_cut)) of $(length(a_grid_wl_sg)) window-length grid points gave a valid SF " *
+            "($(count(.!sep_sfs_cut))x SF outside (1, 100) %$(isempty(reasons) ? "" : ", " * reasons)) — at least 2 required; " *
+            "check DEP/SEP statistics of this channel; a det-specific override or aoe status change may be needed"))
     end
     min_sf       = minimum(sep_sfs[sep_sfs_cut])
     wl_sg_min_sf = wls[sep_sfs_cut][findmin(sep_sfs[sep_sfs_cut])[2]]
