@@ -19,7 +19,7 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     enc_guess, fano_guess = _get_enc_fano_guess(peaks, fwhm)
     @debug "Initial guess for ENC: $enc_guess, Fano factor: $fano_guess"
     # ct starts in the middle of its Uniform prior: its lower bound 0 maps to -∞ in the transformed space and the optimizer never leaves it
-    p_start = pol_order == 1 ? mvalue.([enc_guess, fano_guess]) : mvalue.([enc_guess, fano_guess, fano_guess^2 / (16 * enc_guess)])
+    p_start = pol_order == 1 ? mvalue.([enc_guess, fano_guess]) : [mvalue(enc_guess), FANO_TERM_GE, FANO_TERM_GE^2 / (16 * mvalue(enc_guess))]
     @debug "Initial parameters: $p_start"
     pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, enc_guess, fano_guess)
     @debug "Pseudo prior: $pseudo_prior"
@@ -93,24 +93,30 @@ function _get_enc_fano_guess(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vect
     return enc_guess, fano_guess
 end
 
+# FWHM² slope from Fano statistics, (2√(2ln2))²·ε·F with ε = 2.96 eV: F = 0.11 as the mode, F = 0.05–0.15 as the hard window
+const FANO_TERM_GE = (2 * sqrt(2 * log(2)))^2 * 2.96e-3 * 0.11
+const FANO_TERM_WINDOW = FANO_TERM_GE .* (0.05 / 0.11, 0.15 / 0.11)
+
 function get_fit_fwhm_pseudo_prior(pol_order::Int, enc_guess::Measurement, fano_guess::Measurement)
     # create pseudo prior for fit parameters using initial fit pars for pseudo priors
     # fano_guess = 2.96e-2*0.11
     pprior_base = NamedTupleDist(
         # mode at the pre-fit value, 68 % quantile 3σ above it; the Weibull support already enforces enc > 0
         enc = weibull_from_mx(mvalue(enc_guess), mvalue(enc_guess) + 3 * muncert(enc_guess)),
-        fano = weibull_from_mx(mvalue(fano_guess), 10*mvalue(fano_guess)),
-        # √(enc + fano·E + ct·E²) is concave for all E iff 4·enc·ct < fano²: allow ct up to half that bound (from the pre-fit values)
-        ct = Uniform(0, mvalue(fano_guess^2/(4*enc_guess)/2))
+        # pol_order 1: fano is the effective slope (trapping included), mode at the pre-fit value, 68 % quantile 3σ above
+        fano = weibull_from_mx(mvalue(fano_guess), mvalue(fano_guess) + 3 * muncert(fano_guess)),
+        # pol_order 2: ct carries the trapping, fano is the physical Fano term - hard window F = 0.05–0.15
+        fano_phys = truncated(weibull_from_mx(FANO_TERM_GE, 1.2 * FANO_TERM_GE).untruncated, FANO_TERM_WINDOW...),
+        # √(enc + fano·E + ct·E²) is concave for all E iff 4·enc·ct < fano²: allow ct up to half that bound
+        ct = Uniform(0, FANO_TERM_GE^2 / (8 * mvalue(enc_guess)))
     )
 
-    # extract prior base
-    (; enc, fano, ct) = pprior_base
+    (; enc, fano, fano_phys, ct) = pprior_base
 
     unshaped(if pol_order == 1
         NamedTupleDist(; enc, fano)
     elseif pol_order == 2
-        NamedTupleDist(; enc, fano, ct)
+        NamedTupleDist(; enc, fano = fano_phys, ct)
     else
         throw(ArgumentError("Only 1, 2 order polynominal calibration is supported"))
     end)
