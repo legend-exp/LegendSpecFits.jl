@@ -26,7 +26,10 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     # fit FWHM fit function as a square root of a polynomial
     # result_chi2, report_chi2 = chi2fit(x -> LegendSpecFits.heaviside(x)*sqrt(abs(x)), pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm); v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
     result_chi2, report_chi2_linear = chi2fit(pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm).^2; v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
-    report_chi2 = NamedTuple{keys(report_chi2_linear)}(merge(report_chi2_linear, (y = ustrip.(e_unit, fwhm), f_fit = x -> sqrt(report_chi2_linear.f_fit(x)))))
+    # FWHM(E) with the parameter covariance: enc and fano are ~80 % anti-correlated, the independent propagation in
+    # report_chi2_linear.f_fit makes the error band (and the value at Qbb) up to a factor 2 too wide
+    f_fit = x -> _fwhm_at(result_chi2, mvalue(x), muncert(x); scale_err_by_chi2red)
+    report_chi2 = NamedTuple{keys(report_chi2_linear)}(merge(report_chi2_linear, (y = ustrip.(e_unit, fwhm), f_fit = f_fit)))
 
     # get pars and apply unit
     par =  result_chi2.par
@@ -43,9 +46,7 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
 
     # get fwhm at Qbb 
     # Qbb from: https://www.researchgate.net/publication/253446083_Double-beta-decay_Q_values_of_74Se_and_76Ge
-    # with the parameter covariance: enc and fano are ~80 % anti-correlated, propagating them as independent
-    # Measurements (report_chi2.f_fit) overestimates the error by up to a factor 2
-    qbb = _fwhm_at(result_chi2, 2039.061, 0.007; scale_err_by_chi2red) * e_unit
+    qbb = report_chi2.f_fit(measurement(2039.061, 0.007)) * e_unit
     result = merge(result_chi2, (par = par_unit , qbb = qbb, concave = concave, func = func, func_err = func_err, func_cal = func_cal, func_cal_err = func_cal_err, peaks = peaks, fwhm = fwhm))
     report = merge(report_chi2, (e_unit = e_unit, par = result.par, qbb = result.qbb, type = :fwhm))
 
