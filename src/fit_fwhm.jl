@@ -49,44 +49,28 @@ end
 fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = fit_fwhm(1, peaks, fwhm; kwargs...)
 
 
-function _simple_linear_fit(x::Vector{<:Real}, y::Vector{<:Real})
-    # Creates a matrix where column 1 is all 1s, column 2 is x
+function _simple_linear_fit(x::Vector{<:Real}, y::Vector{<:Union{Real, Measurement{<:Real}}})
+    # weighted least squares of y = β₁ + β₂ x with the y uncertainties as weights; the parameter covariance is the
+    # inverse weighted normal matrix (exact for known weights). Without uncertainties: unit weights, scaled by the
+    # residual variance if there are degrees of freedom left
     X = hcat(ones(length(x)), x)
-
-    # solve linear regression using the normal equation: β = (X'X)^(-1) X'y
-    β = X \ y
-
-    # n = number of observations, p = number of parameters
-    n, p = size(X) 
-    # dof = n - p Degrees of freedom
-    dof = n - p
-
-    # Calculate residuals
-    y_pred = X * β
-    residuals = y .- y_pred
-
-    # Calculate residual variance (Mean Squared Error)
-    sigma_sq = sum(residuals.^2) / dof
-
-    # Calculate the Variance-Covariance matrix
-    # We need the inverse of (X' * X). We can do this by solving (X' * X) \\ I
-    I_mat = [i == j ? 1.0 : 0.0 for i in 1:p, j in 1:p]
-
-    cov_matrix = sigma_sq * ((X' * X) \ I_mat)
-
-    # The standard errors are the square roots of the diagonal elements
-    se = sqrt.(abs.([cov_matrix[i, i] for i in 1:p]))
-    measurement.(β, se)
+    y_val, y_err = mvalue.(y), muncert.(y)
+    w = all(>(0), y_err) ? y_err .^ -2 : ones(length(y))
+    cov_matrix = inv(X' * (w .* X))
+    β = cov_matrix * (X' * (w .* y_val))
+    dof = length(y) - 2
+    s2 = all(>(0), y_err) ? 1.0 : (dof > 0 ? sum(w .* (y_val .- X * β) .^ 2) / dof : 1.0)
+    measurement.(β, sqrt.(s2 .* diag(cov_matrix)))
 end
 
 function _get_enc_fano_guess(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}})
-    # strip units, only use central values, square y-values to fit a square root function
-    enc_guess, fano_guess = _simple_linear_fit(mvalue.(ustrip.(e_unit, peaks)), mvalue.(ustrip.(e_unit, fwhm).^2))
+    # strip units, square y-values to fit a square root function; the FWHM uncertainties (propagated to fwhm²) weight the fit
+    enc_guess, fano_guess = _simple_linear_fit(mvalue.(ustrip.(e_unit, peaks)), ustrip.(e_unit, fwhm).^2)
 
     # sanity checks to make sure initial guesses are strictly positive, otherwise set to small positive values to avoid issues with the fit function
     enc_guess, fano_guess = if enc_guess < 0 # if the ENC is negative, set it to a small positive value (e.g. 0.01) to avoid issues with the fit function
         @warn "ENC is negative in initial guess, trying different intial guess strategy"
-        enc_guess, fano_guess_non_squared = _simple_linear_fit(mvalue.(ustrip.(e_unit, peaks)), mvalue.(ustrip.(e_unit, fwhm)))
+        enc_guess, fano_guess_non_squared = _simple_linear_fit(mvalue.(ustrip.(e_unit, peaks)), ustrip.(e_unit, fwhm))
         if enc_guess < 0.0 # if the ENC is still negative, set it to first FWHM value as very rough estimate
             @warn "ENC is still negative in initial guess lowest FWHM"
             measurement(mvalue(ustrip(e_unit, fwhm[argmin(peaks)])), 0.8 * mvalue(ustrip(e_unit, fwhm[argmin(peaks)]))), fano_guess_non_squared
