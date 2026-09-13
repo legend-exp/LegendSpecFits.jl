@@ -30,6 +30,9 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
 
     # get pars and apply unit
     par =  result_chi2.par
+    # the ct bound in the prior is built from the pre-fit values; check concavity on the fitted ones (always true for pol_order 1)
+    concave = pol_order == 1 || 4 * mvalue(par[1]) * mvalue(par[3]) < mvalue(par[2])^2
+    concave || @warn "FWHM resolution curve is not concave: 4·enc·ct = $(4 * mvalue(par[1]) * mvalue(par[3])) ≥ fano² = $(mvalue(par[2])^2)"
     par_unit = par .* [e_unit^i for i in pol_order:-1:0]
 
     # built function in string
@@ -43,7 +46,7 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     # with the parameter covariance: enc and fano are ~80 % anti-correlated, propagating them as independent
     # Measurements (report_chi2.f_fit) overestimates the error by up to a factor 2
     qbb = _fwhm_at(result_chi2, 2039.061, 0.007; scale_err_by_chi2red) * e_unit
-    result = merge(result_chi2, (par = par_unit , qbb = qbb, func = func, func_err = func_err, func_cal = func_cal, func_cal_err = func_cal_err, peaks = peaks, fwhm = fwhm))
+    result = merge(result_chi2, (par = par_unit , qbb = qbb, concave = concave, func = func, func_err = func_err, func_cal = func_cal, func_cal_err = func_cal_err, peaks = peaks, fwhm = fwhm))
     report = merge(report_chi2, (e_unit = e_unit, par = result.par, qbb = result.qbb, type = :fwhm))
 
     return result, report
@@ -111,7 +114,7 @@ function get_fit_fwhm_pseudo_prior(pol_order::Int, enc_guess::Measurement, fano_
     pprior_base = NamedTupleDist(
         enc = truncated(weibull_from_mx(mvalue(enc_guess), mvalue(enc_guess) + ifelse(muncert(enc_guess) > 0.05, muncert(enc_guess), 1.2*mvalue(enc_guess))).untruncated, ifelse(mvalue(enc_guess) < 0.3, 0.3*mvalue(enc_guess), 0.3), Inf),
         fano = weibull_from_mx(mvalue(fano_guess), 10*mvalue(fano_guess)),
-        # for a √ of a quadratic function, the function is concave if fano^2/(4*enc) < ct, and convex if fano^2/(4*enc) >  ct, so let's take 0.5 as a conservative guess for the upper limit of ct, and 0 as the lower limit
+        # √(enc + fano·E + ct·E²) is concave for all E iff 4·enc·ct < fano²: allow ct up to half that bound (from the pre-fit values)
         ct = Uniform(0, mvalue(fano_guess^2/(4*enc_guess)/2))
     )
 
