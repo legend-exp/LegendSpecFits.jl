@@ -33,7 +33,7 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     # the ct bound in the prior is built from the pre-fit values; check concavity on the fitted ones (always true for pol_order 1)
     concave = pol_order == 1 || 4 * mvalue(par[1]) * mvalue(par[3]) < mvalue(par[2])^2
     concave || @warn "FWHM resolution curve is not concave: 4·enc·ct = $(4 * mvalue(par[1]) * mvalue(par[3])) ≥ fano² = $(mvalue(par[2])^2)"
-    par_unit = par .* [e_unit^i for i in pol_order:-1:0]
+    par_unit = par .* [e_unit^(3-i) for i in eachindex(par)]      # par[i] multiplies E^(i-1) in fwhm² (keV²): keV², keV, 1
 
     # built function in string
     func     = "sqrt($(join(["$(mvalue(par[i])) * ($(e_expression))^$(i-1)" for i in eachindex(par)], " + ")))$e_unit"
