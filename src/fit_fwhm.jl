@@ -95,7 +95,8 @@ function get_fit_fwhm_pseudo_prior(pol_order::Int, enc_guess::Measurement, fano_
     # create pseudo prior for fit parameters using initial fit pars for pseudo priors
     # fano_guess = 2.96e-2*0.11
     pprior_base = NamedTupleDist(
-        enc = truncated(weibull_from_mx(mvalue(enc_guess), mvalue(enc_guess) + ifelse(muncert(enc_guess) > 0.05, muncert(enc_guess), 1.2*mvalue(enc_guess))).untruncated, ifelse(mvalue(enc_guess) < 0.3, 0.3*mvalue(enc_guess), 0.3), Inf),
+        # mode at the pre-fit value, 68 % quantile 3σ above it; the Weibull support already enforces enc > 0
+        enc = weibull_from_mx(mvalue(enc_guess), mvalue(enc_guess) + 3 * muncert(enc_guess)),
         fano = weibull_from_mx(mvalue(fano_guess), 10*mvalue(fano_guess)),
         # √(enc + fano·E + ct·E²) is concave for all E iff 4·enc·ct < fano²: allow ct up to half that bound (from the pre-fit values)
         ct = Uniform(0, mvalue(fano_guess^2/(4*enc_guess)/2))
