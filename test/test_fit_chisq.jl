@@ -27,6 +27,15 @@ using Test
     @test isapprox(result.par[1], par_true[1], atol = 0.2*par_true[1])
     @test isapprox(result.par[2], par_true[2], atol = 0.2*par_true[2])
 
+    @info "parameter uncertainties against the closed-form weighted least squares"
+    x = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    y = measurement.([7.1, 8.9, 11.2, 12.8, 15.3, 16.7], [0.3, 0.3, 0.5, 0.5, 0.8, 0.8])
+    result, report = chi2fit(1, x, y; uncertainty=true)
+    X = hcat(ones(length(x)), x); W = Measurements.uncertainty.(y) .^ -2
+    cov_wls = inv(X' * (W .* X))
+    @test isapprox(Measurements.value.(result.par), cov_wls * (X' * (W .* Measurements.value.(y))), rtol = 1e-5)
+    @test isapprox(Measurements.uncertainty.(result.par), sqrt.([cov_wls[1,1], cov_wls[2,2]]), rtol = 1e-4)
+
     x = [1,2]
     y = f_lin.(x,par_true...) .+ 0.5.*randn(2)
     @info "chisq fit with 2 fit parameter on 2 data points (test of gof)"

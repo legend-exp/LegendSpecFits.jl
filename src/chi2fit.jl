@@ -86,7 +86,8 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     
     if uncertainty && converged
         try
-            covmat = inv(ForwardDiff.hessian(f_opt, v_chi2))
+            # f_opt is a χ² (not a log-likelihood): its Hessian at the minimum is 2·C⁻¹, so the covariance is 2·H⁻¹
+            covmat = 2 * inv(ForwardDiff.hessian(f_opt, v_chi2))
             v_chi2_err = sqrt.(diag(abs.(covmat)))#mvalue.(sqrt.(diag(abs.(covmat))))
             par = measurement.(v_chi2, v_chi2_err)
             
