@@ -19,14 +19,21 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     enc_guess, fano_guess = _get_enc_fano_guess(peaks, fwhm)
     @debug "Initial guess for ENC: $enc_guess, Fano factor: $fano_guess"
     # ct starts in the middle of its Uniform prior: its lower bound 0 maps to -∞ in the transformed space and the optimizer never leaves it
-    p_start = pol_order == 1 ? mvalue.([enc_guess, fano_guess]) : [mvalue(enc_guess), FANO_TERM_GE, FANO_TERM_GE^2 / (16 * mvalue(enc_guess))]
+    p_start = pol_order == 1 ? mvalue.([enc_guess, fano_guess]) : [mvalue(enc_guess), FANO_TERM_GE, 0.5]
     @debug "Initial parameters: $p_start"
     pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, enc_guess, fano_guess)
     @debug "Pseudo prior: $pseudo_prior"
 
     # fit FWHM fit function as a square root of a polynomial
     # result_chi2, report_chi2 = chi2fit(x -> LegendSpecFits.heaviside(x)*sqrt(abs(x)), pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm); v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
-    result_chi2, report_chi2_linear = chi2fit(pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm).^2; v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
+    result_chi2, report_chi2_linear = if pol_order == 1
+        chi2fit(pol_order, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm).^2; v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
+    else
+        # ct = κ·fano²/(4·enc) with κ ∈ (0, 1): √(enc + fano·E + ct·E²) is then concave for every enc, fano the fit visits
+        # (4·enc·ct < fano² ⇔ κ < 1); a bound on ct alone from pre-fit values does not survive the fit moving enc and fano
+        r, rep = chi2fit((x, enc, fano, κ) -> enc .+ fano .* x .+ κ * fano^2 / (4 * enc) .* x .^ 2, ustrip.(e_unit, peaks), ustrip.(e_unit, fwhm).^2; v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
+        _kappa_to_ct(r), rep
+    end
     # FWHM(E) with the parameter covariance: enc and fano are ~80 % anti-correlated, the independent propagation in
     # report_chi2_linear.f_fit makes the error band (and the value at Qbb) up to a factor 2 too wide
     f_fit = x -> _fwhm_at(result_chi2, mvalue(x), muncert(x); scale_err_by_chi2red)
@@ -35,7 +42,7 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     # get pars and apply unit
     par =  result_chi2.par
     # the ct bound in the prior is built from the pre-fit values; check concavity on the fitted ones (always true for pol_order 1)
-    concave = pol_order == 1 || 4 * mvalue(par[1]) * mvalue(par[3]) < mvalue(par[2])^2
+    concave = pol_order == 1 || 4 * mvalue(par[1]) * mvalue(par[3]) <= mvalue(par[2])^2 * (1 + 1e-9)
     concave || @warn "FWHM resolution curve is not concave: 4·enc·ct = $(4 * mvalue(par[1]) * mvalue(par[3])) ≥ fano² = $(mvalue(par[2])^2)"
     par_unit = par .* [e_unit^(3-i) for i in eachindex(par)]      # par[i] multiplies E^(i-1) in fwhm² (keV²): keV², keV, 1
 
@@ -54,6 +61,16 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     return result, report
 end
 fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = fit_fwhm(1, peaks, fwhm; kwargs...)
+
+# (enc, fano, κ) → (enc, fano, ct = κ·fano²/(4·enc)); the covariance follows with the Jacobian so that _fwhm_at and the
+# parameter errors see the polynomial coefficients
+function _kappa_to_ct(r::NamedTuple)
+    enc, fano, κ = mvalue.(r.par); ct = κ * fano^2 / (4 * enc)
+    hasproperty(r, :gof) || return merge(r, (par = [r.par[1], r.par[2], measurement(ct, NaN)],))
+    J = [1.0 0.0 0.0; 0.0 1.0 0.0; -ct / enc  2 * ct / fano  fano^2 / (4 * enc)]
+    C = J * r.gof.covmat * J'
+    merge(r, (par = measurement.([enc, fano, ct], sqrt.(abs.(diag(C)))), gof = merge(r.gof, (covmat = C,))))
+end
 
 # FWHM = √p(E) at E ± e_err from the fwhm² polynomial fit, error from the full parameter covariance. With
 # scale_err_by_chi2red the covariance is inflated by χ²/ndf if > 1 (PDG scale factor: the points scatter more than
@@ -107,16 +124,16 @@ function get_fit_fwhm_pseudo_prior(pol_order::Int, enc_guess::Measurement, fano_
         fano = weibull_from_mx(mvalue(fano_guess), mvalue(fano_guess) + 3 * muncert(fano_guess)),
         # pol_order 2: ct carries the trapping, fano is the physical Fano term - hard window F = 0.05–0.15
         fano_phys = truncated(weibull_from_mx(FANO_TERM_GE, 1.2 * FANO_TERM_GE).untruncated, FANO_TERM_WINDOW...),
-        # √(enc + fano·E + ct·E²) is concave for all E iff 4·enc·ct < fano²: allow ct up to half that bound
-        ct = Uniform(0, FANO_TERM_GE^2 / (8 * mvalue(enc_guess)))
+        # κ = ct / (fano²/(4·enc)) ∈ (0, 1): the concave range, see fit_fwhm
+        κ = Uniform(0, 1)
     )
 
-    (; enc, fano, fano_phys, ct) = pprior_base
+    (; enc, fano, fano_phys, κ) = pprior_base
 
     unshaped(if pol_order == 1
         NamedTupleDist(; enc, fano)
     elseif pol_order == 2
-        NamedTupleDist(; enc, fano = fano_phys, ct)
+        NamedTupleDist(; enc, fano = fano_phys, κ)
     else
         throw(ArgumentError("Only 1, 2 order polynominal calibration is supported"))
     end)
