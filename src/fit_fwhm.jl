@@ -18,7 +18,8 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     # get initial guess for ENC and Fano factor using pre-fit
     enc_guess, fano_guess = _get_enc_fano_guess(peaks, fwhm)
     @debug "Initial guess for ENC: $enc_guess, Fano factor: $fano_guess"
-    p_start = append!(mvalue.([enc_guess, fano_guess]), fill(0.0, pol_order-1))
+    # ct starts in the middle of its Uniform prior: its lower bound 0 maps to -∞ in the transformed space and the optimizer never leaves it
+    p_start = pol_order == 1 ? mvalue.([enc_guess, fano_guess]) : mvalue.([enc_guess, fano_guess, fano_guess^2 / (16 * enc_guess)])
     @debug "Initial parameters: $p_start"
     pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, enc_guess, fano_guess)
     @debug "Pseudo prior: $pseudo_prior"
