@@ -85,27 +85,10 @@ function _get_enc_fano_guess(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vect
     # strip units, square y-values to fit a square root function; the FWHM uncertainties (propagated to fwhm²) weight the fit
     enc_guess, fano_guess = _simple_linear_fit(mvalue.(ustrip.(e_unit, peaks)), ustrip.(e_unit, fwhm).^2)
 
-    # sanity checks to make sure initial guesses are strictly positive, otherwise set to small positive values to avoid issues with the fit function
-    enc_guess, fano_guess = if enc_guess < 0 # if the ENC is negative, set it to a small positive value (e.g. 0.01) to avoid issues with the fit function
-        @warn "ENC is negative in initial guess, trying different intial guess strategy"
-        enc_guess, fano_guess_non_squared = _simple_linear_fit(mvalue.(ustrip.(e_unit, peaks)), ustrip.(e_unit, fwhm))
-        if enc_guess < 0.0 # if the ENC is still negative, set it to first FWHM value as very rough estimate
-            @warn "ENC is still negative in initial guess lowest FWHM"
-            measurement(mvalue(ustrip(e_unit, fwhm[argmin(peaks)])), 0.8 * mvalue(ustrip(e_unit, fwhm[argmin(peaks)]))), fano_guess_non_squared
-        else
-            enc_guess, fano_guess_non_squared
-        end
-    else
-        enc_guess, fano_guess
-    end
-    
-    # if fano factor is still negative, set it to literature value for germanium (e.g. 0.11) to avoid issues with the fit function
-    if fano_guess < 0 # if the fano factor is negative, set it to a small positive value (e.g. 0.01) to avoid issues with the fit function
-        @warn "Fano factor is negative in initial guess, setting it to 2.96e-2*0.11"
-        enc_guess, measurement(2.96e-2*0.11, 0.8*2.96e-2*0.11)
-    else
-        enc_guess, fano_guess
-    end
+    # a negative intercept or slope means the FWHM values do not follow √(enc + fano·E); any fit from a substitute start
+    # value is invented - the peak fits of this channel need a look (QC / override) instead
+    (mvalue(enc_guess) > 0 && mvalue(fano_guess) > 0) || throw(ArgumentError("FWHM pre-fit gives enc = $(mvalue(enc_guess)) keV², fano = $(mvalue(fano_guess)) keV - the FWHM values are inconsistent with √(enc + fano·E); check the peak fits of this channel"))
+    return enc_guess, fano_guess
 end
 
 function get_fit_fwhm_pseudo_prior(pol_order::Int, enc_guess::Measurement, fano_guess::Measurement)
