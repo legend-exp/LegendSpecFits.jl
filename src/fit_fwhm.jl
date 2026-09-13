@@ -10,7 +10,7 @@ Fit the FWHM of the peaks to a quadratic function.
 function fit_fwhm end
 export fit_fwhm
 
-function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true)
+function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true, scale_err_by_chi2red::Bool=false)
     @assert length(peaks) == length(fwhm) "Peaks and FWHM must have the same length"
     @assert pol_order in (1, 2) "Only 1, 2 order polynominal calibration is supported"
 
@@ -40,13 +40,28 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
 
     # get fwhm at Qbb 
     # Qbb from: https://www.researchgate.net/publication/253446083_Double-beta-decay_Q_values_of_74Se_and_76Ge
-    qbb = report_chi2.f_fit(measurement(2039.061, 0.007)) * e_unit
+    # with the parameter covariance: enc and fano are ~80 % anti-correlated, propagating them as independent
+    # Measurements (report_chi2.f_fit) overestimates the error by up to a factor 2
+    qbb = _fwhm_at(result_chi2, 2039.061, 0.007; scale_err_by_chi2red) * e_unit
     result = merge(result_chi2, (par = par_unit , qbb = qbb, func = func, func_err = func_err, func_cal = func_cal, func_cal_err = func_cal_err, peaks = peaks, fwhm = fwhm))
     report = merge(report_chi2, (e_unit = e_unit, par = result.par, qbb = result.qbb, type = :fwhm))
 
     return result, report
 end
 fit_fwhm(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = fit_fwhm(1, peaks, fwhm; kwargs...)
+
+# FWHM = √p(E) at E ± e_err from the fwhm² polynomial fit, error from the full parameter covariance. With
+# scale_err_by_chi2red the covariance is inflated by χ²/ndf if > 1 (PDG scale factor: the points scatter more than
+# their errors allow). No covariance (uncertainty=false or failed error estimate) gives NaN as the error
+function _fwhm_at(result::NamedTuple, e::Real, e_err::Real; scale_err_by_chi2red::Bool=false)
+    p = mvalue.(result.par); f = sqrt(evalpoly(e, p))
+    hasproperty(result, :gof) || return measurement(f, NaN)
+    scale = scale_err_by_chi2red && result.gof.dof > 0 ? max(1.0, result.gof.chi2min / result.gof.dof) : 1.0
+    g = [e^(i-1) for i in eachindex(p)] ./ (2f)                                  # ∂f/∂pᵢ
+    df_de = evalpoly(e, p[2:end] .* (1:length(p)-1)) / (2f)                       # ∂f/∂E
+    var = scale * (g' * result.gof.covmat * g) + (df_de * e_err)^2
+    measurement(f, var >= 0 ? sqrt(var) : NaN)
+end
 
 
 function _simple_linear_fit(x::Vector{<:Real}, y::Vector{<:Union{Real, Measurement{<:Real}}})
