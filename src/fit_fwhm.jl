@@ -12,9 +12,8 @@ export fit_fwhm
 
 function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true)
     @assert length(peaks) == length(fwhm) "Peaks and FWHM must have the same length"
-    @assert pol_order != 1 || pol_order != 2 "Only 1, 2 order polynominal calibration is supported"
-    
-    
+    @assert pol_order in (1, 2) "Only 1, 2 order polynominal calibration is supported"
+
     @debug "Fit resolution curve with $(pol_order)-order polynominal function"
     # get initial guess for ENC and Fano factor using pre-fit
     enc_guess, fano_guess = _get_enc_fano_guess(peaks, fwhm)
@@ -90,7 +89,7 @@ function _get_enc_fano_guess(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vect
         enc_guess, fano_guess_non_squared = _simple_linear_fit(mvalue.(ustrip.(e_unit, peaks)), mvalue.(ustrip.(e_unit, fwhm)))
         if enc_guess < 0.0 # if the ENC is still negative, set it to first FWHM value as very rough estimate
             @warn "ENC is still negative in initial guess lowest FWHM"
-            measurement(mvalue(ustrip(e_unit, fwhm[sortperm(peaks)])), mvalue(ustrip(e_unit, fwhm[sortperm(peaks)]*0.8))), fano_guess_non_squared
+            measurement(mvalue(ustrip(e_unit, fwhm[argmin(peaks)])), 0.8 * mvalue(ustrip(e_unit, fwhm[argmin(peaks)]))), fano_guess_non_squared
         else
             enc_guess, fano_guess_non_squared
         end
