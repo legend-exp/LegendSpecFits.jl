@@ -7,6 +7,9 @@ Fit the calibration lines with polynomial function of pol_order order
     * `result`: NamedTuple with the following fields
         * `par`: best-fit parameters
         * `gof`: godness of fit
+        * `func`: the calibration curve as a LEGEND Julia expression of `e_expression`
+        * `func_err`: the same expression with the uncertainty of the curve written out as `value ± error`,
+          which includes the correlations between the fit parameters (see `chi2fit`)
     * `report`: 
 """
 function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e", m_cal_simple::Union{MaybeWithEnergyUnits, Nothing} = nothing, uncertainty::Bool=true)
@@ -50,9 +53,12 @@ function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.Real
 
     result_fit = merge(result_fit, (par = par_unit,))
 
-    # built function in string 
+    # p(E) with uncertainty √d(E), d(E) = Σᵢⱼ Cᵢⱼ E^(i+j-2) from the covariance C; written out because
+    # separate `±` literals cannot carry the parameter correlations
+    C = Measurements.cov(par)
+    d = [sum(C[i, j] for i in eachindex(par), j in eachindex(par) if i + j - 1 == k) for k in 1:2length(par)-1]
     func = join(["$(mvalue(par[i]))$e_unit .* ($(e_expression)).^$(i-1)" for i in eachindex(par)], " .+ ")
-    func_err = join(["($(par[i]))$e_unit .* ($(e_expression)).^$(i-1)" for i in eachindex(par)], " .+ ")
+    func_err = "($func) .± sqrt($(join(["$(d[k])$e_unit^2 .* ($(e_expression)).^$(k-1)" for k in eachindex(d)], " .+ ")))"
     
     result = merge(result_fit, (func = func, func_err = func_err, µ = μ, peaks = peaks))
     report = merge(report_fit, (e_unit = e_unit, par = result.par, type = :cal))
