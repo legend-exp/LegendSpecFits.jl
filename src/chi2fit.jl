@@ -10,6 +10,7 @@ Least square fit with chi2 minimization
 The numer of fit parameter is determined with `first(methods(f_fit)).nargs - 2`. That's why it's important that f_fit has the synthax f(x,arg1,arg2,arg3,...)
 pull_t : pull term, a vector of NamedTuple with fields `mean` and `std`. A Gaussian pull term is added to the chi2 function to account for systematic uncertainties. If left blank, no pull term is used.
 v_init : initial value for fit parameter optimization. If left blank, the initial value is set to 1 or guessed roughly for all fit parameters
+correlated : if `true`, the returned parameters carry their full covariance, so that uncertainties of quantities derived from them, including `report.f_fit`, account for the parameter correlations. If `false`, the parameters are independent measurements with the same marginal uncertainties, which overestimates the uncertainty of derived quantities whenever the parameters are correlated.
 # Return:
 - result : NamedTuple with the optimized fit parameter and the fit function
 - report: 
@@ -21,7 +22,8 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
                     lower_bound::Vector{<:Real}=fill(-Inf, length(pull_t)),
                     upper_bound::Vector{<:Real}=fill(Inf, length(pull_t)),
                     pseudo_prior::Union{ContinuousMultivariateDistribution, Nothing}=nothing,
-                    uncertainty::Bool=true)
+                    uncertainty::Bool=true,
+                    correlated::Bool=true)
     @assert length(x) == length(y) "x and y must have the same length"
     @assert length(pull_t) == length(v_init) == length(lower_bound)  == length(upper_bound) "Length of pull_t, v_init, lower_bound and upper_bound does not match."
 
@@ -69,15 +71,21 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     # init guess for fit parameter: this could be improved. 
     npar = length(pull_t) # number of fit parameter (including nuisance parameters)
 
-    # minimization and error estimation
-    optf = OptimizationFunction((u, p) -> (f_opt ∘ inverse(f_trafo))(u), AutoForwardDiff())
-    optprob = OptimizationProblem(optf, f_trafo(v_init), (), lb=lower_bound, ub=upper_bound)
-    res = solve(optprob, NLopt.LN_BOBYQA(), maxiters = 3000, maxtime=optim_time_limit)
-    
-    converged = (res.retcode == ReturnCode.Success)
+    # minimize in the pseudo-prior space u, where one unit is one prior standard deviation
+    f_inv = inverse(f_trafo)
+    f_u = f_opt ∘ f_inv
+    u_init = f_trafo(v_init)
+    step = isnothing(pseudo_prior) ? max.(0.1 .* abs.(v_init), 1e-3) : ones(npar)
+    limits = [isfinite(lb) || isfinite(ub) ? (isfinite(lb) ? lb : nothing, isfinite(ub) ? ub : nothing) : nothing for (lb, ub) in zip(lower_bound, upper_bound)]
+    # strategy 2 seeds with the Hessian at the start point; a first step scaled by `errors` alone can
+    # overshoot into the flat tails of the prior transform, from which the fit cannot recover
+    m = Minuit(f_u, u_init; errors = step, limits, up = 1.0, strategy = 2, grad = u -> ForwardDiff.gradient(f_u, u), check_gradient = false)
+    migrad!(m; maxfcn = 3000)
+    converged = m.valid
 
     # get best fit results
-    v_chi2  = inverse(f_trafo)(res.u)
+    u_chi2 = collect(m.values)
+    v_chi2 = f_inv(u_chi2)
     
     if !converged @warn "Fit did not converge" end
     par = measurement.(v_chi2,Ref(NaN)) # if ucnertainty is not calculated, return NaN
@@ -86,14 +94,21 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     
     if uncertainty && converged
         try
-            covmat = inv(ForwardDiff.hessian(f_opt, v_chi2))
-            v_chi2_err = sqrt.(diag(abs.(covmat)))#mvalue.(sqrt.(diag(abs.(covmat))))
-            par = measurement.(v_chi2, v_chi2_err)
+            # cov = 2 H⁻¹ for a χ², in the fit parameters: the prior transform is too nonlinear in its
+            # tails to propagate a covariance from the pseudo-prior space
+            covmat = 2 .* inv(ForwardDiff.hessian(f_opt, v_chi2))
+            # correlated parameters share unit normals, so derived quantities propagate the full covariance
+            par = if correlated
+                v_chi2 .+ cholesky(Hermitian(covmat)).L * [measurement(0, 1) for _ in v_chi2]
+            else
+                measurement.(v_chi2, sqrt.(diag(covmat)))
+            end
             
             @debug "Best Fit parameters: $par"
             # gof 
-            chi2min = res.objective
-            dof = length(x) - length(v_chi2)
+            chi2min = m.fval
+            # each pull term constrains one parameter like an additional data point
+            dof = length(x) - length(v_chi2) + count(!isempty, pull_t)
             pvalue = if iszero(dof)
                 @warn "The number of fit parameters is equivalent to number of data points --> dof = 0 ; p-value not meaningful, set to NaN"
                 NaN

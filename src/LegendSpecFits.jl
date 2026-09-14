@@ -34,6 +34,7 @@ import MeasureBase
 using Measurements
 using Measurements: value
 using Measurements: uncertainty
+using NativeMinuit: Minuit, migrad!
 using OrderedCollections
 using Optimization
 using OptimizationBBO
