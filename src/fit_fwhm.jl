@@ -1,7 +1,9 @@
 """
-    fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy}, fwhm::Vector{<:Unitful.Energy}; e_type_cal, e_expression, uncertainty, correlated)
+    fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy}, fwhm::Vector{<:Unitful.Energy}; e_type_cal, e_expression, uncertainty, correlated, pull_fano)
 Fit the resolution curve fwhm(E) = √(enc + fano·E [+ ct·E²]) to the FWHM of the peaks, with `pol_order` the
-degree of the polynomial under the square root.
+degree of the polynomial under the square root. With `pull_fano = true`, the quadratic fit ties the
+linear term to Fano statistics of germanium (F = 0.112 ± 0.015) by a pull term, so that the E² term takes
+up the other contributions; by default, and in the linear fit, the linear term is free.
 # Returns
     * `par`: `enc`, the width √enc in keV that the curve approaches at zero energy; `fano`, the Fano
       factor extracted from the linear term with the pair creation energy of germanium; and, for the
@@ -27,7 +29,7 @@ const fwhm_fano_term_ge = fwhm_prefactor^2 * fano_factor_ge * pair_creation_ener
 # size and the Hessian of the χ² invertible
 const e_fit_fwhm_unit = u"MeV"
 
-function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true, correlated::Bool=true)
+function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true, correlated::Bool=true, pull_fano::Bool=false)
     @assert length(peaks) == length(fwhm) "Peaks and FWHM must have the same length"
     @assert pol_order == 1 || pol_order == 2 "Only 1, 2 order polynominal calibration is supported"
 
@@ -35,16 +37,16 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     # initial guess for the polynomial coefficients (ENC, Fano term, quadratic term) from a pre-fit
     par_guess = _get_enc_fano_guess(peaks, fwhm, pol_order)
     @debug "Initial guess for fit parameters: $par_guess"
-    p_start = mvalue.(par_guess)
-    pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, par_guess)
-    @debug "Pseudo prior: $pseudo_prior"
     # the linear term is pulled to Fano statistics only when an E² term takes up the other contributions
     pull_t = NamedTuple[NamedTuple() for _ in 1:pol_order+1]
-    if pol_order == 2
+    if pol_order == 2 && pull_fano
         fano_unit = e_unit^2 / e_fit_fwhm_unit
         pull_t[2] = (mean = ustrip(fano_unit, mvalue(fwhm_fano_term_ge)), std = ustrip(fano_unit, muncert(fwhm_fano_term_ge)))
     end
     @debug "Pull terms: $pull_t"
+    p_start = mvalue.(par_guess)
+    pseudo_prior = get_fit_fwhm_pseudo_prior(pol_order, par_guess)
+    @debug "Pseudo prior: $pseudo_prior"
 
     # fit fwhm² with a polynomial; the report exposes the fwhm curve as its square root, in keV
     result_chi2, report_chi2_linear = chi2fit(pol_order, ustrip.(e_fit_fwhm_unit, peaks), ustrip.(e_unit, fwhm).^2; v_init=p_start, pseudo_prior=pseudo_prior, pull_t=pull_t, uncertainty, correlated)
@@ -116,7 +118,7 @@ function _get_enc_fano_guess(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vect
     if pol_order == 2
         ct_max = mvalue(par_guess[2])^2 / (4 * mvalue(par_guess[1]))
         if mvalue(par_guess[3]) >= ct_max
-            par_guess[3] = measurement(ct_max / 2, ct_max / 2)
+            par_guess[3] = measurement(ct_max / 2, ct_max / 4)
         end
     end
     par_guess

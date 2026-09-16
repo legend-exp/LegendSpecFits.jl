@@ -80,7 +80,7 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     # strategy 2 seeds with the Hessian at the start point; a first step scaled by `errors` alone can
     # overshoot into the flat tails of the prior transform, from which the fit cannot recover
     m = Minuit(f_u, u_init; errors = step, limits, up = 1.0, strategy = 2, grad = u -> ForwardDiff.gradient(f_u, u), check_gradient = false)
-    migrad!(m; maxfcn = 3000)
+    migrad!(m; maxfcn = 5000)
     converged = m.valid
 
     # get best fit results
