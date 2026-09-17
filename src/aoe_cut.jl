@@ -132,12 +132,18 @@ export get_peaks_survival_fractions, get_peaks_surrival_fractions
 
 
 """
+    get_peak_survival_fraction(peakhist, survived_hist, cut_hist; uncertainty=true, fit_func=:gamma_def)
     get_peak_survival_fraction(e, peak, window, survival_flag; kwargs...)
     get_peak_survival_fraction(cut_parameter, e, peak, window; low_cut=-Inf, high_cut=Inf, selection=trues(length(cut_parameter)), kwargs...)
 
-Fit a peak before and after an arbitrary event selection. The primary method accepts
-the final selection directly; the interval-based method constructs it and forwards
-to the primary method. Bounds are exclusive.
+Fit a peak before and after an arbitrary event selection. The histogram method accepts
+count histograms for all, surviving, and rejected events with identical, unitless
+energy binning; the latter two must partition the first. It returns fit results and
+reports without a nominal `peak` label.
+
+The event-selection method constructs these histograms and adds the supplied `peak`
+to both outputs. The interval-based method constructs the selection and forwards
+to the event-selection method. Bounds are exclusive.
 """
 function get_peak_survival_fraction(e::AbstractVector{<:T}, peak::T, window::AbstractVector{T}, survival_flag::AbstractVector{Bool};
     uncertainty::Bool=true, bin_width_window::T=2.0u"keV", fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
@@ -145,15 +151,19 @@ function get_peak_survival_fraction(e::AbstractVector{<:T}, peak::T, window::Abs
     binning = ustrip(peak-first(window)):ustrip(bin_width):ustrip(peak+last(window))
 
     peakhist = fit(Histogram, ustrip.(e), binning)
-    peakstats = estimate_single_peak_stats(peakhist)
-    result_before, report_before = fit_single_peak_th228(peakhist, peakstats; uncertainty=uncertainty, fit_func=fit_func)
-
     survived_hist = fit(Histogram, ustrip.(e[survival_flag]), binning)
     cut_hist = fit(Histogram, ustrip.(e[.!survival_flag]), binning)
-    result_after, report_after = fit_subpeaks_th228(survived_hist, cut_hist, result_before; uncertainty=uncertainty, fit_func=fit_func)
+    result, report = get_peak_survival_fraction(peakhist, survived_hist, cut_hist; uncertainty, fit_func)
+    return merge((peak = peak,), result), merge((peak = peak,), report)
+end
+
+function get_peak_survival_fraction(peakhist::Histogram, survived_hist::Histogram, cut_hist::Histogram;
+    uncertainty::Bool=true, fit_func::Symbol=:gamma_def)
+    peakstats = estimate_single_peak_stats(peakhist)
+    result_before, report_before = fit_single_peak_th228(peakhist, peakstats; uncertainty, fit_func)
+    result_after, report_after = fit_subpeaks_th228(survived_hist, cut_hist, result_before; uncertainty, fit_func)
 
     result = (
-        peak = peak,
         fit_func = fit_func,
         n_before = result_before.n,
         n_after = result_before.n * result_after.sf,
@@ -161,7 +171,6 @@ function get_peak_survival_fraction(e::AbstractVector{<:T}, peak::T, window::Abs
         gof = (after = result_after.gof, before = result_before.gof),
     )
     report = (
-        peak = result.peak,
         n_before = result.n_before,
         n_after = result.n_after,
         sf = result.sf,

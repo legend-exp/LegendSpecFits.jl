@@ -3,6 +3,7 @@
 using LegendSpecFits
 using Measurements: value as mvalue
 using Random
+using StatsBase
 using Test
 using Unitful
 
@@ -21,6 +22,24 @@ using Unitful
     selection = (low_cut .< aoe .< high_cut) .&& preselection
     Random.seed!(7)
     generic_result, generic_report = get_peak_survival_fraction(e, peak, window, selection; uncertainty=false)
+    bin_width = LegendSpecFits.get_friedman_diaconis_bin_width(e[peak - 2.0u"keV" .< e .< peak + 2.0u"keV"])
+    binning = ustrip(peak - first(window)):ustrip(bin_width):ustrip(peak + last(window))
+    peakhist = fit(Histogram, ustrip.(e), binning)
+    survived_hist = fit(Histogram, ustrip.(e[selection]), binning)
+    cut_hist = fit(Histogram, ustrip.(e[.!selection]), binning)
+    Random.seed!(7)
+    histogram_result, histogram_report = get_peak_survival_fraction(peakhist, survived_hist, cut_hist; uncertainty=false)
+    @test propertynames(histogram_result) == (:fit_func, :n_before, :n_after, :sf, :gof)
+    @test propertynames(histogram_report) == (:n_before, :n_after, :sf, :before, :after)
+    for field in (:n_before, :n_after, :sf)
+        @test isapprox(mvalue(histogram_result[field]), mvalue(generic_result[field]))
+        @test isapprox(mvalue(histogram_report[field]), mvalue(generic_report[field]))
+    end
+    @test generic_result.peak == generic_report.peak == peak
+    @test histogram_report.before.h.weights == peakhist.weights
+    @test histogram_report.after.survived.h.weights == survived_hist.weights
+    @test histogram_report.after.cut.h.weights == cut_hist.weights
+
     Random.seed!(7)
     threshold_result, threshold_report = get_peak_survival_fraction(aoe, e, peak, window; low_cut, high_cut, selection=preselection, uncertainty=false)
     @test mvalue(generic_result.sf) == mvalue(threshold_result.sf)
