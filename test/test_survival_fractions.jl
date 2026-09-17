@@ -10,7 +10,7 @@ using Unitful
 @testset "Peak survival-fraction selections" begin
     Random.seed!(42)
     peak = 2614.5u"keV"
-    window = [20.0u"keV", 20.0u"keV"]
+    window = (20.0u"keV", 20.0u"keV")
     e = peak .+ 1.5u"keV" .* randn(20_000)
     aoe = randn(20_000)
     lq = -aoe
@@ -46,12 +46,7 @@ using Unitful
     @test sum(direct_report.after.survived.h.weights) == count(selection)
     @test direct_report.before.h.weights == direct_report.after.survived.h.weights + direct_report.after.cut.h.weights
     @test_throws ArgumentError get_peak_survival_fraction(e, selection[1:end-1]; uncertainty=false)
-
-    tuple_result, tuple_report = get_peak_survival_fraction(e, peak, Tuple(window), selection; uncertainty=false)
-    @test isapprox(mvalue(tuple_result.sf), mvalue(generic_result.sf))
-    @test tuple_report.before.h.weights == generic_report.before.h.weights
-    @test_throws ArgumentError get_peak_survival_fraction(e, peak, [first(window)], selection; uncertainty=false)
-    @test_throws ArgumentError get_peak_survival_fraction(e, peak, [first(window), last(window), last(window)], selection; uncertainty=false)
+    @test_throws MethodError get_peak_survival_fraction(e, peak, collect(window), selection; uncertainty=false)
 
     Random.seed!(7)
     threshold_result, threshold_report = get_peak_survival_fraction(aoe, e, peak, window; low_cut, high_cut, selection=preselection, uncertainty=false)

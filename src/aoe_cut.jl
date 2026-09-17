@@ -86,10 +86,12 @@ export get_low_aoe_cut
 
 
 """
-    get_peaks_survival_fractions(e, peaks, peak_names, windows, survival_flag; kwargs...)
-    get_peaks_survival_fractions(cut_parameter, e, peaks, peak_names, windows; low_cut=-Inf, high_cut=Inf, selection=trues(length(cut_parameter)), kwargs...)
+    get_peaks_survival_fractions(e::AbstractVector{<:T}, peaks::AbstractVector{<:T}, peak_names::AbstractVector{Symbol}, windows::AbstractVector{<:Tuple{T, T}}, survival_flag::AbstractVector{Bool}; kwargs...) where T<:Unitful.Energy{<:Real}
+    get_peaks_survival_fractions(cut_parameter::AbstractVector{<:Unitful.RealOrRealQuantity}, e::AbstractVector{<:T}, peaks::AbstractVector{<:T}, peak_names::AbstractVector{Symbol}, windows::AbstractVector{<:Tuple{T, T}}; kwargs...) where T<:Unitful.Energy{<:Real}
 
-Fit survival fractions for several peaks. The primary method accepts the final event
+Fit survival fractions for several peaks. Each window is a tuple of lower and
+upper energy widths. The overloads accepting separate vectors of widths construct
+those tuples and forward. The primary method accepts the final event
 selection directly. The interval-based method constructs that flag and forwards to
 the primary method. Either bound may be omitted; with both omitted, finite cut
 parameter values survive. Bounds are exclusive.
@@ -101,7 +103,7 @@ function get_peaks_survival_fractions(e::AbstractVector{<:T}, peaks::AbstractVec
 
     Threads.@threads for i in eachindex(peaks, peak_names, windows, fit_funcs)
         peak, window, fit_func = peaks[i], windows[i], fit_funcs[i]
-        result_peak, report_peak = get_peak_survival_fraction(e, peak, collect(window), survival_flag; uncertainty, bin_width_window, fit_func)
+        result_peak, report_peak = get_peak_survival_fraction(e, peak, window, survival_flag; uncertainty, bin_width_window, fit_func)
         v_result[i] = result_peak
         v_report[i] = report_peak
     end
@@ -111,7 +113,7 @@ function get_peaks_survival_fractions(e::AbstractVector{<:T}, peaks::AbstractVec
     return result, report
 end
 
-get_peaks_survival_fractions(e, peaks, peak_names, left_window_sizes::AbstractVector{<:Unitful.Energy{<:Real}}, right_window_sizes::AbstractVector{<:Unitful.Energy{<:Real}}, survival_flag::AbstractVector{Bool}; kwargs...) = get_peaks_survival_fractions(e, peaks, peak_names, collect(zip(left_window_sizes, right_window_sizes)), survival_flag; kwargs...)
+get_peaks_survival_fractions(e::AbstractVector{<:T}, peaks::AbstractVector{<:T}, peak_names::AbstractVector{Symbol}, left_window_sizes::AbstractVector{<:T}, right_window_sizes::AbstractVector{<:T}, survival_flag::AbstractVector{Bool}; kwargs...) where T<:Unitful.Energy{<:Real} = get_peaks_survival_fractions(e, peaks, peak_names, collect(zip(left_window_sizes, right_window_sizes)), survival_flag; kwargs...)
 
 function get_peaks_survival_fractions(cut_parameter::AbstractVector{<:Unitful.RealOrRealQuantity}, e::AbstractVector{<:T}, peaks::AbstractVector{<:T}, peak_names::AbstractVector{Symbol}, windows::AbstractVector{<:Tuple{T, T}};
     low_cut::Unitful.RealOrRealQuantity=-Inf*unit(first(cut_parameter)), high_cut::Unitful.RealOrRealQuantity=Inf*unit(first(cut_parameter)), selection::AbstractVector{Bool}=trues(length(cut_parameter)), kwargs...) where T<:Unitful.Energy{<:Real}
@@ -119,58 +121,57 @@ function get_peaks_survival_fractions(cut_parameter::AbstractVector{<:Unitful.Re
     get_peaks_survival_fractions(e, peaks, peak_names, windows, survival_flag; kwargs...)
 end
 
-get_peaks_survival_fractions(cut_parameter::AbstractVector{<:Unitful.RealOrRealQuantity}, e, peaks, peak_names, left_window_sizes::AbstractVector{<:Unitful.Energy{<:Real}}, right_window_sizes::AbstractVector{<:Unitful.Energy{<:Real}}; kwargs...) = get_peaks_survival_fractions(cut_parameter, e, peaks, peak_names, collect(zip(left_window_sizes, right_window_sizes)); kwargs...)
+get_peaks_survival_fractions(cut_parameter::AbstractVector{<:Unitful.RealOrRealQuantity}, e::AbstractVector{<:T}, peaks::AbstractVector{<:T}, peak_names::AbstractVector{Symbol}, left_window_sizes::AbstractVector{<:T}, right_window_sizes::AbstractVector{<:T}; kwargs...) where T<:Unitful.Energy{<:Real} = get_peaks_survival_fractions(cut_parameter, e, peaks, peak_names, collect(zip(left_window_sizes, right_window_sizes)); kwargs...)
 
 Base.@deprecate get_peaks_surrival_fractions(args...; kwargs...) get_peaks_survival_fractions(args...; kwargs...)
 export get_peaks_survival_fractions, get_peaks_surrival_fractions
 
 
 """
-    get_peak_survival_fraction(peakhist, survived_hist, cut_hist; uncertainty=true, fit_func=:gamma_def)
-    get_peak_survival_fraction(e, survival_flag; uncertainty=true, fit_func=:gamma_def)
-    get_peak_survival_fraction(e, peak, window, survival_flag; kwargs...)
-    get_peak_survival_fraction(cut_parameter, e, peak, window; low_cut=-Inf, high_cut=Inf, selection=trues(length(cut_parameter)), kwargs...)
+    get_peak_survival_fraction(h_before::Histogram{<:Real, 1}, h_survived::Histogram{<:Real, 1}, h_cut::Histogram{<:Real, 1}; uncertainty::Bool=true, fit_func::Symbol=:gamma_def)
+    get_peak_survival_fraction(e::AbstractVector{<:T}, survival_flag::AbstractVector{Bool}; uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
+    get_peak_survival_fraction(e::AbstractVector{<:T}, peak::T, window::Tuple{T, T}, survival_flag::AbstractVector{Bool}; uncertainty::Bool=true, bin_width_window::T=2.0u"keV", fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
+    get_peak_survival_fraction(cut_parameter::AbstractVector{<:Unitful.RealOrRealQuantity}, e::AbstractVector{<:T}, peak::T, window::Tuple{T, T}; low_cut::Unitful.RealOrRealQuantity=-Inf*unit(first(cut_parameter)), high_cut::Unitful.RealOrRealQuantity=Inf*unit(first(cut_parameter)), selection::AbstractVector{Bool}=trues(length(cut_parameter)), kwargs...) where T<:Unitful.Energy{<:Real}
 
 Fit a peak before and after an arbitrary event selection. The histogram method accepts
-count histograms for all, surviving, and rejected events with identical, unitless
-energy binning; the latter two must partition the first. It returns fit results and
-reports without a nominal `peak` label.
+one-dimensional count histograms for all, surviving, and rejected events with the
+same unitless energy binning; the latter two must partition the first. It returns
+fit results and reports without a nominal `peak` label.
 
 The two-vector method bins the supplied peak-region energies and returns the
-histogram method's outputs. The center/window method accepts exactly two lower
-and upper widths and adds the supplied `peak` to both outputs. The interval-based
-method constructs the selection and forwards to the center/window method. Bounds
+histogram method's outputs. The center/window method accepts a tuple of lower
+and upper energy widths and adds `peak` to both outputs. The cut-parameter method
+constructs the selection and forwards to the center/window method. Cut bounds
 are exclusive.
 """
-function get_peak_survival_fraction(e::AbstractVector{<:T}, peak::T, window::Union{AbstractVector{T}, Tuple{T, T}}, survival_flag::AbstractVector{Bool};
+function get_peak_survival_fraction(e::AbstractVector{<:T}, peak::T, window::Tuple{T, T}, survival_flag::AbstractVector{Bool};
     uncertainty::Bool=true, bin_width_window::T=2.0u"keV", fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
-    @argcheck length(window) == 2
     bin_width = get_friedman_diaconis_bin_width(e[e .> peak - bin_width_window .&& e .< peak + bin_width_window])
     binning = ustrip(peak-first(window)):ustrip(bin_width):ustrip(peak+last(window))
 
-    peakhist = fit(Histogram, ustrip.(e), binning)
-    survived_hist = fit(Histogram, ustrip.(e[survival_flag]), binning)
-    cut_hist = fit(Histogram, ustrip.(e[.!survival_flag]), binning)
-    result, report = get_peak_survival_fraction(peakhist, survived_hist, cut_hist; uncertainty, fit_func)
+    h_before = fit(Histogram, ustrip.(e), binning)
+    h_survived = fit(Histogram, ustrip.(e[survival_flag]), binning)
+    h_cut = fit(Histogram, ustrip.(e[.!survival_flag]), binning)
+    result, report = get_peak_survival_fraction(h_before, h_survived, h_cut; uncertainty, fit_func)
     return merge((peak = peak,), result), merge((peak = peak,), report)
 end
 
-function get_peak_survival_fraction(e::AbstractVector{<:Unitful.Energy{<:Real}}, survival_flag::AbstractVector{Bool};
-    uncertainty::Bool=true, fit_func::Symbol=:gamma_def)
+function get_peak_survival_fraction(e::AbstractVector{<:T}, survival_flag::AbstractVector{Bool};
+    uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
     @argcheck axes(e) == axes(survival_flag)
     bin_width = get_friedman_diaconis_bin_width(e)
     binning = ustrip(minimum(e)):ustrip(bin_width):ustrip(maximum(e) + bin_width)
-    peakhist = fit(Histogram, ustrip.(e), binning)
-    survived_hist = fit(Histogram, ustrip.(e[survival_flag]), binning)
-    cut_hist = fit(Histogram, ustrip.(e[.!survival_flag]), binning)
-    get_peak_survival_fraction(peakhist, survived_hist, cut_hist; uncertainty, fit_func)
+    h_before = fit(Histogram, ustrip.(e), binning)
+    h_survived = fit(Histogram, ustrip.(e[survival_flag]), binning)
+    h_cut = fit(Histogram, ustrip.(e[.!survival_flag]), binning)
+    get_peak_survival_fraction(h_before, h_survived, h_cut; uncertainty, fit_func)
 end
 
-function get_peak_survival_fraction(peakhist::Histogram, survived_hist::Histogram, cut_hist::Histogram;
+function get_peak_survival_fraction(h_before::Histogram{<:Real, 1}, h_survived::Histogram{<:Real, 1}, h_cut::Histogram{<:Real, 1};
     uncertainty::Bool=true, fit_func::Symbol=:gamma_def)
-    peakstats = estimate_single_peak_stats(peakhist)
-    result_before, report_before = fit_single_peak_th228(peakhist, peakstats; uncertainty, fit_func)
-    result_after, report_after = fit_subpeaks_th228(survived_hist, cut_hist, result_before; uncertainty, fit_func)
+    peakstats = estimate_single_peak_stats(h_before)
+    result_before, report_before = fit_single_peak_th228(h_before, peakstats; uncertainty, fit_func)
+    result_after, report_after = fit_subpeaks_th228(h_survived, h_cut, result_before; uncertainty, fit_func)
 
     result = (
         fit_func = fit_func,
@@ -189,7 +190,7 @@ function get_peak_survival_fraction(peakhist::Histogram, survived_hist::Histogra
     return result, report
 end
 
-function get_peak_survival_fraction(cut_parameter::AbstractVector{<:Unitful.RealOrRealQuantity}, e::AbstractVector{<:T}, peak::T, window::Union{AbstractVector{T}, Tuple{T, T}};
+function get_peak_survival_fraction(cut_parameter::AbstractVector{<:Unitful.RealOrRealQuantity}, e::AbstractVector{<:T}, peak::T, window::Tuple{T, T};
     low_cut::Unitful.RealOrRealQuantity=-Inf*unit(first(cut_parameter)), high_cut::Unitful.RealOrRealQuantity=Inf*unit(first(cut_parameter)), selection::AbstractVector{Bool}=trues(length(cut_parameter)), kwargs...) where T<:Unitful.Energy{<:Real}
     survival_flag = (low_cut .< cut_parameter .< high_cut) .&& selection
     get_peak_survival_fraction(e, peak, window, survival_flag; kwargs...)

@@ -83,7 +83,7 @@ function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
             aoe_sep_i = flatview(aoe_sep)[i_aoe, :][isfinite.(flatview(aoe_sep)[i_aoe, :])] ./ result_sep.m_calib
             e_sep_i   = e_sep_calib[isfinite.(flatview(aoe_sep)[i_aoe, :])]
 
-            result_sep_sf, _ = get_peak_survival_fraction(e_sep_i, sep, sep_window, aoe_sep_i .> psd_cut.lowcut; uncertainty=uncertainty, fit_func=sep_cut_search_fit_func)
+            result_sep_sf, _ = get_peak_survival_fraction(e_sep_i, sep, Tuple(sep_window), aoe_sep_i .> psd_cut.lowcut; uncertainty=uncertainty, fit_func=sep_cut_search_fit_func)
 
             sep_sfs[i_aoe] = result_sep_sf.sf
             wls[i_aoe] = wl
