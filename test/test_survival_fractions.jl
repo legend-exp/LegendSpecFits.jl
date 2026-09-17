@@ -40,6 +40,19 @@ using Unitful
     @test histogram_report.after.survived.h.weights == survived_hist.weights
     @test histogram_report.after.cut.h.weights == cut_hist.weights
 
+    direct_result, direct_report = get_peak_survival_fraction(e, selection; uncertainty=false)
+    @test propertynames(direct_result) == propertynames(histogram_result)
+    @test sum(direct_report.before.h.weights) == length(e)
+    @test sum(direct_report.after.survived.h.weights) == count(selection)
+    @test direct_report.before.h.weights == direct_report.after.survived.h.weights + direct_report.after.cut.h.weights
+    @test_throws ArgumentError get_peak_survival_fraction(e, selection[1:end-1]; uncertainty=false)
+
+    tuple_result, tuple_report = get_peak_survival_fraction(e, peak, Tuple(window), selection; uncertainty=false)
+    @test isapprox(mvalue(tuple_result.sf), mvalue(generic_result.sf))
+    @test tuple_report.before.h.weights == generic_report.before.h.weights
+    @test_throws ArgumentError get_peak_survival_fraction(e, peak, [first(window)], selection; uncertainty=false)
+    @test_throws ArgumentError get_peak_survival_fraction(e, peak, [first(window), last(window), last(window)], selection; uncertainty=false)
+
     Random.seed!(7)
     threshold_result, threshold_report = get_peak_survival_fraction(aoe, e, peak, window; low_cut, high_cut, selection=preselection, uncertainty=false)
     @test mvalue(generic_result.sf) == mvalue(threshold_result.sf)
