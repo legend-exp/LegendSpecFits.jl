@@ -73,4 +73,33 @@ using Unitful
         # indices follow the input axes
         @test select_optimum(view([9.0, 1.0, 1.0], 2:3), view([(0, 0), (2, 2), (1, 1)], 2:3); rel_tol = 0.0) == 2
     end
+
+    @testset "evaluate_energy_point" begin
+        rng = MersenneTwister(1234)
+        n = 4000
+        qdrift = 100 .+ 200 .* rand(rng, n)
+        slope = 0.01
+        e = μ .+ 0.8 .* randn(rng, n) .- slope .* (qdrift .- 200)
+        row = evaluate_energy_point(e, qdrift, peak, window, 2400.0, 2800.0, 0.5)
+        row_raw = evaluate_energy_point(e, qdrift, peak, window, 2400.0, 2800.0, 0.5; apply_ctc = false)
+        @test keys(row) == (:fwhm_before, :fwhm, :w90, :asym, :tail_fraction, :tail_scale, :centroid, :fct, :m_cal_simple, :ctc_converged, :n_events)
+        @test row.fct ≈ slope rtol = 0.2
+        @test row.ctc_converged
+        @test row.w90 < row_raw.w90
+        @test row.fwhm < row.fwhm_before
+        @test unit(row.w90) == u"keV"
+        @test row.m_cal_simple ≈ 1.0u"keV" rtol = 0.01
+        @test row.n_events <= n
+        # the ADC correction `e + fct * qdrift` removes the injected dependence (1.5 before)
+        e_ctc = e .+ row.fct .* qdrift
+        low, high = qdrift .< 150, qdrift .> 250
+        @test abs(sum(e_ctc[low]) / count(low) - sum(e_ctc[high]) / count(high)) < 0.3
+        # without correction: same histogram as the uncorrected fit inside ctc_energy
+        @test row_raw.fct == 0.0
+        @test row_raw.fwhm_before == row_raw.fwhm
+        @test row_raw.fwhm ≈ row.fwhm_before rtol = 1e-8
+        @test evaluate_energy_point(view(e, :), view(qdrift, :), peak, window, 2400.0, 2800.0, 0.5; apply_ctc = false) == row_raw
+        @test_throws "at least 100 required" evaluate_energy_point(e[1:50], qdrift[1:50], peak, window, 2400.0, 2800.0, 0.5)
+        @test_throws DimensionMismatch evaluate_energy_point(e, qdrift[1:10], peak, window, 2400.0, 2800.0, 0.5)
+    end
 end
