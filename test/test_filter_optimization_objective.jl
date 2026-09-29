@@ -58,4 +58,19 @@ using Unitful
         @test objective_value(m, :fwhm_asym) == 3.0u"keV"
         @test_throws "objective must be one of (:w90, :fwhm, :asym, :fwhm_asym)" objective_value(m, :sigma)
     end
+
+    @testset "select_optimum" begin
+        params = [(2, 1), (1, 3), (1, 2), (3, 0)]
+        # all four within 0.5 % of the minimum: shortest first, then second element
+        @test select_optimum([1.0, 1.002, 1.003, 0.999], params; rel_tol = 0.005) == 3
+        @test select_optimum([1.0, 1.002, 1.003, 0.999], params; rel_tol = 0.0) == 4
+        @test select_optimum([1.0, 1.02, 1.004, 1.03], params; rel_tol = 0.005) == 3
+        # NaN is never selected, even when its parameters are the shortest
+        @test select_optimum([1.0, 1.0, NaN, 1.0], params; rel_tol = 0.005) == 2
+        @test select_optimum([NaN, 2.0, NaN, 1.0], params; rel_tol = 0.005) == 4
+        @test_throws "all objective values are NaN" select_optimum([NaN, NaN], [(1, 1), (2, 2)]; rel_tol = 0.005)
+        @test_throws DimensionMismatch select_optimum([1.0, 2.0], [(1, 1)]; rel_tol = 0.005)
+        # indices follow the input axes
+        @test select_optimum(view([9.0, 1.0, 1.0], 2:3), view([(0, 0), (2, 2), (1, 1)], 2:3); rel_tol = 0.0) == 2
+    end
 end

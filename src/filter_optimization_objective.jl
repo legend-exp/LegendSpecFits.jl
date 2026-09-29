@@ -88,3 +88,26 @@ function objective_value(metrics::NamedTuple, objective::Symbol)
     throw(ArgumentError("objective must be one of $energy_objectives, got :$objective"))
 end
 export objective_value
+
+"""
+    select_optimum(objective_values::AbstractVector{<:Real}, params::AbstractVector{<:Tuple}; rel_tol::Real)
+
+Index of the selected optimum. Candidates whose objective lies within `min * (1 + rel_tol)` of the
+smallest objective tie; among ties the lexicographically smallest parameter tuple wins, i.e. the
+smallest first element, then the smallest second. `NaN` objectives are never selected. The
+returned index belongs to `eachindex(objective_values, params)`.
+
+Throws an `ArgumentError` if all objectives are `NaN`, if the smallest objective is not positive
+and finite, or if `rel_tol < 0`; throws a `DimensionMismatch` if the two vectors have different
+indices.
+"""
+function select_optimum(objective_values::AbstractVector{<:Real}, params::AbstractVector{<:Tuple}; rel_tol::Real)
+    rel_tol >= 0 || throw(ArgumentError("select_optimum: rel_tol must be non-negative, got $rel_tol"))
+    valid = filter(i -> !isnan(objective_values[i]), eachindex(objective_values, params))
+    isempty(valid) && throw(ArgumentError("select_optimum: all objective values are NaN"))
+    best = minimum(objective_values[i] for i in valid)
+    0 < best < Inf || throw(ArgumentError("select_optimum: smallest objective must be positive and finite, got $best"))
+    ties = filter(i -> objective_values[i] <= best * (1 + rel_tol), valid)
+    return argmin(i -> params[i], ties)
+end
+export select_optimum
