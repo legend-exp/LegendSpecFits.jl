@@ -102,4 +102,41 @@ using Unitful
         @test_throws "at least 100 required" evaluate_energy_point(e[1:50], qdrift[1:50], peak, window, 2400.0, 2800.0, 0.5)
         @test_throws DimensionMismatch evaluate_energy_point(e, qdrift[1:10], peak, window, 2400.0, 2800.0, 0.5)
     end
+
+    @testset "fit_fwhm_ft" begin
+        rng = MersenneTwister(42)
+        n = 4000
+        z = randn(rng, n)
+        qdrift = 100 .+ 200 .* rand(rng, n)
+        e_grid_ft = range(1.0u"µs", step = 0.2u"µs", length = 11)
+        σ_ft = [0.8 * (1 + 3 * ustrip(u"µs", ft - 2.0u"µs")^2) for ft in e_grid_ft]
+        e_grid = μ .+ σ_ft .* z'
+        e_grid[1, :] .= NaN
+
+        result, report = fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false)
+        @test abs(mvalue(result.ft) - 2.0u"µs") <= step(e_grid_ft) * (1 + 1e-9)
+        @test abs(mvalue(result.legacy_ft) - 2.0u"µs") <= step(e_grid_ft) * (1 + 1e-9)
+        @test result.objective == :w90
+        @test result.min_objective <= minimum(report.w90) * 1.005
+        @test report.table isa Table
+        @test length(report.table) == length(e_grid_ft)
+        @test report.table.ft == collect(e_grid_ft)
+        @test report.table.status[1] != "ok" && isnan(report.table.w90[1])
+        @test all(==("ok"), report.table.status[2:end])
+        @test report.e_grid_ft == collect(e_grid_ft)[2:end]
+        @test all(iszero, report.fct)
+
+        result_fwhm, _ = fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; objective = :fwhm)
+        @test result_fwhm.min_objective == result_fwhm.min_fwhm
+
+        @test_throws "No valid FWHM found" fit_fwhm_ft(fill(NaN, 2, n), e_grid_ft[1:2], qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false)
+        @test_throws "objective must be one of" fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; objective = :sigma)
+
+        # default path with charge-trapping correction
+        fts_ctc = e_grid_ft[4:8]
+        e_grid_ctc = μ .+ σ_ft[4:8] .* z' .- 0.01 .* (qdrift' .- 200)
+        result_ctc, report_ctc = fit_fwhm_ft(e_grid_ctc, fts_ctc, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5)
+        @test abs(mvalue(result_ctc.ft) - 2.0u"µs") <= step(fts_ctc) * (1 + 1e-9)
+        @test all(isapprox.(report_ctc.table.fct, 0.01; rtol = 0.2))
+    end
 end
