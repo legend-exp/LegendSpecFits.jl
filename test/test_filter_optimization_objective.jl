@@ -48,6 +48,33 @@ using Unitful
         @test_throws "containment must lie in (0, 1)" peak_width_metrics(v_gauss; containment = 1.0)
         @test_throws "containment must lie in (0, 1)" peak_width_metrics(v_gauss; containment = 0.0)
         @test_throws ArgumentError peak_width_metrics(merge(v_gauss, (skew_fraction = 1.0,)))
+        @test_throws "parameter μ must be positive" peak_width_metrics(merge(v_gauss, (μ = 0.0,)))
+        @test_throws "parameter n must be positive" peak_width_metrics(merge(v_gauss, (n = 0.0,)))
+        @test_throws "parameter skew_width must be non-negative" peak_width_metrics(merge(v_gauss, (skew_width = -0.01,)))
+
+        # long tails: w90 agrees with a reference on a grid with step σ / 500
+        f_sig = LegendSpecFits.get_th228_fit_functions().gamma_sigWithTail
+        function w90_reference(v; containment = 0.9)
+            x = range(v.μ - max(10 * v.σ, 8 * v.skew_width * v.μ), v.μ + 6 * v.σ; step = v.σ / 500)
+            y = [f_sig(xi, v) for xi in x]
+            cdf = cumsum([0.0; (y[begin+1:end] .+ y[begin:end-1]) ./ 2])
+            cdf ./= last(cdf)
+            w = Inf
+            j = firstindex(cdf)
+            for i in eachindex(cdf)
+                target = cdf[i] + containment
+                target > last(cdf) && break
+                while cdf[j] < target
+                    j += 1
+                end
+                w = min(w, x[j-1] + (target - cdf[j-1]) / (cdf[j] - cdf[j-1]) * step(x) - x[i])
+            end
+            return w
+        end
+        for tail_scale in (100.0, 200.0)
+            v_long = (μ = μ, σ = 0.8, n = 1000.0, skew_fraction = 0.05, skew_width = tail_scale / μ)
+            @test peak_width_metrics(v_long).w90 ≈ w90_reference(v_long) rtol = 0.002
+        end
     end
 
     @testset "objective_value" begin
@@ -71,7 +98,14 @@ using Unitful
         @test_throws "all objective values are NaN" select_optimum([NaN, NaN], [(1, 1), (2, 2)]; rel_tol = 0.005)
         @test_throws DimensionMismatch select_optimum([1.0, 2.0], [(1, 1)]; rel_tol = 0.005)
         # indices follow the input axes
-        @test select_optimum(view([9.0, 1.0, 1.0], 2:3), view([(0, 0), (2, 2), (1, 1)], 2:3); rel_tol = 0.0) == 2
+        i_axes = select_optimum(view([9.0, 1.0, 1.0], Base.IdentityUnitRange(2:3)), view([(0, 0), (2, 2), (1, 1)], Base.IdentityUnitRange(2:3)); rel_tol = 0.0)
+        @test i_axes == 3
+        @test i_axes in 2:3
+        @test_throws "smallest objective must be positive and finite" select_optimum([0.0, 1.0], [(1, 1), (2, 2)]; rel_tol = 0.005)
+        @test_throws "smallest objective must be positive and finite" select_optimum([-1.0, 1.0], [(1, 1), (2, 2)]; rel_tol = 0.005)
+        for bad in (-0.1, Inf, NaN)
+            @test_throws "rel_tol" select_optimum([1.0, 2.0], [(1, 1), (2, 2)]; rel_tol = bad)
+        end
     end
 
     @testset "evaluate_energy_point" begin
@@ -135,6 +169,10 @@ using Unitful
         @test_throws "No valid FWHM found" fit_fwhm_ft(fill(NaN, 2, n), e_grid_ft[1:2], qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false)
         @test_throws "objective must be one of" fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; objective = :sigma)
 
+        for bad in (-0.1, Inf, NaN)
+            @test_throws "rel_tol" fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; rel_tol = bad)
+        end
+
         # default path with charge-trapping correction
         fts_ctc = e_grid_ft[4:8]
         e_grid_ctc = μ .+ σ_ft[4:8] .* z' .- 0.01 .* (qdrift' .- 200)
@@ -170,6 +208,9 @@ using Unitful
         @test to_steps.(first(report.path)) == (35, 16)
         @test to_steps.(last(report.path)) == to_steps.((result.rt, result.ft))
         @test (report.rt, report.ft) == (result.rt, result.ft)
+        # the table order does not depend on thread scheduling
+        _, report_again = optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
+        @test collect(zip(to_steps.(report_again.table.rt), to_steps.(report_again.table.ft))) == collect(zip(to_steps.(report.table.rt), to_steps.(report.table.ft)))
 
         # the half-plane ft > 2.25 µs excludes the unconstrained optimum
         feasible(rt, ft) = ft > 2.25u"µs"
@@ -179,7 +220,7 @@ using Unitful
         @test abs(result_f.ft - 2.3u"µs") <= lattice * (1 + 1e-9)
         @test unique_points(report_f.table)
 
-        # flat objective: all points tie, the shortest rt, then ft, of the final neighbourhood wins
+        # flat objective: all points tie, the shortest rt, then ft, of the final neighborhood wins
         f_flat(rt, ft) = μ .+ 0.8 .* z
         result_flat, _ = optimize_rtft(f_flat, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
         @test result_flat.converged
@@ -196,6 +237,49 @@ using Unitful
         @test any(failed)
         @test all(isnan, report_fail.table.w90[failed])
         @test result_fail.ft <= 1.6u"µs" + lattice / 2
+
+        # plateau noise below rel_tol moves the optimum by at most one lattice step
+        noise(rt, ft) = 1 + 0.002 * sin(12.9898 * to_steps(rt) + 78.233 * to_steps(ft))
+        f_noisy(rt, ft) = μ .+ (σ_bowl(rt, ft) * noise(rt, ft)) .* z
+        result_noisy, _ = optimize_rtft(f_noisy, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
+        @test abs(to_steps(result_noisy.rt) - 40) <= 1
+        @test abs(to_steps(result_noisy.ft) - 20) <= 1
+
+        # a seed in a corner of the bounds: no evaluation outside the bounds
+        result_corner, report_corner = optimize_rtft(f_bowl, qdrift, 1.0u"µs", 0.5u"µs"; kw...)
+        @test all(r -> 10 <= to_steps(r) <= 80, report_corner.table.rt)
+        @test all(f -> 5 <= to_steps(f) <= 40, report_corner.table.ft)
+        @test length(report_corner.table) > 1
+
+        # only the seed is feasible: it is returned after one evaluation
+        feasible_seed(rt, ft) = (to_steps(rt), to_steps(ft)) == (35, 16)
+        result_seed, _ = optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; feasible = feasible_seed, kw...)
+        @test (to_steps(result_seed.rt), to_steps(result_seed.ft)) == (35, 16)
+        @test result_seed.converged
+        @test result_seed.n_evals == 1
+
+        # every neighbor of the seed fails: the seed is returned and the minimum is not certified
+        f_seed_only(rt, ft) = (to_steps(rt), to_steps(ft)) == (35, 16) ? f_bowl(rt, ft) : fill(NaN, n)
+        result_alone, report_alone = optimize_rtft(f_seed_only, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
+        @test (to_steps(result_alone.rt), to_steps(result_alone.ft)) == (35, 16)
+        @test !result_alone.converged
+        @test count(==("ok"), report_alone.table.status) == 1
+
+        # an interrupt is not an evaluation failure
+        f_interrupt(rt, ft) = (to_steps(rt), to_steps(ft)) == (35, 16) ? f_bowl(rt, ft) : throw(InterruptException())
+        root_error(e) = e isa TaskFailedException ? root_error(e.task.exception) : e isa CompositeException ? root_error(first(e.exceptions)) : e
+        err_search = try
+            optimize_rtft(f_interrupt, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
+            nothing
+        catch e
+            e
+        end
+        @test root_error(err_search) isa InterruptException
+
+        for bad in (-0.1, Inf, NaN)
+            @test_throws "rel_tol" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw..., rel_tol = bad)
+        end
+        @test_throws TypeError optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw..., step0 = (0.4u"µs", 0.4u"µs", 0.4u"µs"))
 
         @test_throws "optimize_rtft: seed evaluation failed" optimize_rtft((rt, ft) -> fill(NaN, n), qdrift, 3.5u"µs", 1.6u"µs"; kw...)
         @test_throws "outside rt_bounds" optimize_rtft(f_bowl, qdrift, 9.0u"µs", 1.6u"µs"; kw...)
