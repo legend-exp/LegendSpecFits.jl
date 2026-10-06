@@ -197,3 +197,130 @@ function evaluate_energy_point(e::AbstractVector{<:Real}, qdrift::AbstractVector
     )
 end
 export evaluate_energy_point
+
+"""
+    optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0, ft0; rt_bounds::Tuple, ft_bounds::Tuple, feasible=(rt, ft) -> true, step0::Tuple, lattice, objective::Symbol=:w90, rel_tol::Real=0.005, max_evals::Int=60, eval_kwargs...)
+
+Joint search of rise time `rt` and flat-top time `ft` minimizing `objective` (see
+`objective_value`) of `evaluate_energy_point`.
+
+`f_energy(rt, ft)` returns the energies (ADC) of the waveform set at one filter setting, aligned
+with `qdrift`; it is called concurrently from several threads. `rt0`, `ft0`, the bounds, `step0` and
+`lattice` are `Unitful` times. Every candidate lies on the lattice `k * lattice` and is evaluated at
+most once. `eval_kwargs` must contain `peak`, `window`, `min_e`, `max_e`, `rel_cut_fit` and may
+contain `n_bins`, `apply_ctc`, `containment`; they are forwarded to `evaluate_energy_point`.
+
+Compass pattern search with diagonal moves: starting from the seed `(rt0, ft0)` rounded to the
+lattice and the steps `step0` rounded to multiples of the lattice, the eight neighbours at the
+current steps that lie inside the bounds (snapped to the lattice with a tolerance of `1e-6`
+lattice steps), satisfy `feasible(rt, ft)` and are not yet evaluated are evaluated in parallel
+(`Threads.@threads`). The search moves to the best neighbour if its objective is below
+`(1 - rel_tol)` times the current one; otherwise both steps are halved, never below one lattice
+step. It stops with `converged = true` when both steps equal the lattice and no neighbour improves,
+and with `converged = false` when `max_evals` evaluations are reached. The optimum is chosen with
+`select_optimum` among the final point and its evaluated neighbours at the final steps, so ties
+within `rel_tol` go to the shortest `rt`, then the shortest `ft`.
+
+An evaluation that throws is recorded with its error text in `status` and `NaN` metrics, and the
+search continues.
+
+# Returns
+- `result`: `(rt, ft, fwhm, w90, asym, fct, min_objective, objective, n_evals, converged)`
+- `report`: `(rt, ft, objective, table, path)`, where `table` is a `TypedTables.Table` with one
+  row per evaluation and columns `rt, ft, stage, step_rt, step_ft, status, fwhm_before, fwhm, w90,
+  asym, tail_fraction, tail_scale, centroid, fct, m_cal_simple, ctc_converged, n_events`
+  (`stage` is `:seed` or `:neighbour`), and `path` is the vector of accepted `(rt, ft)`
+  positions starting with the seed.
+
+Throws an `ArgumentError` for an unknown `objective`, `lattice <= 0`, `max_evals < 1`,
+non-positive `step0`, `rt0` or `ft0` outside their bounds, a seed that rounds to an infeasible or
+out-of-bounds lattice point, or missing or unsupported `eval_kwargs`. Throws an `ErrorException`
+if the seed evaluation fails.
+"""
+function optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0::Unitful.Time{<:Real}, ft0::Unitful.Time{<:Real};
+        rt_bounds::Tuple, ft_bounds::Tuple, feasible=(rt, ft) -> true, step0::Tuple, lattice::Unitful.Time{<:Real},
+        objective::Symbol=:w90, rel_tol::Real=0.005, max_evals::Int=60, eval_kwargs...)
+    objective in energy_objectives || throw(ArgumentError("objective must be one of $energy_objectives, got :$objective"))
+    lattice > zero(lattice) || throw(ArgumentError("optimize_rtft: lattice must be positive, got $lattice"))
+    max_evals >= 1 || throw(ArgumentError("optimize_rtft: max_evals must be at least 1, got $max_evals"))
+    all(>(zero(lattice)), step0) || throw(ArgumentError("optimize_rtft: step0 must be positive, got $step0"))
+    first(rt_bounds) <= rt0 <= last(rt_bounds) || throw(ArgumentError("optimize_rtft: rt0 = $rt0 outside rt_bounds = $rt_bounds"))
+    first(ft_bounds) <= ft0 <= last(ft_bounds) || throw(ArgumentError("optimize_rtft: ft0 = $ft0 outside ft_bounds = $ft_bounds"))
+    required = (:peak, :window, :min_e, :max_e, :rel_cut_fit)
+    kw = values(eval_kwargs)
+    absent = filter(k -> !haskey(kw, k), required)
+    isempty(absent) || throw(ArgumentError("optimize_rtft: eval_kwargs must contain $absent"))
+    unsupported = filter(k -> !(k in (required..., :n_bins, :apply_ctc, :containment)), keys(kw))
+    isempty(unsupported) || throw(ArgumentError("optimize_rtft: unsupported eval_kwargs $unsupported"))
+    point_kwargs = Base.structdiff(kw, NamedTuple{required})
+
+    to_lattice(t) = uconvert(NoUnits, t / lattice)
+    rt_range = ceil(Int, to_lattice(first(rt_bounds)) - 1e-6):floor(Int, to_lattice(last(rt_bounds)) + 1e-6)
+    ft_range = ceil(Int, to_lattice(first(ft_bounds)) - 1e-6):floor(Int, to_lattice(last(ft_bounds)) + 1e-6)
+    admissible(k) = k[1] in rt_range && k[2] in ft_range && feasible(k[1] * lattice, k[2] * lattice)
+    neighbours(c, s) = [(c[1] + di * s[1], c[2] + dj * s[2]) for di in -1:1 for dj in -1:1 if (di, dj) != (0, 0)]
+    seed = (round(Int, to_lattice(rt0)), round(Int, to_lattice(ft0)))
+    admissible(seed) || throw(ArgumentError("optimize_rtft: seed ($rt0, $ft0) rounds to an infeasible or out-of-bounds lattice point"))
+    steps = (max(1, round(Int, to_lattice(first(step0)))), max(1, round(Int, to_lattice(last(step0)))))
+
+    head = (rt = 0 * lattice, ft = 0 * lattice, stage = :seed, step_rt = 0 * lattice, step_ft = 0 * lattice, status = "")
+    records = Vector{typeof(merge(head, nan_energy_point))}()
+    cache = Dict{Tuple{Int, Int}, Int}()
+    cache_lock = ReentrantLock()
+    function evaluate!(todo, stage, s)
+        Threads.@threads for k in todo
+            rt, ft = k[1] * lattice, k[2] * lattice
+            row, status = try
+                convert(typeof(nan_energy_point), evaluate_energy_point(f_energy(rt, ft), qdrift, kw.peak, kw.window, kw.min_e, kw.max_e, kw.rel_cut_fit; point_kwargs...)), "ok"
+            catch err
+                @warn "optimize_rtft: evaluation failed at rt = $rt, ft = $ft" exception = err
+                nan_energy_point, sprint(showerror, err)
+            end
+            record = merge((rt = rt, ft = ft, stage = stage, step_rt = s[1] * lattice, step_ft = s[2] * lattice, status = status), row)
+            lock(cache_lock) do
+                push!(records, record)
+                cache[k] = lastindex(records)
+            end
+        end
+    end
+    is_ok(k) = haskey(cache, k) && records[cache[k]].status == "ok"
+    obj(k) = ustrip(objective_value(records[cache[k]], objective))
+
+    evaluate!([seed], :seed, steps)
+    is_ok(seed) || error("optimize_rtft: seed evaluation failed: $(records[cache[seed]].status)")
+    current = seed
+    path = [(seed[1] * lattice, seed[2] * lattice)]
+    converged = false
+    while length(records) < max_evals
+        hood = filter(admissible, neighbours(current, steps))
+        todo = filter(k -> !haskey(cache, k), hood)
+        budget = max_evals - length(records)
+        evaluate!(first(todo, budget), :neighbour, steps)
+        length(todo) > budget && break
+        evaluated = filter(is_ok, hood)
+        if !isempty(evaluated)
+            best = argmin(k -> (obj(k), k), evaluated)
+            if obj(best) < obj(current) * (1 - rel_tol)
+                current = best
+                push!(path, (best[1] * lattice, best[2] * lattice))
+                continue
+            end
+        end
+        if steps == (1, 1)
+            converged = true
+            break
+        end
+        steps = (max(1, first(steps) ÷ 2), max(1, last(steps) ÷ 2))
+    end
+
+    final = [current; filter(k -> admissible(k) && is_ok(k), neighbours(current, steps))]
+    best_row = records[cache[final[select_optimum([obj(k) for k in final], final; rel_tol)]]]
+    result = (
+        rt = best_row.rt, ft = best_row.ft, fwhm = best_row.fwhm, w90 = best_row.w90, asym = best_row.asym, fct = best_row.fct,
+        min_objective = objective_value(best_row, objective), objective = objective,
+        n_evals = length(records), converged = converged
+    )
+    report = (rt = result.rt, ft = result.ft, objective = objective, table = Table(records), path = path)
+    return result, report
+end
+export optimize_rtft
