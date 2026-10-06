@@ -73,35 +73,78 @@ end
 export fit_enc_sigmas
 
 """
-    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T, apply_ctc::Bool=true; kwargs...)
-    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e, max_e, rel_cut_fit; kwargs...)
-    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e, max_e, rel_cut_fit; kwargs...)
+    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt, min_e, max_e, rel_cut_fit, apply_ctc::Bool=true; n_bins=-1, peak=2614.5u"keV", window=(35.0u"keV", 25.0u"keV"), objective=:w90, containment=0.9, rel_tol=0.005, ft_fwhm_tol=0.1u"keV")
+    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt, min_e, max_e, rel_cut_fit; kwargs...)
 
-Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshape and return the optimal FT and the corresponding FWHM value. The cut values cut for each flat-top time a window for better histogramming.
-If the `apply_ctc` flag is set to `true`, the CTC correction is applied to the energy values. 
-Othwise, if a `qdrift` vector is provided, the CTC correction is applied to the energy values.
+Scan the flat-top times `e_grid_ft` at the rise time `rt` and select the optimal flat-top time.
 
-# Arguments
-- `e_grid`: 2D array of energy values for each FT in `e_grid_ft`
-- `e_grid_ft`: 1D array of FT values for which the FWHM values in `e_grid` are calculated
-- `rt`: RT value for which the FWHM values in `e_grid` are calculated
-- `min_e`: minimum energy value to consider for the fit
-- `max_e`: maximum energy value to consider for the fit
-- `rel_cut_fit`: relative cut value to use for the fit
+With `qdrift`, row `i` of `e_grid` (energies in ADC at `e_grid_ft[i]`) is evaluated with
+`evaluate_energy_point`, in parallel across flat-top times, with the linear charge-trapping
+correction if `apply_ctc` is `true`. Widths are calibrated per flat-top time with that point's
+`m_cal_simple`. The optimum minimizes `objective` (one of `:w90, :fwhm, :asym, :fwhm_asym`, see
+`objective_value`); flat-top times whose objective lies within `rel_tol` of the minimum tie and
+the shortest one wins (`select_optimum`). `legacy_ft` is the shortest flat-top time whose FWHM
+lies within `ft_fwhm_tol` of the minimum FWHM. A flat-top time whose evaluation throws is
+recorded in `report.table` with its error text in `status` and `NaN` metrics.
 
-# Returns
-- `ft`: optimal FT value
-- `min_fwhm`: corresponding FWHM value
+Without `qdrift`, each row is fitted without correction and the flat-top time is chosen by FWHM
+with the `ft_fwhm_tol` rule; the result is `(ft, min_fwhm)`.
+
+# Returns (with `qdrift`)
+- `result`: `(ft, min_fwhm, min_objective, objective, legacy_ft)`; `ft` and `legacy_ft` carry
+  `step(e_grid_ft)` as uncertainty, `min_fwhm` is the FWHM at `ft`
+- `report`: `(ft, min_fwhm, min_objective, objective, legacy_ft, e_grid_ft, fwhm, w90, asym, fct,
+  table)`; `e_grid_ft, fwhm, w90, asym, fct` hold the successful flat-top times, `table` is a
+  `TypedTables.Table` with one row per flat-top time and columns `ft, status, fwhm_before, fwhm,
+  w90, asym, tail_fraction, tail_scale, centroid, fct, m_cal_simple, ctc_converged, n_events`
+
+Throws an `ArgumentError` for an unknown `objective`, a `DimensionMismatch` if the rows of
+`e_grid` do not match `e_grid_ft`, and an `ErrorException` if no flat-top time is evaluated
+successfully.
 """
-function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T, apply_ctc::Bool=true; kwargs...) where {T <:Real}
-    if apply_ctc
-        return _fit_fwhm_ft_ctc(e_grid, e_grid_ft, qdrift, rt, min_e, max_e, rel_cut_fit; kwargs...)
-    else
-        return _fit_fwhm_ft(e_grid, e_grid_ft, rt, min_e, max_e, rel_cut_fit; kwargs...)
+function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::Real, max_e::Real, rel_cut_fit::Real, apply_ctc::Bool=true;
+        n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"),
+        objective::Symbol=:w90, containment::Real=0.9, rel_tol::Real=0.005, ft_fwhm_tol::Unitful.Energy{<:Real}=0.1u"keV")
+    objective in energy_objectives || throw(ArgumentError("objective must be one of $energy_objectives, got :$objective"))
+    axes(e_grid, 1) == eachindex(e_grid_ft) || throw(DimensionMismatch("e_grid has $(size(e_grid, 1)) rows, e_grid_ft has $(length(e_grid_ft)) entries"))
+
+    fts = collect(e_grid_ft)
+    rows = similar(fts, typeof(nan_energy_point))
+    status = similar(fts, String)
+    Threads.@threads for i in eachindex(fts)
+        try
+            rows[i] = evaluate_energy_point(Array{Float64}(e_grid[i, :]), qdrift, peak, window, min_e, max_e, rel_cut_fit; n_bins, apply_ctc, containment)
+            status[i] = "ok"
+        catch err
+            @warn "fit_fwhm_ft: evaluation failed at ft = $(fts[i])" exception = err
+            rows[i] = nan_energy_point
+            status[i] = sprint(showerror, err)
+        end
     end
+
+    ok = findall(==("ok"), status)
+    if isempty(ok)
+        @error "No valid FWHM found." status
+        throw(ErrorException("No valid FWHM found, could not determine optimal FT"))
+    end
+    i_best = select_optimum([ustrip(objective_value(row, objective)) for row in rows], [(ft,) for ft in fts]; rel_tol)
+    min_fwhm_all = minimum(rows[i].fwhm for i in ok)
+    i_legacy = argmin(i -> fts[i], filter(i -> rows[i].fwhm - min_fwhm_all < ft_fwhm_tol, ok))
+
+    best = rows[i_best]
+    result = (
+        ft = measurement(fts[i_best], step(e_grid_ft)), min_fwhm = best.fwhm,
+        min_objective = objective_value(best, objective), objective = objective,
+        legacy_ft = measurement(fts[i_legacy], step(e_grid_ft))
+    )
+    report = merge(result, (
+        e_grid_ft = fts[ok], fwhm = [rows[i].fwhm for i in ok], w90 = [rows[i].w90 for i in ok],
+        asym = [rows[i].asym for i in ok], fct = [rows[i].fct for i in ok],
+        table = Table([merge((ft = fts[i], status = status[i]), rows[i]) for i in eachindex(fts)])
+    ))
+    return result, report
 end
 fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e, max_e, rel_cut_fit; kwargs...) = _fit_fwhm_ft(e_grid, e_grid_ft, rt, min_e, max_e, rel_cut_fit; kwargs...)
-fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e, max_e, rel_cut_fit; kwargs...) = _fit_fwhm_ft_ctc(e_grid, e_grid_ft, qdrift, rt, min_e, max_e, rel_cut_fit; kwargs...)
 export fit_fwhm_ft
 
 
@@ -179,111 +222,6 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
     fwhm = fwhm[fts_success]
     modes = modes[fts_success]
 
-    # get minimal fwhm and rt
-    if isempty(fwhm)
-        @error "No valid FWHM found."
-        throw(ErrorException("No valid FWHM found, could not determine optimal FT"))
-    else
-        # calibration constant from mean of modes
-        c = peak ./ mean(modes)
-        fwhm = fwhm .* c
-        # get minimal fwhm and ft
-        sel = findall(mvalue.(fwhm .- minimum(fwhm)) .< ft_fwhm_tol)
-        ft_min_fwhm, min_i = findmin(e_grid_ft[sel])
-        min_fwhm = fwhm[sel][min_i]
-    end
-    # generate result and report
-    result = (
-        ft = measurement(ft_min_fwhm, step(e_grid_ft)),
-        min_fwhm = min_fwhm
-    )
-    report = (
-        ft = result.ft, 
-        min_fwhm = result.min_fwhm,
-        e_grid_ft = fts,
-        fwhm = fwhm,
-    )
-    return result, report
-
-end
-
-
-"""
-    _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs", peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.Energy{<:Real} = 0.1u"keV") where {T <:Real}
-
-Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshape and return the optimal FT and the corresponding FWHM value. The cut values cut for each flat-top time a window for better histogramming.
-
-# Arguments
-- `e_grid`: 2D array of energy values for each FT in `e_grid_ft`
-- `e_grid_ft`: 1D array of FT values for which the FWHM values in `e_grid` are calculated
-- `qdrift`: drift time values for each energy value in `e_grid`
-- `rt`: RT value for which the FWHM values in `e_grid` are calculated
-- `min_e`: minimum energy value to consider for the fit
-- `max_e`: maximum energy value to consider for the fit
-- `nbins`: number of bins to use for the histogram of energy values
-- `rel_cut_fit`: relative cut value to use for the fit
-- `ft_fwhm_tol`: search for lowest "optimal" ft within `minimum(fwhm) + ft_fwhm_tol` to avoid artificially large ft 
-
-# Returns
-- `ft`: optimal FT value
-- `min_fwhm`: corresponding FWHM value
-"""
-function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T; n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.Energy{<:Real} = 0.1u"keV") where {T <:Real}
-    @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"
-    
-    # create empty array for results
-    fts = Vector{eltype(e_grid_ft)}(undef, length(e_grid_ft))
-    fwhm = Vector{Measurement}(undef, length(e_grid_ft))
-    modes = Vector{Float64}(undef, length(e_grid_ft))
-    fts_success  = Bool.(zeros(length(e_grid_ft)))
-    
-    Threads.@threads for f in eachindex(e_grid_ft)
-        # get ft
-        ft = e_grid_ft[f]
-
-        # get e values for this ft
-        e_ft = Array{Float64}(flatview(e_grid)[f, :])
-        e_isfinite_cut = isfinite.(e_ft) .&& isfinite.(qdrift) .&& e_ft .> 0 .&& qdrift .> 0
-        qdrift_ft = qdrift[e_isfinite_cut]
-        e_ft = e_ft[e_isfinite_cut]
-
-        # sanity check
-        if count(min_e .< e_ft .< max_e) < 100
-            @debug "Not enough data points for FT $ft, skipping"
-            continue
-        end
-        # cut around peak to increase performance
-		fit_cut = cut_single_peak(e_ft, min_e, max_e,; n_bins=n_bins, relative_cut=rel_cut_fit)
-		e_peak_cut = fit_cut.max - 15*(fit_cut.max - fit_cut.low) .< e_ft .< fit_cut.max + 15*(fit_cut.max - fit_cut.low)
-		e_ft = e_ft[e_peak_cut]
-        qdrift_ft = qdrift_ft[e_peak_cut]
-
-        # create histogram from it
-        bin_width = get_friedman_diaconis_bin_width(e_ft)
-        h = fit(Histogram, e_ft, minimum(e_ft):bin_width:maximum(e_ft))
-
-        # create peakstats
-        ps = estimate_single_peak_stats_th228(h)
-        # check if ps guess is valid
-        if any(tuple_to_array(ps) .<= 0)
-            @debug "Invalid guess for peakstats, skipping"
-            continue
-        end
-        # fit peak
-        m_cal_simple = peak / fit_cut.max
-        result, _ = ctc_energy(e_ft .* m_cal_simple, qdrift_ft, peak, window)
-        
-        # get fwhm
-        fwhm[f] = result.fwhm_after / m_cal_simple
-        fts_success[f] = true
-        modes[f] = fit_cut.max
-    end
-
-    # get all successful fits
-    fts = collect(e_grid_ft)[fts_success]
-    fwhm = fwhm[fts_success]
-    modes = modes[fts_success]
-    
     # get minimal fwhm and rt
     if isempty(fwhm)
         @error "No valid FWHM found."
