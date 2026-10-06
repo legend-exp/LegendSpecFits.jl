@@ -98,7 +98,7 @@ with the `ft_fwhm_tol` rule; the result is `(ft, min_fwhm)`.
   `TypedTables.Table` with one row per flat-top time and columns `ft, status, fwhm_before, fwhm,
   w90, asym, tail_fraction, tail_scale, centroid, fct, m_cal_simple, ctc_converged, n_events`
 
-Throws an `ArgumentError` for an unknown `objective`, a `DimensionMismatch` if the rows of
+Throws an `ArgumentError` for an unknown `objective` or a `rel_tol` outside `[0, Inf)`, a `DimensionMismatch` if the rows of
 `e_grid` do not match `e_grid_ft`, and an `ErrorException` if no flat-top time is evaluated
 successfully.
 """
@@ -106,6 +106,7 @@ function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:R
         n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"),
         objective::Symbol=:w90, containment::Real=0.9, rel_tol::Real=0.005, ft_fwhm_tol::Unitful.Energy{<:Real}=0.1u"keV")
     objective in energy_objectives || throw(ArgumentError("objective must be one of $energy_objectives, got :$objective"))
+    0 <= rel_tol < Inf || throw(ArgumentError("fit_fwhm_ft: rel_tol must satisfy 0 <= rel_tol < Inf, got $rel_tol"))
     axes(e_grid, 1) == eachindex(e_grid_ft) || throw(DimensionMismatch("e_grid has $(size(e_grid, 1)) rows, e_grid_ft has $(length(e_grid_ft)) entries"))
 
     fts = collect(e_grid_ft)
@@ -116,6 +117,7 @@ function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:R
             rows[i] = evaluate_energy_point(Array{Float64}(e_grid[i, :]), qdrift, peak, window, min_e, max_e, rel_cut_fit; n_bins, apply_ctc, containment)
             status[i] = "ok"
         catch err
+            err isa InterruptException && rethrow()
             @warn "fit_fwhm_ft: evaluation failed at ft = $(fts[i])" exception = err
             rows[i] = nan_energy_point
             status[i] = sprint(showerror, err)
