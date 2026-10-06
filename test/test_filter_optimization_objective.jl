@@ -139,4 +139,67 @@ using Unitful
         @test abs(mvalue(result_ctc.ft) - 2.0u"µs") <= step(fts_ctc) * (1 + 1e-9)
         @test all(isapprox.(report_ctc.table.fct, 0.01; rtol = 0.2))
     end
+
+    @testset "optimize_rtft" begin
+        rng = MersenneTwister(7)
+        n = 3000
+        z = randn(rng, n)
+        qdrift = 100 .+ 200 .* rand(rng, n)
+        lattice = 0.1u"µs"
+        to_steps(t) = round(Int, uconvert(NoUnits, t / lattice))
+        # σ grows by 2 % per lattice step squared around rt = 4.0 µs, ft = 2.0 µs; the fixed
+        # draws `z` make the objective a deterministic function of the lattice point
+        σ_bowl(rt, ft) = 0.8 * (1 + 0.02 * ((to_steps(rt) - 40)^2 + (to_steps(ft) - 20)^2))
+        f_bowl(rt, ft) = μ .+ σ_bowl(rt, ft) .* z
+        kw = (rt_bounds = (1.0u"µs", 8.0u"µs"), ft_bounds = (0.5u"µs", 4.0u"µs"), step0 = (0.4u"µs", 0.4u"µs"), lattice = lattice,
+              peak = peak, window = window, min_e = 2400.0, max_e = 2800.0, rel_cut_fit = 0.5, apply_ctc = false)
+        unique_points(t) = length(unique(zip(to_steps.(t.rt), to_steps.(t.ft)))) == length(t)
+
+        result, report = optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
+        @test result.converged
+        @test abs(result.rt - 4.0u"µs") <= lattice * (1 + 1e-9)
+        @test abs(result.ft - 2.0u"µs") <= lattice * (1 + 1e-9)
+        @test result.objective == :w90 && report.objective == :w90
+        @test result.n_evals == length(report.table) <= 60
+        @test unique_points(report.table)
+        @test count(==(:seed), report.table.stage) == 1
+        @test all(==("ok"), report.table.status)
+        @test to_steps.(first(report.path)) == (35, 16)
+        @test to_steps.(last(report.path)) == to_steps.((result.rt, result.ft))
+        @test (report.rt, report.ft) == (result.rt, result.ft)
+
+        # the half-plane ft > 2.25 µs excludes the unconstrained optimum
+        feasible(rt, ft) = ft > 2.25u"µs"
+        result_f, report_f = optimize_rtft(f_bowl, qdrift, 3.5u"µs", 2.8u"µs"; feasible, kw...)
+        @test all(feasible.(report_f.table.rt, report_f.table.ft))
+        @test abs(result_f.rt - 4.0u"µs") <= lattice * (1 + 1e-9)
+        @test abs(result_f.ft - 2.3u"µs") <= lattice * (1 + 1e-9)
+        @test unique_points(report_f.table)
+
+        # flat objective: all points tie, the shortest rt, then ft, of the final neighbourhood wins
+        f_flat(rt, ft) = μ .+ 0.8 .* z
+        result_flat, _ = optimize_rtft(f_flat, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
+        @test result_flat.converged
+        @test to_steps.((result_flat.rt, result_flat.ft)) == (34, 15)
+
+        result_short, report_short = optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; merge(kw, (max_evals = 5,))...)
+        @test !result_short.converged
+        @test result_short.n_evals == length(report_short.table) == 5
+
+        # failed evaluations are recorded and the search continues around them
+        f_fail(rt, ft) = ft > 1.65u"µs" ? fill(NaN, n) : f_bowl(rt, ft)
+        result_fail, report_fail = optimize_rtft(f_fail, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
+        failed = report_fail.table.status .!= "ok"
+        @test any(failed)
+        @test all(isnan, report_fail.table.w90[failed])
+        @test result_fail.ft <= 1.6u"µs" + lattice / 2
+
+        @test_throws "optimize_rtft: seed evaluation failed" optimize_rtft((rt, ft) -> fill(NaN, n), qdrift, 3.5u"µs", 1.6u"µs"; kw...)
+        @test_throws "outside rt_bounds" optimize_rtft(f_bowl, qdrift, 9.0u"µs", 1.6u"µs"; kw...)
+        @test_throws "lattice must be positive" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; merge(kw, (lattice = 0.0u"µs",))...)
+        @test_throws "max_evals must be at least 1" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; merge(kw, (max_evals = 0,))...)
+        @test_throws "eval_kwargs must contain (:peak,)" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; Base.structdiff(kw, NamedTuple{(:peak,)})...)
+        @test_throws "unsupported eval_kwargs (:bogus,)" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw..., bogus = 1)
+        @test_throws "objective must be one of" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw..., objective = :sigma)
+    end
 end
