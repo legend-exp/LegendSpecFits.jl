@@ -89,6 +89,9 @@ using Unitful
         @test row.fwhm < row.fwhm_before
         @test unit(row.w90) == u"keV"
         @test row.m_cal_simple ≈ 1.0u"keV" rtol = 0.01
+        # widths are scaled to the fitted peak position, so the centroid of a symmetric peak is the peak
+        @test abs(row.centroid - peak) < 5e-4 * peak
+        @test abs(row_raw.centroid - peak) < 5e-4 * peak
         @test row.n_events <= n
         # the ADC correction `e + fct * qdrift` removes the injected dependence (1.5 before)
         e_ctc = e .+ row.fct .* qdrift

@@ -80,8 +80,8 @@ Scan the flat-top times `e_grid_ft` at the rise time `rt` and select the optimal
 
 With `qdrift`, row `i` of `e_grid` (energies in ADC at `e_grid_ft[i]`) is evaluated with
 `evaluate_energy_point`, in parallel across flat-top times, with the linear charge-trapping
-correction if `apply_ctc` is `true`. Widths are calibrated per flat-top time with that point's
-`m_cal_simple`. The optimum minimizes `objective` (one of `:w90, :fwhm, :asym, :fwhm_asym`, see
+correction if `apply_ctc` is `true`. Widths are calibrated per flat-top time, scaled to the
+fitted peak position of that point (see `evaluate_energy_point`). The optimum minimizes `objective` (one of `:w90, :fwhm, :asym, :fwhm_asym`, see
 `objective_value`); flat-top times whose objective lies within `rel_tol` of the minimum tie and
 the shortest one wins (`select_optimum`). `legacy_ft` is the shortest flat-top time whose FWHM
 lies within `ft_fwhm_tol` of the minimum FWHM. A flat-top time whose evaluation throws is

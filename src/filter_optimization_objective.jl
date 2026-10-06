@@ -128,7 +128,7 @@ setting.
 
 Events with finite, positive `e` and `qdrift` are kept. `cut_single_peak` on `(min_e, max_e)`
 locates the peak mode; events within 15 half-widths of the mode enter the evaluation, and
-`m_cal_simple = peak / mode` converts them to keV. With `apply_ctc=true`, `ctc_energy`
+`m_cal_simple = peak / mode` converts them to keV for the fits. With `apply_ctc=true`, `ctc_energy`
 fits the linear charge-trapping correction and the metrics of `peak_width_metrics` are
 computed from the peak fit after the correction. With `apply_ctc=false`, the uncorrected peak is
 fitted with the same histogram as the uncorrected fit inside `ctc_energy`.
@@ -136,8 +136,11 @@ fitted with the same histogram as the uncorrected fit inside `ctc_energy`.
 # Returns
 A NamedTuple row `(fwhm_before, fwhm, w90, asym, tail_fraction, tail_scale, centroid, fct,
 m_cal_simple, ctc_converged, n_events)`:
-- `fwhm_before`, `fwhm`, `w90`, `tail_scale`, `centroid`: `Unitful` energies in keV, calibrated
-  with this point's `m_cal_simple`
+- `fwhm_before`, `fwhm`, `w90`, `tail_scale`, `centroid`: `Unitful` energies in keV. Each is the
+  value from the fit in `m_cal_simple`-calibrated keV multiplied by `peak / μ`, where `μ` is the
+  fitted peak position of that same fit (the uncorrected fit for `fwhm_before`, the fit after the
+  correction for the others). The fitted peak therefore sits at `peak`, and `centroid == peak`
+  for a symmetric peak.
 - `asym`, `tail_fraction`: unitless
 - `fct`: first-order element of `ctc_energy`'s `result.fct` in ADC per `qdrift` unit, such that
   `e + fct * qdrift` is the corrected energy in ADC
@@ -173,7 +176,7 @@ function evaluate_energy_point(e::AbstractVector{<:Real}, qdrift::AbstractVector
     if apply_ctc
         ctc_result, ctc_report = ctc_energy(e_cal, qdrift_win, peak, window, m_cal_simple)
         v = ctc_report.report_after.v
-        fwhm_before = mvalue(ustrip(e_unit, ctc_result.fwhm_before)) * e_unit
+        fwhm_before = mvalue(ustrip(e_unit, ctc_result.fwhm_before)) * e_unit * (ustrip(e_unit, peak) / mvalue(ctc_report.report_before.v.μ))
         fct = first(ctc_result.fct)
         ctc_converged = ctc_result.converged
     else
@@ -188,11 +191,12 @@ function evaluate_energy_point(e::AbstractVector{<:Real}, qdrift::AbstractVector
     isfinite(v.σ) && v.σ > 0 || error("evaluate_energy_point: peak fit returned σ = $(v.σ)")
 
     metrics = peak_width_metrics(v; containment)
-    fwhm = metrics.fwhm * e_unit
+    scale = ustrip(e_unit, peak) / mvalue(v.μ) * e_unit
+    fwhm = metrics.fwhm * scale
     return (
-        fwhm_before = apply_ctc ? fwhm_before : fwhm, fwhm = fwhm, w90 = metrics.w90 * e_unit,
-        asym = metrics.asym, tail_fraction = metrics.tail_fraction, tail_scale = metrics.tail_scale * e_unit,
-        centroid = metrics.centroid * e_unit, fct = fct, m_cal_simple = m_cal_simple,
+        fwhm_before = apply_ctc ? fwhm_before : fwhm, fwhm = fwhm, w90 = metrics.w90 * scale,
+        asym = metrics.asym, tail_fraction = metrics.tail_fraction, tail_scale = metrics.tail_scale * scale,
+        centroid = metrics.centroid * scale, fct = fct, m_cal_simple = m_cal_simple,
         ctc_converged = ctc_converged, n_events = length(e_win)
     )
 end
