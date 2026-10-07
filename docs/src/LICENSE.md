@@ -2,5 +2,5 @@
 
 ```@eval
 using Markdown
-Markdown.parse_file(joinpath(@__DIR__, "..", "..", "LICENSE.md"))
+Markdown.parse_file(joinpath(@__DIR__, "..", "..", "LICENSE"))
 ```
