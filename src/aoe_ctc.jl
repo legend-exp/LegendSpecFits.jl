@@ -18,7 +18,6 @@ Correct for the drift time dependence of A/E parameter
     * `func`: function to correct aoe
     * `func_generic`: generic function to correct aoe
 """
-
 function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQuantity}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.RealOrRealQuantity}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; aoe_expression::Union{Symbol, String}="aoe", qdrift_expression::Union{Symbol, String} = "qdrift / e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), fit_func::Symbol=:aoe_two_bck, pol_order::Int=1) # deleted m_cal since no calibration
 
     # distribution compton band entries
