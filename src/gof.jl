@@ -66,28 +66,64 @@ end
 export p_value
 
 
-""" 
-    p_value_poissonll(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector})
-p-value via poisson likelihood ratio: baseline for ML fits using Poisson statistics and bins with low number of counts
+"""
+    poisson_deviance(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml)
+
+Poisson deviance of the histogram `h` under the model `f_fit` with parameters
+`v_ml`, `D = 2 Σ_i [λ_i − k_i + k_i log(k_i / λ_i)]` with `k_i` the counts and
+`λ_i` the bin width times the model at the bin center (the likelihood-ratio
+statistic of Baker and Cousins), together with its mean `E[D]` and variance
+`Var[D]` under the model, summed from the exact Poisson moments of every
+bin's term. A bin whose expectation vanishes contributes nothing when it is
+empty and `Inf` otherwise.
+"""
+function poisson_deviance(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
+    counts, bin_widths, bin_centers = _prepare_data(h)
+    λs = _get_model_counts(f_fit, v_ml, bin_centers, bin_widths)
+    D = 0.0; E = 0.0; V = 0.0
+    for (λ, k) in zip(λs, counts)
+        if !(λ > 0)
+            k > 0 && (D = Inf)
+            continue
+        end
+        D += 2 * (λ - k + (k > 0 ? k * log(k / λ) : 0.0))
+        # exact moments of the bin's term: the Poisson mass above k_max is below 1e-12
+        d = Poisson(λ)
+        k_max = ceil(Int, λ + 12 * sqrt(λ) + 30)
+        m1 = 0.0; m2 = 0.0
+        for j in 0:k_max
+            t = 2 * (λ - j + (j > 0 ? j * log(j / λ) : 0.0))
+            w = pdf(d, j)
+            m1 += w * t
+            m2 += w * t^2
+        end
+        E += m1
+        V += m2 - m1^2
+    end
+    return D, E, V
+end
+export poisson_deviance
+
+"""
+    p_value_poissonll(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
+
+Goodness of fit of a maximum-likelihood fit with Poisson statistics: the
+moment-corrected deviance test. The Poisson deviance `D` of
+[`poisson_deviance`](@ref) is compared with its mean and variance under the
+fitted model, the mean reduced by the number of fitted parameters, and the
+p-value is the upper tail of the normal distribution at
+`z = (D − (E[D] − n_par)) / sqrt(Var[D])`. Unlike the χ² approximation of the
+deviance this stays valid for bins with few or no counts (Kaastra 2017,
+A&A 605, A51, for the equivalent C statistic).
+
+Returns `(pval, chi2, dof)` with `chi2 = D` and `dof` the number of bins
+minus the number of parameters.
 """
 function p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
-    counts, bin_widths, bin_centers = _prepare_data(h) # prepare data
-    model_func = Base.Fix2(fit_func, v_ml) # fix the fit parameters to ML best-estimate
-
-    bin_ll(x, bw, k) = logpdf(Poisson(bw * model_func(x)), k) # loglikelihood per bin, evaluated for best-fit parameters (v_ml)
-    loglikelihood_ml = sum(Base.Broadcast.broadcasted(bin_ll, bin_centers, bin_widths, counts)) # joint loglikelihood, evaluated for best-fit parameters (v_ml)
-
-    loglikelihood_null = sum(logpdf.(Poisson.(counts), counts))  # joint loglikelihood, evaluate for data only
-    chi2 = -2*(loglikelihood_ml - loglikelihood_null) # likelihood ratio. this quantity should follow chi2 distribution. 
-
+    chi2, expected, variance = poisson_deviance(fit_func, h, v_ml)
     npar = length(v_ml)
-    dof = length(counts[counts .> 0]) - npar
-    pval = if dof <= 0
-        0.0
-    else
-        ccdf(Chisq(dof), chi2)
-    end
-
+    dof = length(h.weights) - npar
+    pval = isfinite(chi2) && variance > 0 ? ccdf(Normal(), (chi2 - (expected - npar)) / sqrt(variance)) : 0.0
     return pval, chi2, dof
 end
 export p_value_poissonll
