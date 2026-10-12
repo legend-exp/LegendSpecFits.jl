@@ -6,7 +6,6 @@ using Measurements: value as mvalue
 using Distributions
 using Unitful 
 
-include("test_utils.jl")
 
 
 @testset "A/E energy correction" begin
