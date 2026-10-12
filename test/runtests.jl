@@ -2,6 +2,8 @@
 
 import Test
 
+include("test_utils.jl")
+
 Test.@testset "Package LegendSpecFits" begin
     #include("test_aqua.jl")
     include("test_fitting_api.jl")

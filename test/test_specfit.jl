@@ -7,7 +7,6 @@ using Distributions
 using StatsBase
 using Interpolations
 using Unitful 
-include("test_utils.jl")
 
 @testset "specfit" begin
     # load data, simple calibration 

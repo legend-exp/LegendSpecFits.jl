@@ -11,7 +11,6 @@ using Unitful
 using TypedTables
 using PropDicts
 using Random
-include("test_utils.jl")
 
 
 logger = ConsoleLogger(stderr, Logging.Info)

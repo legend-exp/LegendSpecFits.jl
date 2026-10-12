@@ -1,5 +1,6 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 
+using Unitful
 using Interpolations: Throw, extrapolate, interpolate, Gridded, Linear
 _linear_interpolation(range::AbstractVector, vs::AbstractVector; extrapolation_bc = Throw()) =
     extrapolate(interpolate((range, ), vs, Gridded(Linear())), extrapolation_bc)
