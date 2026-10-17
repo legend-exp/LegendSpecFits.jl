@@ -18,7 +18,7 @@ logger = ConsoleLogger(stderr, Logging.Info)
     ecal = filter(x -> x <= 265_000, vcat(rand(rng, Distributions.Exponential(70_000),97_000), 261_450 .+ 200 .* randn(rng, 2_000), 210_350 .+ 185 .* randn(rng, 500), 159_300 .+ 170 .* randn(rng, 500)))
     lines = [:Tl208DEP, :Tl208SEP, :Tl208FEP]
     energies = [1592.513, 2103.512, 2614.511]u"keV"
-    result_autocal, report_autocal = LegendSpecFits.autocal_energy(ecal, energies, α = 0.01, rtol = 2)
+    result_autocal, report_autocal = LegendSpecFits.autocal_energy(ecal, energies, α = 0.01, rtol = 5e-3)
     @test isapprox(result_autocal.c, 0.01, rtol = 0.01)
     result_simple, report_simple = LegendSpecFits.simple_calibration(ecal, energies, [25, 25, 35]u"keV", [25, 25, 30]u"keV", calib_type = :th228)
     @test isapprox(result_simple.c, 0.01 * u"keV", rtol = 0.01)
