@@ -189,7 +189,7 @@ function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealO
         fwhm = fwhm .* c
         # get minimal fwhm and ft
         sel = findall(mvalue.(fwhm .- minimum(fwhm)) .< ft_fwhm_tol)
-        ft_min_fwhm, min_i = findmin(e_grid_ft[sel])
+        ft_min_fwhm, min_i = findmin(fts[sel])
         min_fwhm = fwhm[sel][min_i]
     end
     # generate result and report
@@ -294,7 +294,7 @@ function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vecto
         fwhm = fwhm .* c
         # get minimal fwhm and ft
         sel = findall(mvalue.(fwhm .- minimum(fwhm)) .< ft_fwhm_tol)
-        ft_min_fwhm, min_i = findmin(e_grid_ft[sel])
+        ft_min_fwhm, min_i = findmin(fts[sel])
         min_fwhm = fwhm[sel][min_i]
     end
     # generate result and report

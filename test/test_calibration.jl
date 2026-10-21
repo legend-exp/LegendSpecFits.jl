@@ -3,7 +3,7 @@
 using LegendSpecFits
 using Test
 using LegendDataManagement: ljl_propfunc
-using Measurements: value as mvalue, uncertainty as muncert
+using Measurements: measurement, value as mvalue, uncertainty as muncert
 using Distributions
 using TypedTables
 using Unitful
@@ -80,6 +80,24 @@ logger = ConsoleLogger(stderr, Logging.Info)
             fwhm_err = ustrip.(u"keV", ljl_propfunc(func_err).(test_tbl))
             @test mvalue.(fwhm_err) ≈ mvalue.(report.f_fit.(e_test))
             @test muncert.(fwhm_err) ≈ muncert.(report.f_fit.(e_test))
+        end
+    end
+
+    @testset "Resolution initialization" begin
+        energies = [583.187, 727.33, 860.557, 1620.5, 2614.511]u"keV"
+        e = ustrip.(u"MeV", energies)
+        # Positive, finite negative-tail, and overflowing negative-tail prefits.
+        for (intercept, err, fallback) in ((3.0, 0.03, false), (-4.0, 0.3, false), (-4.0, 0.003, true))
+            widths = measurement.(sqrt.(intercept .+ 10 .* e), err) .* u"keV"
+            raw = LegendSpecFits._simple_linear_fit(e, ustrip.(u"keV", widths).^2)
+            guesses = LegendSpecFits._get_enc_fano_guess(energies, widths)
+            @test all(g -> isfinite(mvalue(g)) && mvalue(g) > 0 && isfinite(muncert(g)) && muncert(g) > 0, guesses)
+            reference = truncated(Normal(fallback ? 0.0 : mvalue(raw[1]), muncert(raw[1])), 0.0, Inf)
+            @test mvalue(guesses[1]) ≈ median(reference)
+            @test muncert(guesses[1]) ≈ quantile(reference, 0.8413) - median(reference)
+            prior = LegendSpecFits.get_fit_fwhm_pseudo_prior(1, guesses)
+            transform = LegendSpecFits.BAT.DistributionTransform(Normal, prior)
+            @test all(isfinite, transform(mvalue.(guesses)))
         end
     end
 end

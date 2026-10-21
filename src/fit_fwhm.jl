@@ -105,12 +105,16 @@ function _get_enc_fano_guess(peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vect
     # fwhm² = enc + fano * e (+ ct * e²) is linear in the fit parameters, on the scale the fit uses
     par_fit = _simple_linear_fit(mvalue.(ustrip.(e_fit_fwhm_unit, peaks)), ustrip.(e_unit, fwhm) .^ 2, pol_order)
 
-    # median and 84.1% quantile of N(μ, σ) restricted to (0, ∞): μ and μ + σ far from zero, a small
-    # positive value of scale σ for μ ≲ 0
+    # Use the positive part of the prefit Normal distribution to initialize the Weibull seed.
     function _positive(p::Measurement)
         d = truncated(Normal(mvalue(p), muncert(p)), 0.0, Inf)
-        m = median(d)
-        measurement(m, quantile(d, 0.8413) - m)
+        m, q = median(d), quantile(d, 0.8413)
+        # If tail quantiles overflow, use a zero-centered Normal with the same uncertainty.
+        if !isfinite(m) || !isfinite(q)
+            d = truncated(Normal(zero(mvalue(p)), muncert(p)), 0.0, Inf)
+            m, q = median(d), quantile(d, 0.8413)
+        end
+        measurement(m, q - m)
     end
     par_guess = _positive.(par_fit)
 
