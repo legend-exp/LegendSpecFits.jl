@@ -1,32 +1,52 @@
 """
-    sipm_simple_calibration(pe_uncal::Vector{<:Real})
-    sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real})
+    sipm_simple_calibration(pe_uncal::Vector{<:Real}; kwargs...)
+    sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real}; kwargs...)
 
-Simple SiPM calibration from the 1 PE and 2 PE peak positions found by a
-peakfinder. The noise/1PE cut is auto-detected at the centroid of the first
-valley after the noise peak.
+Determines a linear calibration of SiPM pulse amplitudes to photoelectron (PE)
+units from the positions of the 1 PE and 2 PE peaks found by a peak finder.
 
-`n_fwhm_noise_cut` caps the valley search window in units of the noise-peak
-half-width above its center. `0.0` skips valley detection and uses
-`initial_min_amp`. Negative values force the legacy formula
-`cuts_1pe.max + n_fwhm_noise_cut * fwhm_noise` (kept for backward-compatibility
-with configs that dip into the noise peak).
+The calibration is `pe = c * amplitude + offset`, with `c` the inverse of the
+distance between the first two peaks and `offset` chosen such that the first
+peak lies at `min_pe_peak`. The noise peak is located with [`cut_single_peak`](@ref).
+The threshold between noise and the 1 PE peak is placed at the center of the first
+valley after the noise peak; if the valley is too short, at the noise peak maximum
+plus 3 times its half-width, and if none is found, at the end of the search range. Peaks are searched on a Savitzky-Golay smoothed
+histogram with `RadiationSpectra.determine_calibration_constant_through_peak_ratios`;
+if that fails, local maxima are used. Neighboring peaks closer than 60 % of the
+largest peak distance are merged.
 
-For VoV input, an optional second-stage QC (`single_trigger_only=true`) keeps
-only waveforms with exactly one trigger above the detected threshold.
+The method for `VectorOfVectors` takes the trigger amplitudes of each waveform.
+It determines the threshold from the finite triggers (of waveforms with at most
+`cut_pool_max_mult` triggers if `single_trigger_only` is `true`), keeps the
+triggers above it (only waveforms with exactly one such trigger if
+`single_trigger_only` is `true`), and calibrates these with the vector method.
 
-kwargs:
-    * `initial_min_amp`, `initial_max_amp`: histogram bounds for the noise/peak search
-    * `relative_cut_noise_cut`: passed to `cut_single_peak`
-    * `n_fwhm_noise_cut`: see above
-    * `single_trigger_only` (VoV only)
-    * `min_pe_peak`, `max_pe_peak`, `peakfinder_*`: peakfinder controls
+## Keywords
+* `initial_min_amp::Real = 0.0`, `initial_max_amp::Real = 50.0`: Amplitude range for the noise peak and peak search.
+* `relative_cut_noise_cut::Real = 0.5`: Relative cut level of [`cut_single_peak`](@ref) for the noise peak.
+* `n_fwhm_noise_cut::Real = 5.0`: Upper limit of the valley search in half-widths of the noise peak above its center.
+  `0.0` skips the valley search and uses `initial_min_amp` as threshold. A negative value places
+  the threshold at the noise peak maximum plus this factor times the noise peak half-width.
+* `min_pe_peak::Int = 1`, `max_pe_peak::Int = 5`: First and last PE peak considered (vector method).
+* `initial_max_bin_width_quantile::Real = 0.9`: Quantile of the amplitudes up to which the bin width is determined (vector method).
+* `peakfinder_σ::Real = -1.0`: Expected peak width in bins; a non-positive value estimates it from the noise peak (must be an integer otherwise).
+* `peakfinder_threshold::Real = 10.0`, `peakfinder_rtol::Real = 0.1`, `peakfinder_α::Real = 0.05`: Threshold,
+  relative tolerance and significance level of the peak finder.
+* `single_trigger_only::Bool = true`, `cut_pool_max_mult::Int = 3`: Waveform selection (`VectorOfVectors` method).
 
-Returns `(result, report)`. `result` carries the calibration (`f_simple_calib`,
-`c`, `offset`, `peakpos`, `noisepeakpos`, `noisepeakwidth`, `noise_threshold`,
-`noise_threshold_cal`). `report` carries plotting data (`peakpos*`, `h_uncal`,
-`h_calsimple`, `h_*_full` for the unfiltered all-trigger spectra,
-`noise_threshold*`, `valley_found`).
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `pe_simple_cal`: calibrated amplitudes (vector method).
+* `peakpos`: peak positions in uncalibrated units.
+* `f_simple_calib`, `f_simple_uncal`: the calibration function and its inverse.
+* `c`, `offset`: slope and offset of the calibration.
+* `noisepeakpos`, `noisepeakwidth`: position and width of the noise peak.
+* `noise_threshold`, `noise_threshold_cal`: threshold between noise and the 1 PE peak, uncalibrated and calibrated.
+
+`report` contains `peakpos`, `peakpos_cal`, the histograms `h_uncal` and
+`h_calsimple` (uncalibrated and calibrated), `h_uncal_full` and `h_calsimple_full`
+(spectra of all triggers, before the waveform selection), `noise_threshold`,
+`noise_threshold_cal` and `valley_found`, for plotting with `LegendMakie.lplot`.
 """
 function sipm_simple_calibration end
 export sipm_simple_calibration

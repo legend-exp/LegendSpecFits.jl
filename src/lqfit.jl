@@ -15,13 +15,28 @@ f_lq_σ(x, v::NamedTuple) = f_lq_σ(x, [v.σ_scs_amplitude, v.σ_scs_decay, v.σ
 
 
 """
-    fit_lq_compton(peakhists::Array, peakstats::StructArray, compton_bands::Array{T}) where T<:Real
+    fit_lq_compton(
+        peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T};
+        pars_lq::NamedTuple{(:μ, :μ_err, :σ, :σ_err)} = (μ = nothing, μ_err = nothing, σ = nothing, σ_err = nothing),
+        uncertainty::Bool = false
+    ) where T<:Unitful.Energy{<:Real}
 
-Fit the A/E Compton bands using the `f_lq_compton` function consisting of a gaussian SSE peak and a step like background for MSE events.
+Fits the LQ distribution in each Compton band with [`fit_single_lq_compton`](@ref).
 
-# Returns
-    * `result`: Dict of NamedTuples of the fit results containing values and errors for each compton band
-    * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
+The model is a Gaussian peak plus an exponentially modified Gaussian background
+([`aoe_compton_peakshape`](@ref)). If `pars_lq.μ` is given, `μ` and `σ` in each
+band's peak statistics are replaced by the energy-dependent functions of the
+parameters `pars_lq.μ` (linear) and `pars_lq.σ` (exponential decay). Bands whose fit
+throws an error are skipped with a warning.
+
+## Arguments
+* `peakhists`: LQ histogram of each band.
+* `peakstats`: Initial peak statistics of each band.
+* `compton_bands`: Energies of the bands; they are used as keys of the result.
+
+## Returns
+A tuple `(result, report)` of two `OrderedDict`s keyed by `compton_bands`, with the
+`result` and `report` `NamedTuple`s of [`fit_single_lq_compton`](@ref) as values.
 """
 function fit_lq_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; pars_lq::NamedTuple{(:μ, :μ_err, :σ, :σ_err)}=NamedTuple{(:μ, :μ_err, :σ, :σ_err)}(nothing, nothing, nothing, nothing), uncertainty::Bool=false) where T<:Unitful.Energy{<:Real}
     # create return and result dicts
@@ -53,13 +68,19 @@ export fit_lq_compton
 
 
 """
-    fit_single_lq_compton(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
+    fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool = true)
 
-Perform a fit of the peakshape to the data in `h` using the initial values in `ps` while using the `f_lq_compton` function consisting of a gaussian SSE peak and a step like background for MSE events.
+Fits the LQ distribution of the histogram `h` with [`aoe_compton_peakshape`](@ref)
+by maximizing the binned Poisson likelihood. The uniform priors of the
+parameters are centered on the peak statistics `ps`
+(`peak_pos`, `peak_sigma`, `peak_counts`, `mean_background`).
 
-# Returns
-    * `result`: NamedTuple of the fit results containing values and errors
-    * `report`: NamedTuple of the fit report which can be plotted
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the parameters `μ`, `σ`, `n`, `B`, `δ`
+(`Measurement`s if `uncertainty` is `true` and the fit converged, plain numbers otherwise) and, in the
+former case, `gof` with `pvalue`, `chi2`, `dof` (from [`p_value`](@ref)), `covmat`, `residuals`, `residuals_norm` and `bin_centers`.
+`report` contains the best-fit values `v`, the histogram `h` and the functions `f_fit`, `f_sig` and `f_bck`
+of the total, signal and background shapes.
 """
 function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true)
     # create pseudo priors

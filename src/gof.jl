@@ -3,7 +3,8 @@
 
 """
     _prepare_data(h::Histogram{<:Real,1})
-aux. function to convert histogram data into bin edges, bin width and bin counts
+
+Returns the tuple `(counts, bin_widths, bin_centers)` of the one-dimensional histogram `h`.
 """
 function _prepare_data(h::Histogram{<:Real,1})
     # get bin center, width and counts from histogrammed data
@@ -16,8 +17,10 @@ end
 
 
 """
-    _get_model_counts(f_fit::Base.Callable,v_ml::Union{NamedTuple, AbstractVector},bin_centers::StepRangeLen,bin_widths::StepRangeLen)
-aux. function to get modelled peakshape based on  histogram binning and best-fit parameter
+    _get_model_counts(f_fit::Base.Callable, v_ml, bin_centers, bin_widths)
+
+Returns the expected counts in each bin: the bin width times the model
+`f_fit(x, v_ml)` evaluated at the bin center.
 """
 function _get_model_counts(f_fit::Base.Callable, v_ml::Union{NamedTuple, AbstractVector}, bin_centers::Union{StepRangeLen, Vector{<:Real}}, bin_widths::Union{StepRangeLen, Vector{<:Real}})
     model_func = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
@@ -27,18 +30,21 @@ end
 
 
 
-""" 
-    p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector}) 
-calculate p-value based on least-squares, assuming gaussian uncertainty
-baseline method to get goodness-of-fit (gof)
-# input:
- * `f_fit`function handle of fit function (peakshape)
- * `h` histogram of data
- * `v_ml` best-fit parameters
-# returns:
- * `pval` p-value of chi2 test
- * `chi2` chi2 value
- * `dof` degrees of freedom
+"""
+    p_value(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
+
+Calculates the p-value of a fit with a chi-squared test that assumes Gaussian
+uncertainties, the model counts being the variance of each bin.
+
+Only bins with at least one count enter the test. `f_fit(x, v_ml)` is the fit
+function and `v_ml` the best-fit parameters. For bins with few counts the
+Gaussian assumption is poor; see [`p_value_poissonll`](@ref) for a test that
+stays valid there.
+
+## Returns
+A tuple `(pval, chi2, dof)` with the p-value, the chi-squared value and the
+degrees of freedom (number of non-empty bins minus the number of parameters).
+`pval` is `NaN` if `dof` is negative.
 """
 function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     # prepare data
@@ -67,15 +73,18 @@ export p_value
 
 
 """
-    poisson_deviance(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml)
+    poisson_deviance(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
 
-Poisson deviance of the histogram `h` under the model `f_fit` with parameters
-`v_ml`, `D = 2 Σ_i [λ_i − k_i + k_i log(k_i / λ_i)]` with `k_i` the counts and
-`λ_i` the bin width times the model at the bin center (the likelihood-ratio
-statistic of Baker and Cousins), together with its mean `E[D]` and variance
-`Var[D]` under the model, summed from the exact Poisson moments of every
-bin's term. A bin whose expectation vanishes contributes nothing when it is
+Calculates the Poisson deviance of the histogram `h` under the model
+`f_fit(x, v_ml)`, `D = 2 Σ_i [λ_i − k_i + k_i log(k_i / λ_i)]`, with `k_i` the
+counts and `λ_i` the bin width times the model at the bin center (the
+likelihood-ratio statistic of Baker and Cousins). Also calculates its mean `E[D]`
+and variance `Var[D]` under the model, summed from the exact Poisson moments of
+every bin's term. A bin whose expectation vanishes contributes nothing when it is
 empty and `Inf` otherwise.
+
+## Returns
+A tuple `(D, E, V)` of the deviance, its mean and its variance.
 """
 function poisson_deviance(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     counts, bin_widths, bin_centers = _prepare_data(h)
@@ -107,8 +116,8 @@ export poisson_deviance
 """
     p_value_poissonll(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
 
-Goodness of fit of a maximum-likelihood fit with Poisson statistics: the
-moment-corrected deviance test. The Poisson deviance `D` of
+Calculates the p-value of a maximum-likelihood fit with Poisson statistics with
+the moment-corrected deviance test. The Poisson deviance `D` of
 [`poisson_deviance`](@ref) is compared with its mean and variance under the
 fitted model, the mean reduced by the number of fitted parameters, and the
 p-value is the upper tail of the normal distribution at
@@ -116,8 +125,9 @@ p-value is the upper tail of the normal distribution at
 deviance this stays valid for bins with few or no counts (Kaastra 2017,
 A&A 605, A51, for the equivalent C statistic).
 
-Returns `(pval, chi2, dof)` with `chi2 = D` and `dof` the number of bins
-minus the number of parameters.
+## Returns
+A tuple `(pval, chi2, dof)` with `chi2 = D` and `dof` the number of bins
+minus the number of parameters. `pval` is 0 if `D` is not finite.
 """
 function p_value_poissonll(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     chi2, expected, variance = poisson_deviance(fit_func, h, v_ml)
@@ -129,6 +139,14 @@ end
 export p_value_poissonll
 
 
+"""
+    likelihood_ratio(f_fit::Base.Callable, h::Histogram{<:Real,1})
+
+Calculates the likelihood-ratio statistic `-2 (log L_model - log L_saturated)` of
+the histogram `h`, where `L_model` is the Poisson likelihood for the expected
+counts `bin_width * f_fit(bin_center)` and `L_saturated` is the likelihood with
+the expected counts set equal to the observed counts.
+"""
 function likelihood_ratio(f_fit::Base.Callable, h::Histogram{<:Real,1})
     bin_edges = first(h.edges)
     counts = h.weights
@@ -139,24 +157,20 @@ function likelihood_ratio(f_fit::Base.Callable, h::Histogram{<:Real,1})
     loglikelihood = sum(logpdf.(Poisson.(counts), counts))
     -2*(loglikelihood_ml - loglikelihood)
 end
-export likelihood_ratio2
 """
-    p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1},ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background)},v_ml::NamedTuple,;n_samples::Int64=1000) 
-alternative p-value calculation via Monte Carlo sampling. **Warning**: computational more expensive than p_vaule() and p_value_LogLikeRatio()
-# Input:
- * `f_fit`function handle of fit function (peakshape)
- * `h` histogram of data
- * `ps` best-fit parameters
- * `v_ml` best-fit parameters
- * `n_samples` number of samples
+    p_value_MC(
+        f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple, v_ml::NamedTuple;
+        n_samples::Int64 = 1000
+    )
 
-# Performed Steps:
-* Create n_samples randomized histograms. For each bin, samples are drawn from a Poisson distribution with λ = model peak shape (best-fit parameter)
-* Each sample histogram is fit using the model function `f_fit`
-* For each sample fit, the max. loglikelihood fit is calculated 
+Calculates a p-value with Monte Carlo sampling. This is computationally more
+expensive than [`p_value`](@ref) and [`p_value_poissonll`](@ref).
 
-# Returns
-* % p value --> comparison of sample max. loglikelihood and max. loglikelihood of best-fit
+`n_samples` histograms are drawn with Poisson-distributed bin counts around the
+best-fit model `f_fit(x, v_ml)`. Each sample is fitted with
+[`fit_single_peak_th228`](@ref), starting from the peak statistics `ps`, and the
+negative log-likelihood of the sample fit is calculated. The p-value is the
+fraction of samples whose negative log-likelihood is at most that of `h`.
 """
 function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}, v_ml::NamedTuple, ; n_samples::Int64=1000) where T<:Real
     counts, bin_widths, bin_centers = _prepare_data(h) # get data 
@@ -190,21 +204,20 @@ function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple
 end
 export p_value_MC
 
-""" 
-    residuals(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector})
-Calculate bin-wise residuals and normalized residuals. 
-Calcualte bin-wise p-value based on poisson distribution for each bin.
+"""
+    get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
 
-# Input:
- * `f_fit`function handle of fit function (peakshape)
- * `h` histogram of data
- * `v_ml` best-fit parameters
+Calculates bin-wise residuals and normalized residuals of the histogram `h`
+with respect to the model `f_fit(x, v_ml)`, and a bin-wise p-value based on the
+Poisson distribution of each bin. Only bins with positive expected counts are included.
 
-# Returns:
- * `residuals` difference: model - data (histogram bin count)
- * `residuals_norm` normalized residuals: model - data / sqrt(model)
- * `p_value_binwise` p-value for each bin based on poisson distribution
- * `bin_centers` centers of the bins for which the `residuals` were determined
+## Returns
+A tuple `(residuals, residuals_norm, p_value_binwise, bin_centers)` with
+* `residuals`: model counts minus data counts in each bin.
+* `residuals_norm`: `residuals` divided by the square root of the model counts.
+* `p_value_binwise`: probability, for a Poisson distribution with the model counts as mean,
+  of a deviation from the mean at least as large as observed.
+* `bin_centers`: centers of the included bins.
 """
 function get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{NamedTuple, AbstractVector})
     # prepare data

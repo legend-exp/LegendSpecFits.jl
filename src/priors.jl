@@ -3,10 +3,11 @@
 """
     LegendSpecFits.stabilize_dist(d::Distribution)
 
-Return a numerically stable version of the distribution `d`.
+Returns a numerically stable version of the distribution `d`.
 
-Tries to ensure that the (log-)PDF of the result is finite over its whole
-support.
+For a `Weibull` distribution with infinite log-density at zero, the result is
+truncated to start at a small positive value. Other distributions are returned
+unchanged.
 """
 stabilize_dist(d::Distribution) = d
 
@@ -21,10 +22,10 @@ end
 """
     weibull_from_mx(m::Real, x::Real, p_x::Real = 0.6827)::Weibull
 
-Construct a Weibull distribution with a given median `m` and a given
-`p_x`-quantile `x`.
+Constructs a `Weibull` distribution with median `m` whose `p_x`-quantile is
+`x`. The default `p_x = 0.6827` corresponds to a one-sigma quantile.
 
-Useful to construct priors for positive quantities.
+The result is suited as a prior for positive quantities.
 """
 function weibull_from_mx(m::Real, x::Real, p_x::Real = 0.6827)
     α = log(-log(1-p_x) / log(2)) / log(x/m)
