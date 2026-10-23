@@ -1,23 +1,31 @@
 
 
 """
-    generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton_bands::Vector{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
+    generate_aoe_compton_bands(
+        aoe::Vector{<:Real}, e::Vector{<:T}, compton_bands::Vector{<:T}, compton_window::T
+    ) where T<:Unitful.Energy{<:Real}
 
-Generate histograms for the A/E Compton bands and estimate peak parameters. 
-The compton bands are cutted out of the A/E spectrum and then binned using the Freedman-Diaconis Rule. For better performance
-the binning is only done in the area around the peak. The peak parameters are estimated using the `estimate_single_peak_stats_psd` function.
+Generates A/E histograms for energy bands in the Compton region and estimates
+the peak parameters in each.
 
-# Returns
-    * `peakhists`: Array of histograms for each compton band
-    * `peakstats`: StructArray of peak parameters for each compton band
-    * `min_aoe`: Array of minimum A/E values for each compton band
-    * `max_aoe`: Array of maximum A/E values for each compton band
-    * `mean_peak_pos`: Mean peak position of all compton bands
-    * `std_peak_pos`: Standard deviation of the peak position of all compton bands
-    * `simple_pars_aoe_μ`: Simple curve fit parameters for the peak position energy depencence
-    * `simple_pars_error_aoe_μ`: Simple curve fit parameter errors for the peak position energy depencence
-    * `simple_pars_aoe_σ`: Simple curve fit parameters for the peak sigma energy depencence
-    * `simple_pars_error_aoe_σ`: Simple curve fit parameter errors for the peak sigma energy depencence
+For each lower band edge `c` in `compton_bands`, the events with positive A/E and
+`c < e < c + compton_window` are selected and histogrammed around the A/E peak
+with Freedman-Diaconis bin widths. The peak statistics are determined with
+[`estimate_single_peak_stats`](@ref) (`:psd` variant). The histograms are then
+rebuilt in the range from 15 standard deviations below to 3 standard deviations
+above the peak position. Simple least-squares fits give the energy dependence of
+the peak position (linear) and width (`√(p1 + p2 / E²)`).
+
+## Returns
+A `NamedTuple` with the fields
+* `peakhists`: histogram of each band.
+* `peakstats`: `StructArray` of peak statistics of each band.
+* `min_aoe`, `max_aoe`: A/E range of the histogram of each band.
+* `e_unit`: energy unit of the fits.
+* `mean_peak_pos`, `std_peak_pos`: mean and standard deviation of the peak positions of all bands.
+* `mean_peak_sigma`, `std_peak_sigma`: mean and standard deviation of the peak widths of bands 20 and above.
+* `simple_pars_aoe_μ`, `simple_pars_error_aoe_μ`: parameters and standard errors of the linear fit of the peak position over energy.
+* `simple_pars_aoe_σ`, `simple_pars_error_aoe_σ`: parameters and standard errors of the fit of the peak width over energy.
 """
 function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton_bands::Vector{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
     @assert length(aoe) == length(e) "A/E and Energy arrays must have the same length"
@@ -108,13 +116,26 @@ export generate_aoe_compton_bands
 
 
 """
-    fit_aoe_compton(peakhists::Array, peakstats::StructArray, compton_bands::Array{T}) where T<:Real
+    fit_aoe_compton(
+        peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T};
+        uncertainty::Bool = false, fit_func::Symbol = :aoe_one_bck
+    ) where T<:Unitful.Energy{<:Real}
 
-Fit the A/E Compton bands using the `f_aoe_compton` function consisting of a gaussian SSE peak and a step like background for MSE events.
+Fits the A/E distribution in each Compton band with [`fit_single_aoe_compton`](@ref).
+The fits run in parallel on the available threads.
 
-# Returns
-    * `result`: Dict of NamedTuples of the fit results containing values and errors for each compton band
-    * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
+## Arguments
+* `peakhists`: A/E histogram of each band, e.g. from [`generate_aoe_compton_bands`](@ref).
+* `peakstats`: Initial peak statistics of each band.
+* `compton_bands`: Energies of the bands; they are used as keys of the result.
+
+## Keywords
+* `uncertainty::Bool = false`: Calculate parameter uncertainties and goodness of fit.
+* `fit_func::Symbol = :aoe_one_bck`: `:aoe_one_bck` or `:aoe_two_bck` (see [`get_aoe_fit_functions`](@ref)).
+
+## Returns
+A tuple `(result, report)` of two `OrderedDict`s keyed by `compton_bands`, with the
+`result` and `report` `NamedTuple`s of [`fit_single_aoe_compton`](@ref) as values.
 """
 function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; uncertainty::Bool=false, fit_func::Symbol=:aoe_one_bck) where T<:Unitful.Energy{<:Real}    
     # create return and result dicts
@@ -150,13 +171,35 @@ export fit_aoe_compton
 
 
 """
-    fit_single_aoe_compton(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :μ, :σ), NTuple{7, T}}; uncertainty::Bool=true) where T<:Real
+    fit_single_aoe_compton(
+        h::Histogram, ps::NamedTuple;
+        uncertainty::Bool = true, pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true),
+        fit_func::Symbol = :aoe_one_bck, background_center = ps.peak_pos, fixed_position::Bool = false
+    )
 
-Perform a fit of the peakshape to the data in `h` using the initial values in `ps` while using the `f_aoe_compton` function consisting of a gaussian SSE peak and a step like background for MSE events.
+Fits the A/E distribution of the histogram `h` by maximizing the binned Poisson
+likelihood, starting from the peak statistics `ps`.
 
-# Returns
-    * `result`: NamedTuple of the fit results containing values and errors
-    * `report`: NamedTuple of the fit report which can be plotted
+The model is a Gaussian single-site-event peak plus a background of
+multi-site events modeled as one (`:aoe_one_bck`) or two (`:aoe_two_bck`)
+exponentially modified Gaussians (see [`get_aoe_fit_functions`](@ref)). `ps`
+is a result of [`estimate_single_peak_stats`](@ref) (`:psd` variant).
+
+## Keywords
+* `uncertainty::Bool = true`: Calculate parameter uncertainties (from the Hessian of the likelihood) and goodness of fit.
+* `pseudo_prior::NamedTupleDist`: Replaces fields of the default prior.
+* `fit_func::Symbol = :aoe_one_bck`: `:aoe_one_bck` or `:aoe_two_bck`.
+* `background_center`: Passed to the peak components in the report.
+* `fixed_position::Bool = false`: Fix the peak position `μ` to `ps.peak_pos`.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fit parameters
+(`μ`, `σ`, `n`, `B`, `δ`, and `μ2`, `σ2`, `B2f`, `δ2` for `:aoe_two_bck`) as
+`Measurement`s, the `fwhm` of the fitted distribution, `fit_func` and `gof`. `gof` holds
+`converged` and, if the uncertainties were calculated, `pvalue`, `chi2`, `dof` (from [`p_value`](@ref)), `covmat`
+and the mean, median and standard deviation of the normalized residuals.
+`report` contains the best-fit values `v`, the histogram `h`, `f_fit`, `f_components` and `gof`,
+for plotting with `LegendMakie.lplot`.
 """
 function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:aoe_one_bck, background_center::Union{Real,Nothing} = ps.peak_pos, fixed_position::Bool=false)
     # create pseudo priors
@@ -278,10 +321,10 @@ end
 
 """
     estimate_fwhm_aoe_compton(v::NamedTuple, f_fit::Function)
-Get the FWHM of a peak from the fit parameters.
 
-# Returns
-    * `fwhm`: the FWHM of the peak
+Calculates the FWHM of the peak described by the fit function `f_fit(x)` with the
+parameters `v`. The maximum is searched on a 0.001 grid between `v.μ - v.σ` and
+`v.μ + v.σ`. Returns `NaN` if the half-maximum positions cannot be found.
 """
 function estimate_fwhm_aoe_compton(v::NamedTuple, f_fit::Function)
     try
@@ -310,12 +353,17 @@ function estimate_fwhm_aoe_compton(v::NamedTuple, f_fit::Function)
 end
 
 """
-    get_peak_fwhm_aoe_compton(v_ml::NamedTuple, v_ml_err::NamedTuple)
-Get the FWHM of a peak from the fit parameters while performing a MC error propagation.
+    get_peak_fwhm_aoe_compton(v_ml::NamedTuple, v_ml_err::Union{Matrix, NamedTuple}, f_fit::Function, uncertainty::Bool = true)
 
-# Returns
-    * `fwhm`: the FWHM of the peak
-    * `fwhm_err`: the uncertainty of the FWHM of the peak
+Calculates the FWHM of an A/E peak from the best-fit parameters `v_ml`, with
+the fit function `f_fit(x)`, and its uncertainty by Monte Carlo error propagation.
+
+`v_ml_err` is either the covariance matrix of the parameters (10 000 correlated
+samples) or a `NamedTuple` of standard deviations (1000 independent samples).
+With `uncertainty = false`, no sampling is done and the uncertainty is `NaN`.
+
+## Returns
+A tuple `(fwhm, fwhm_err)`.
 """
 function get_peak_fwhm_aoe_compton(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple}, f_fit::Function, uncertainty::Bool=true)
     # get fwhm for peak fit

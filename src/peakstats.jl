@@ -1,19 +1,38 @@
 """
-    estimate_single_peak_stats(h::Histogram, calib_type::Symbol=:th228)
+    estimate_single_peak_stats(h::Histogram; calib_type::Symbol = :th228)
+    estimate_single_peak_stats(e::Vector{<:Real}, bin_width::Real; calib_type::Symbol = :th228)
 
-Estimate statistics/parameters for a single peak in the given histogram `h`.
+Estimates the position, width, size and background level of a single peak in
+the histogram `h`, which is used as a starting point for peak fits.
 
-`h` must only contain a single peak. The peak should have a Gaussian-like
-shape.
-`calib_type` specifies the calibration type. Currently `:th228`, `:psd` and `:simple` is implemented..
+`h` must contain a single peak with a Gaussian-like shape. The second method,
+available for `calib_type = :th228` only, takes the unbinned values `e`, builds a
+histogram with the given `bin_width` and halves the bin width until the
+estimated FWHM is non-zero.
 
-# Returns 
-`NamedTuple` with the fields
-    * `peak_pos`: estimated position of the peak (in the middle of the peak)
-    * `peak_fwhm`: full width at half maximum (FWHM) of the peak
-    * `peak_sigma`: estimated standard deviation of the peak
-    * `peak_counts`: estimated number of counts in the peak
-    * `mean_background`: estimated mean background value
+## Keywords
+* `calib_type::Symbol = :th228`: Estimation variant, one of `:th228` (peak on a
+  background with a step, as in the 228Th calibration spectrum), `:psd`
+  (peak in a pulse shape discrimination parameter, e.g. A/E) or `:simple`
+  (peak position, width and counts only). Any other value throws an error.
+
+## Returns
+A `NamedTuple` with the fields
+* `peak_pos`: estimated position of the peak, from the maximum and the
+  midpoint of the half-maximum range.
+* `peak_fwhm`: full width at half maximum (FWHM) of the peak.
+* `peak_sigma`: estimated standard deviation of the peak.
+* `peak_counts`: estimated number of counts in the peak.
+* `mean_background`: estimated mean background per unit of the horizontal axis
+  (`:th228` and `:psd` only; for `:psd` it is the number of counts below
+  three standard deviations of the peak).
+* `bin_width`, `mean_background_step`, `mean_background_std`: bin width of `h`,
+  estimated height of the background step across the peak and standard deviation
+  of the background per unit of the horizontal axis (`:th228` only).
+
+If the half-maximum range is empty, the width is estimated from the
+quarter-maximum range, and a fallback of `peak_sigma = 1` is used if that also
+vanishes (`:th228` and `:simple`).
 """
 function estimate_single_peak_stats(args...; calib_type::Symbol=:th228)
     if calib_type == :th228

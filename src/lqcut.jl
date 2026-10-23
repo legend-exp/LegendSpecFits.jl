@@ -1,32 +1,51 @@
 """
-    lq_ctc_correction(lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
-    ctc_dep_edgesigma::Float64=3.0, ctc_lq_precut_relative_cut::Float64=0.25, lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol=:percentile, dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression::Union{String,Symbol}="lq / e", dt_eff_expression::Union{String,Symbol}="qdrift / e", ctc_dt_eff_low_quantile::Float64=0.15, ctc_dt_eff_high_quantile::Float64=0.95, pol_fit_order::Int=1, uncertainty::Bool=false)
+    lq_ctc_correction(
+        lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity},
+        e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_μ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity;
+        ctc_dep_edgesigma::Float64 = 3.0, ctc_lq_precut_relative_cut::Float64 = 0.25,
+        lq_outlier_sigma::Float64 = 2.0, ctc_driftime_cutoff_method::Symbol = :percentile,
+        dt_eff_outlier_sigma::Float64 = 2.0, lq_e_corr_expression = "lq / e",
+        dt_eff_expression = "qdrift / e", ctc_dt_eff_low_quantile::Float64 = 0.15,
+        ctc_dt_eff_high_quantile::Float64 = 0.95, pol_fit_order::Int = 1, uncertainty::Bool = false
+    )
 
-    Perform the drift time correction on the LQ data using the DEP peak. The function cuts outliers in lq and drift time, then performs a polynomial fit on the remaining data. The data is Corrected by subtracting the polynomial fit from the lq data.
+Corrects the drift time dependence of the LQ parameter with the double escape
+peak (DEP).
 
-# Arguments 
-    * `lq`: Energy corrected lq parameter
-    * `dt_eff`: Effective drift time
-    * `e_cal`: Energy
-    * `dep_µ`: Mean of the DEP peak
-    * `dep_σ`: Standard deviation of the DEP peak
+The events within `dep_μ ± ctc_dep_edgesigma * dep_σ` are selected. Outliers in
+LQ and in the effective drift time are removed, and a polynomial is fitted to LQ
+as a function of drift time with [`chi2fit`](@ref). The correction subtracts this polynomial from `lq`.
 
-# Keywords
-    * `ctc_dep_edgesigma`: Number of standard deviations used to define the DEP edges
-    * `ctc_lq_precut_relative_cut`: Relative cut for cut_single_peak function
-    * `ctc_driftime_cutoff_method`: Method used to define the drift time cutoff
-    * `lq_outlier_sigma`: Number of standard deviations used to define the lq cutoff
-    * `dt_eff_outlier_sigma`: Number of standard deviations used to define the drift time cutoff
-    * `lq_e_corr_expression`: Expression for the energy corrected lq classifier 
-    * `dt_eff_expression`: Expression for the effective drift time 
-    * `ctc_dt_eff_low_quantile`: Lower quantile used to define the drift time cutoff
-    * `ctc_dt_eff_high_quantile`: Higher quantile used to define the drift time cutoff
-    * `pol_fit_order`: Order of the polynomial fit used for the drift time correction
+## Arguments
+* `lq`: Energy-corrected LQ parameter.
+* `dt_eff`: Effective drift time.
+* `e_cal`: Calibrated energy.
+* `dep_μ`, `dep_σ`: Mean and standard deviation of the DEP.
 
-# Returns
-    * `result`: NamedTuple of the function used for the drift time correction, the polynomial fit result and the box constraints
-    * `report`: NamedTuple of the histograms used for the fit, the cutoff values and the DEP edges
+## Keywords
+* `ctc_dep_edgesigma`: Half-width of the DEP selection in units of `dep_σ`.
+* `ctc_lq_precut_relative_cut`: Relative cut level of [`cut_single_peak`](@ref) for the LQ precut.
+* `lq_outlier_sigma`: LQ values farther than this many standard deviations from the fitted LQ mean are removed.
+* `ctc_driftime_cutoff_method`: Drift time range selection. `:percentile` uses the quantiles
+  `ctc_dt_eff_low_quantile` and `ctc_dt_eff_high_quantile`; `:gaussian` uses a truncated Gaussian fit with
+  `dt_eff_outlier_sigma` standard deviations (not for detectors with a double-peaked drift time distribution);
+  `:double_gaussian` uses the positions where a fitted double Gaussian falls to 10 % of its maximum.
+* `dt_eff_outlier_sigma`: Used by `:gaussian`.
+* `lq_e_corr_expression`, `dt_eff_expression`: Names of the LQ and drift-time variables in the returned `func`.
+* `ctc_dt_eff_low_quantile`, `ctc_dt_eff_high_quantile`: Used by `:percentile`.
+* `pol_fit_order`: Order of the polynomial.
+* `uncertainty`: Calculate fit uncertainties.
 
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `func`: the corrected LQ as a Julia expression string.
+* `func_generic`: the same with generic parameter names.
+* `fit_result`: result of the polynomial fit ([`chi2fit`](@ref)).
+* `box_constraints`: `NamedTuple` `(lq_lower, lq_upper, t_lower, t_upper)` of the LQ and drift-time ranges used.
+
+`report` contains `lq_report` and `drift_report` (reports of the fits of LQ and
+drift time; `drift_report` is `nothing` for `:percentile`), `lq_box`,
+`drift_time_func` (the fitted polynomial), `dep_left` and `dep_right`.
 """
 function lq_ctc_correction(
     lq::Vector{<:AbstractFloat}, dt_eff::Vector{<:Unitful.RealOrRealQuantity}, e_cal::Vector{<:Unitful.Energy{<:Real}}, dep_µ::Unitful.AbstractQuantity, dep_σ::Unitful.AbstractQuantity; 
@@ -135,26 +154,37 @@ end
 export lq_ctc_correction
 
 """
-    lq_norm(dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=2.0,  uncertainty::Bool=true, lq_class_expression::Union{String,Symbol}="lq / e  - (slope * qdrift / e + y_inter)" )
+    lq_norm(
+        dep_μ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy},
+        lq_classifier::Vector{<:AbstractFloat};
+        dep_sideband_sigma::Float64 = 4.5, cut_truncation_sigma::Float64 = 3.5,
+        uncertainty::Bool = true, lq_class_expression = "lq / e  - (slope * qdrift / e + y_inter)"
+    )
 
-    Performs normalization of the charge-trapping-corrected LQ classifier using the double-escape peak (DEP) region of the Th calibration. It subtracts sidebands around the DEP, fits a truncated Gaussian to the resulting histogram, and generates a normalization expression so that a numerical value of one corresponds to one standard deviation (σ) of the fitted Gaussian.
+Normalizes the charge-trapping-corrected LQ classifier to mean 0 and standard
+deviation 1 using the double escape peak (DEP).
 
-# Arguments
-    * `dep_µ`: Mean of the DEP peak
-    * `dep_σ`: Standard deviation of the DEP peak
-    * `e_cal`: Vector of Energy values
-    * `lq_classifier`: LQ classifier (typically charge-trapping-corrected)
+The LQ histograms of two sidebands next to the DEP (bounds at multiples of `dep_sideband_sigma * dep_σ`
+from `dep_μ`; both sides if `dep_σ < 2 keV`, both on the low-energy side otherwise) are subtracted from the
+DEP histogram, negative bins are set to zero, and a truncated Gaussian is fitted
+to the result with [`fit_binned_trunc_gauss`](@ref).
 
-# Keywords
-    * `dep_sideband_sigma`: Number of standard deviations used to define the sideband edges
-    * `cut_truncation_sigma`: Number of standard deviations used for the precut of sideband subtracted histogram
-    * `uncertainty`: Boolean flag to include uncertainty in the fit (default: true)
-    * `lq_class_expression`: Expression for the used LQ classifier
+## Arguments
+* `dep_μ`, `dep_σ`: Mean and standard deviation of the DEP.
+* `e_cal`: Calibrated energies.
+* `lq_classifier`: LQ classifier values, typically after [`lq_ctc_correction`](@ref).
 
-# Returns
-    * `result`: NamedTuple of the fit result and normalization function
-    * `report`: NamedTuple of the fit result, fit report and temporary histograms
+## Keywords
+* `dep_sideband_sigma`: DEP region and sideband width in units of `dep_σ`.
+* `cut_truncation_sigma`: Fit range around the peak of the subtracted histogram, in standard deviations.
+* `uncertainty`: Calculate fit uncertainties.
+* `lq_class_expression`: Name of the LQ classifier in the returned `func`.
 
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with `fit_result` (result of the Gaussian fit)
+and `func`, the normalized LQ as a Julia expression string. `report` contains `fit_result`,
+`fit_report`, `temp_hists` (histograms `hist_dep`, `hist_sb1`, `hist_sb2`, `hist_subtracted`,
+`hist_corrected`), `dep_σ` and the energy `edges` of the regions.
 """
 function lq_norm(
     dep_µ::Unitful.Energy, dep_σ::Unitful.Energy, e_cal::Vector{<:Unitful.Energy}, lq_classifier::Vector{<:AbstractFloat}; dep_sideband_sigma::Float64=4.5, cut_truncation_sigma::Float64=3.5, uncertainty::Bool=true, lq_class_expression::Union{String,Symbol}="lq / e  - (slope * qdrift / e + y_inter)"

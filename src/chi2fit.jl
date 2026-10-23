@@ -1,20 +1,53 @@
 
 """
-    fit_chisq(x::AbstractVector{<:Real},y::AbstractVector{<:Real},yerr::AbstractVector{<:Real}, f_fit::Function;pull_t::Vector{<:NamedTuple} = fill(NamedTuple(), first(methods(f_fit)).nargs - 2), v_init::Vector = [])
-Least square fit with chi2 minimization
-# Input:
-- x : x-values
-- y : y-values
-- yerr : 1 sigma uncertainty on y
-- f_fit : fit/model function. e.g. for a linear function: f_lin(x,p1,p2)  = p1 .* x .+ p2   
-The numer of fit parameter is determined with `first(methods(f_fit)).nargs - 2`. That's why it's important that f_fit has the synthax f(x,arg1,arg2,arg3,...)
-pull_t : pull term, a vector of NamedTuple with fields `mean` and `std`. A Gaussian pull term is added to the chi2 function to account for systematic uncertainties. If left blank, no pull term is used.
-v_init : initial value for fit parameter optimization. If left blank, the initial value is set to 1 or guessed roughly for all fit parameters
-correlated : if `true`, the returned parameters carry their full covariance, so that uncertainties of quantities derived from them, including `report.f_fit`, account for the parameter correlations. If `false`, the parameters are independent measurements with the same marginal uncertainties, which overestimates the uncertainty of derived quantities whenever the parameters are correlated.
-# Return:
-- result : NamedTuple with the optimized fit parameter and the fit function
-- report: 
+    chi2fit(f_fit::Function, x, y; pull_t, v_init, lower_bound, upper_bound, pseudo_prior, uncertainty, correlated)
+    chi2fit(f_fit, x, y, yerr; kwargs...)
+    chi2fit(f_fit, x, y, yerr, xerr; kwargs...)
+    chi2fit(n_poly::Int, x, y; kwargs...)
+    chi2fit(f_outer::Function, n_poly::Int, x, y; kwargs...)
 
+Fits the model `f_fit` to the data `(x, y)` by minimizing a chi-squared function
+with the Minuit minimizer (`migrad`).
+
+`x` and `y` are vectors of numbers or `Measurement`s. The uncertainty of each
+`x` is propagated through the model with forward-mode automatic differentiation
+and added in quadrature to the uncertainty of `y`. If all uncertainties are
+zero, all points have equal weight. Separate `yerr` (and `xerr`) vectors are
+converted to `Measurement`s.
+
+## Arguments
+* `f_fit`: Model function `f(x, p1, p2, ...)`. The number of fit parameters is
+  `first(methods(f_fit)).nargs - 2`, so `f_fit` needs a single method with
+  explicit parameter arguments.
+* `n_poly::Int`: Fits a polynomial of degree `n_poly` instead, with parameters ordered from the
+  constant term upward (see [`PolCalFunc`](@ref)). With `f_outer`, the model is `f_outer(poly(x))`.
+
+## Keywords
+* `pull_t::Vector{<:NamedTuple}`: One entry per parameter. A `NamedTuple` `(mean, std)` adds a
+  Gaussian pull term `((p - mean) / std)^2` to the chi-squared function; an empty `NamedTuple()` adds none.
+  The default adds no pull terms.
+* `v_init::Vector{<:Real}`: Initial parameter values. Default is one for every parameter.
+* `lower_bound::Vector{<:Real}`, `upper_bound::Vector{<:Real}`: Parameter limits. Default is no limit.
+* `pseudo_prior::Union{ContinuousMultivariateDistribution, Nothing} = nothing`: If given, the
+  minimization runs in a transformed space where one unit is one prior standard deviation, which
+  keeps parameters in the support of the prior.
+* `uncertainty::Bool = true`: Calculate parameter uncertainties and goodness of fit from the Hessian of the chi-squared function.
+* `correlated::Bool = true`: If `true`, the returned parameters carry their full covariance, so that
+  uncertainties of derived quantities, including `report.f_fit`, account for the parameter correlations.
+  If `false`, the parameters are independent `Measurement`s with the same marginal
+  uncertainties, which overestimates the uncertainty of derived quantities when the parameters are correlated.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `par`: best-fit parameters as `Measurement`s. The uncertainty is `NaN` if `uncertainty` is `false`
+  or the fit did not converge.
+* `converged`: whether the minimizer converged. A warning is issued if not.
+* `gof`: goodness of fit, only present if the uncertainties were calculated, as a `NamedTuple` with
+  `converged`, `pvalue`, `chi2min`, `dof`, `covmat` and `residuals_norm`. The number of degrees
+  of freedom counts each pull term as one data point; `pvalue` is `NaN` if it is zero.
+
+`report` contains `par`, `f_fit` (the fitted model as a function of `x`), `x`, `y` and `gof`,
+for plotting with `LegendMakie.lplot`.
 """ 
 function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}}; 
                     pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), first(methods(f_fit)).nargs - 2), 

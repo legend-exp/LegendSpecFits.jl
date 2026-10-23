@@ -1,14 +1,22 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 """
-    get_th228_fit_functions(; background_center::Union{Real,Nothing} = nothing)
-This function defines the gamma peakshape fit functions used in the calibration specfits.
-* gamma_def: "default" gamma peakshape with gaussian signal, low-energy tail, and background (flat + step)
-* gamma_tails: default gamma peakshape + high-energy tail
-* gamma_bckSlope: default gamma peakshape + linear background slope
-* gamma_bckExp: default gamma peakshape + exponential background 
-* gamma_bckFlat: default gamma peakshape - step background (only flat component!)
-* gamma_tails_bckFlat: default gamma peakshape + high-energy tail - step background (only flat component!)
-* gamma_minimal: only Gaussian signal and flat background
+    get_th228_fit_functions(; background_center::Union{Real, Nothing} = nothing)
+
+Returns a `NamedTuple` of the gamma peak shape functions `f(x, v)` used in the
+calibration fits, where `v` is a `NamedTuple` of the fit parameters. Each is
+built from [`gamma_peakshape`](@ref):
+
+* `gamma_def`: Gaussian signal, low-energy tail, flat background and step background.
+* `gamma_tails`: `gamma_def` plus a high-energy tail.
+* `gamma_sigWithTail`: signal and low-energy tail only, without background.
+* `gamma_bckSlope`: `gamma_def` plus a linear background slope.
+* `gamma_bckExp`: `gamma_def` plus an exponential background.
+* `gamma_bckFlat`: `gamma_def` without the step background.
+* `gamma_tails_bckFlat`: `gamma_tails` without the step background.
+* `gamma_minimal`: Gaussian signal and flat background only.
+
+`background_center` is the reference position of the slope and exponential
+background terms. If `nothing`, the peak position `v.μ` is used.
 """
 function get_th228_fit_functions(; background_center::Union{Real,Nothing} = nothing)
     merge( 
@@ -32,9 +40,19 @@ function get_th228_fit_functions(; background_center::Union{Real,Nothing} = noth
 end
 
 """
-    peakshape_components(fit_func::Symbol; background_center::Real) 
-This function defines the components (signal, low/high-energy tail, backgrounds) of the fit function used in gamma specfits. 
-These component functions are used in the fit-report and in plot receipes 
+    peakshape_components(fit_func::Symbol; background_center::Union{Real, Nothing} = nothing)
+    peakshape_components(fit_func::Symbol, v::NamedTuple; background_center = v.μ)
+
+Returns the component functions of the peak shape `fit_func` (one of the names
+in [`get_th228_fit_functions`](@ref) except `gamma_sigWithTail`) as a
+`NamedTuple` with the fields
+
+* `funcs`: component functions `f(x, v)` (`f_sig`, `f_lowEtail`, `f_bck` and, for the shapes with a
+  high-energy tail, `f_highEtail`). In the method with `v`, these are functions of `x` only,
+  with the parameters `v` applied.
+* `labels`, `colors`, `linestyles`: plot label, color and line style of each component.
+
+The components are used in fit reports and plot recipes.
 """
 function peakshape_components(fit_func::Symbol; background_center::Union{Real,Nothing} = nothing)
     if fit_func == :gamma_def

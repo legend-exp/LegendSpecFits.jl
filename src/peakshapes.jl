@@ -3,19 +3,21 @@
 """
     LegendSpecFits.gauss_pdf(x::Real, μ::Real, σ::Real)
 
-Equivalent to `pdf(Normal(μ, σ), x)`
+Evaluates the probability density function of a normal distribution with mean
+`μ` and standard deviation `σ` at `x`. Equivalent to `pdf(Normal(μ, σ), x)`.
 """
 gauss_pdf(x::Real, μ::Real, σ::Real) = inv(σ * sqrt2π) * exp(-((x - μ) / σ)^2  / 2)
 
 """
     ex_gauss_pdf(x::Real, μ::Real, σ::Real, θ::Real)
 
-The PDF of an
-[Exponentially modified Gaussian distribution](https://en.wikipedia.org/wiki/Exponentially_modified_Gaussian_distribution)
-with Gaussian parameters `μ`, `σ` and exponential scale `θ` at `x`.
+Evaluates the probability density function of an
+[exponentially modified Gaussian distribution](https://en.wikipedia.org/wiki/Exponentially_modified_Gaussian_distribution)
+with Gaussian mean `μ` and standard deviation `σ` and exponential scale `θ` at `x`.
 
-It is the PDF of the distribution that descibes the random process
-`rand(Normal(μ, σ)) + rand(Exponential(θ))`.
+It is the density of the random variable
+`rand(Normal(μ, σ)) + rand(Exponential(θ))`. The function throws an
+`AssertionError` if the result is not finite.
 """
 function ex_gauss_pdf(x::Real, μ::Real, σ::Real, θ::Real)
     R = float(promote_type(typeof(x), typeof(σ), typeof(θ)))
@@ -40,17 +42,18 @@ end
 """
     step_gauss(x::Real, μ::Real, σ::Real)
 
-Evaluates the convulution of a Heaviside step function and the
-PDF of `Normal(μ, σ)` at `x`.
+Evaluates the convolution of a Heaviside step function with the
+PDF of `Normal(μ, σ)` at `x`, i.e. the cumulative distribution function of
+`Normal(μ, σ)`. It rises from 0 to 1 around `μ`.
 
-The result does not correspond to a PDF as it is not normalizable.
+The result is not a probability density because it is not normalizable.
 """
 step_gauss(x::Real, μ::Real, σ::Real) = erfc( (μ-x) / (sqrt2 * σ) ) / 2
 
 """
     linear_function(x::Real, slope::Real, intercept::Real)
 
-Evaluates a linear function at `x` with parameters `slope` and `intercept`.
+Evaluates the linear function `slope * x + intercept` at `x`.
 """
 function linear_function(
     x::Real, slope::Real, intercept::Real
@@ -62,7 +65,7 @@ export linear_function
 """
     exponential_decay(x::Real, amplitude::Real, decay::Real, offset::Real)
 
-Evaluates an exponential decay function at `x` with parameters `amplitude`, `decay` and `offset`.
+Evaluates `amplitude * exp(-decay * x) + offset` at `x`.
 """
 function exponential_decay(
     x::Real, amplitude::Real, decay::Real, offset::Real 
@@ -75,21 +78,29 @@ export exponential_decay
     gamma_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
         step_amplitude::Real, skew_fraction::Real, skew_width::Real,
-        background::Real;  
-        skew_fraction_highE::Real = 0.0, skew_width_highE::Real= 0.0, 
-        background_kwargs... 
+        background::Real;
+        skew_fraction_highE::Real = 0.0, skew_width_highE::Real = 0.0,
+        background_kwargs...
     )
-    
-Standard gamma peakshape: Describes the shape of a typical gamma peak in a detector.
-Components: 
-- Gaussian signal peak with `μ`, `σ`, `n - skew_fraction - skew_fraction_highE`
-- low-energy tail: `skew_fraction`, `skew_width`
-- high-energy tail: `skew_fraction_highE`, `skew_width_highE` (optional, default off)
-- background:
-    - energy-independent `background`
-    - step-function scaled with `step_amplitude` from Compton scattered gammas
-    - linear slope: `background_slope` (optional, default off)
-    - exponential decay: `background_exp` (optional, default off)
+
+Evaluates the shape of a gamma peak in an energy spectrum at `x`. The shape is
+the sum of [`signal_peakshape`](@ref), [`lowEtail_peakshape`](@ref),
+[`highEtail_peakshape`](@ref) and [`background_peakshape`](@ref).
+
+## Arguments
+* `x`: Energy at which the shape is evaluated.
+* `μ`, `σ`: Mean and standard deviation of the Gaussian signal peak.
+* `n`: Total number of counts in the peak (Gaussian part plus tails).
+* `step_amplitude`: Amplitude of the step-like background from Compton-scattered gammas.
+* `skew_fraction`, `skew_width`: Fraction of `n` in the low-energy tail and its
+  exponential scale relative to `μ` (the scale is `skew_width * μ`).
+* `background`: Energy-independent background level.
+
+## Keywords
+* `skew_fraction_highE = 0.0`, `skew_width_highE = 0.0`: Fraction and relative
+  exponential scale of the high-energy tail. The default disables the tail.
+* `background_kwargs...`: Passed to [`background_peakshape`](@ref)
+  (`background_slope`, `background_exp`, `background_center`).
 """
 function gamma_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
@@ -108,10 +119,12 @@ export gamma_peakshape
 """
     signal_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
-        skew_fraction::Real;  skew_fraction_highE::Real = 0.0
+        skew_fraction::Real; skew_fraction_highE::Real = 0.0
     )
-    
-Describes the signal part of the shape of a typical gamma peak in a detector.
+
+Evaluates the Gaussian signal part of a gamma peak at `x`:
+`n * (1 - skew_fraction - skew_fraction_highE)` times the density of
+`Normal(μ, σ)`. Returns zero if `σ` is zero.
 """
 function signal_peakshape(x::Real, μ::Real, σ::Real, n::Real, skew_fraction::Real;  skew_fraction_highE::Real = 0.0)
     return iszero(σ) ? zero(x) : n * (1 - skew_fraction - skew_fraction_highE) * gauss_pdf(x, μ, σ)
@@ -120,16 +133,23 @@ export signal_peakshape
 
 """
     background_peakshape(
-    x::Real, μ::Real, σ::Real, 
-    step_amplitude::Real, background::Real; 
-    background_slope::Real = 0.0, background_exp = 0.0, background_center::Real = µ
-)
+        x::Real, μ::Real, σ::Real,
+        step_amplitude::Real, background::Real;
+        background_slope::Real = 0.0, background_exp = 0.0, background_center::Real = μ
+    )
 
-Describes the background part of the shape of a typical gamma peak in a detector:  components: 
-- step-function scaled with `step_amplitude``
-- energy-independent background: `background``
-- linear slope: `background_slope` (optional)
-- exponential decay:  `background_exp` (optional)
+Evaluates the background part of a gamma peak at `x`:
+
+```math
+A\\,\\mathrm{S}(x; \\mu, \\sigma) + b\\,e^{-d\\,(x - x_c)} + s\\,(x - x_c)\\,,
+```
+
+where ``A`` is `step_amplitude`, ``b`` is `background`, ``d`` is
+`background_exp`, ``s`` is `background_slope` and ``x_c`` is
+`background_center`. The step ``\\mathrm{S}`` is a Gaussian-smoothed step with
+width `σ` that falls from 1 to 0 across `μ` with increasing `x` (more
+background below the peak). With the default keywords the exponential term
+reduces to the constant `background`.
 """
 function background_peakshape(
     x::Real, μ::Real, σ::Real, 
@@ -143,10 +163,12 @@ export background_peakshape
 """
     lowEtail_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
-        skew_fraction::Real, skew_width::Real,
+        skew_fraction::Real, skew_width::Real
     )
-    
-Describes the low-E signal tail part of the shape of a typical gamma peak in a detector.
+
+Evaluates the low-energy tail of a gamma peak at `x`: `n * skew_fraction` times
+an exponentially modified Gaussian that extends toward lower energies, with
+exponential scale `skew_width * μ`. Returns zero if `σ` is zero.
 """
 function lowEtail_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
@@ -160,10 +182,12 @@ export lowEtail_peakshape
 """
     highEtail_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
-        skew_fraction::Real, skew_width::Real,
+        skew_fraction_h::Real, skew_width_h::Real
     )
-    
-Describes the high-E signal tail part of the shape 
+
+Evaluates the high-energy tail of a gamma peak at `x`: `n * skew_fraction_h`
+times an exponentially modified Gaussian that extends toward higher energies,
+with exponential scale `skew_width_h * μ`. Returns zero if `σ` is zero.
 """
 function highEtail_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
@@ -177,7 +201,10 @@ export highEtail_peakshape
 """
     ex_step_gauss(x::Real, l::Real, k::Real, t::Real, d::Real)
 
-Evaluates an extended step gauss model at `x` with parameters `l`, `k`, `t` and `d`.
+Evaluates `(exp(k * (x - l)) + d) / (exp((x - l) / t) + l)` at `x`.
+
+This is the energy dependence of the A/E resolution model of GERDA
+(Eq. (1) in EPJC 73 (2013) 2583).
 """
 function ex_step_gauss(
     x::Real, l::Real, k::Real, 
@@ -195,7 +222,10 @@ export ex_step_gauss
         background::Real, δ::Real
     )
 
-Describes the shape of a typical A/E Compton peak in a detector as a gaussian SSE peak and a step like background for MSE events.
+Evaluates the A/E distribution of events in a Compton region at `x`: a Gaussian
+single-site-event (SSE) peak with mean `μ`, standard deviation `σ` and
+amplitude `n`, plus a multi-site-event (MSE) background `background` modeled as
+an exponentially modified Gaussian with scale `δ` that extends toward lower A/E.
 """
 function aoe_compton_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
@@ -211,7 +241,8 @@ export aoe_compton_peakshape
         x::Real, μ::Real, σ::Real, n::Real
     )
 
-Describes the signal shape of a typical A/E Compton peak in a detector as a gaussian SSE peak.
+Evaluates the signal part of [`aoe_compton_peakshape`](@ref) at `x`: a Gaussian
+single-site-event peak with mean `μ`, standard deviation `σ` and amplitude `n`.
 """
 function aoe_compton_signal_peakshape(
     x::Real, μ::Real, σ::Real, n::Real
@@ -226,7 +257,9 @@ export aoe_compton_signal_peakshape
         background::Real, δ::Real
     )
 
-Describes the background shape of a typical A/E Compton peak in a detector as a step like background for MSE events.
+Evaluates the background part of [`aoe_compton_peakshape`](@ref) at `x`: an
+exponentially modified Gaussian (mirrored, tail toward lower A/E) with amplitude
+`background`, mean `μ`, standard deviation `σ` and scale `δ`.
 """
 function aoe_compton_background_peakshape(
     x::Real, μ::Real, σ::Real,
@@ -242,7 +275,8 @@ export aoe_compton_background_peakshape
         μ2::Real, σ2::Real, n2::Real
     )
 
-Evaluates the sum of two gaussians at `x` with parameters `μ1`, `σ1`, `n1`, `μ2`, `σ2`, `n2`.
+Evaluates the sum of two Gaussian densities at `x`, with means `μ1`, `μ2`,
+standard deviations `σ1`, `σ2` and amplitudes `n1`, `n2`.
 """
 function double_gaussian(
     x::Real, μ1::Real, σ1::Real, n1::Real, 
@@ -257,6 +291,20 @@ export double_gaussian
 # additional peakshape functions for two EMG background
 ###############################################################
 
+"""
+    two_emg_aoe_compton_peakshape(
+        x::Real,
+        μ::Real, σ::Real, n::Real, background::Real, δ::Real,
+        μ2::Real, σ2::Real, background2_fraction::Real, δ2::Real
+    )
+
+Evaluates the A/E distribution of a Compton region with two background
+components at `x`: a Gaussian signal peak (`μ`, `σ`, `n`) plus `background`
+times a mixture of two mirrored exponentially modified Gaussians. The first has
+parameters `μ`, `σ`, `δ` and weight `1 - background2_fraction`, the second has
+`μ2`, `σ2`, `δ2` and weight `background2_fraction`. Returns zero if `σ` or
+`σ2` is zero.
+"""
 function two_emg_aoe_compton_peakshape( # total fit function with two EMGs
     x::Real, 
     μ::Real, σ::Real, n::Real, background::Real, δ::Real, 
@@ -266,6 +314,15 @@ function two_emg_aoe_compton_peakshape( # total fit function with two EMGs
 end
 export two_emg_aoe_compton_peakshape
 
+"""
+    two_emg_aoe_compton_background_peakshape(
+        x::Real,
+        μ::Real, σ::Real, background::Real, δ::Real,
+        μ2::Real, σ2::Real, background2_fraction::Real, δ2::Real
+    )
+
+Evaluates the background part of [`two_emg_aoe_compton_peakshape`](@ref) at `x`.
+"""
 function two_emg_aoe_compton_background_peakshape( # background function with two EMGs
     x::Real, 
     μ::Real, σ::Real, background::Real, δ::Real,
@@ -273,4 +330,3 @@ function two_emg_aoe_compton_background_peakshape( # background function with tw
 )
     return background * ( (1 - background2_fraction) * ex_gauss_pdf(-x, -μ, σ, δ) + background2_fraction * ex_gauss_pdf(-x, -μ2, σ2, δ2))
 end
-export two_aoe_compton_background_peakshape

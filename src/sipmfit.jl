@@ -1,27 +1,47 @@
 
 """
-    fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Real=3.5; 
-        n_mixtures::Int=ceil(Int, (max_pe - min_pe) * 4), nIter::Int=50, nInit::Int=50, 
-        method::Symbol=:kmeans, kind=:diag, Δpe_peak_assignment::Real=0.3, f_uncal::Function=identity, uncertainty::Bool=true)
+    fit_sipm_spectrum(
+        pe_cal::Vector{<:Real}, min_pe::Real = 0.5, max_pe::Real = 3.5;
+        n_mixtures::Int = ceil(Int, (max_pe - min_pe) * 4), nIter::Int = 25, nInit::Int = 50,
+        method::Symbol = :kmeans, kind = :diag, Δpe_peak_assignment::Real = 0.3,
+        f_uncal::Function = identity, uncertainty::Bool = true
+    )
 
-Fit a Gaussian Mixture Model to the given pe calibration data and return the fit parameters.
+Fits a Gaussian mixture model to the calibrated SiPM amplitudes `pe_cal` (in
+photoelectron units) between `min_pe` and `max_pe`, and derives the position and
+resolution of each photoelectron peak.
 
-# Arguments
-- `pe_cal::Vector{<:Real}`: the pe calibration data
-- `min_pe::Real=0.5`: the minimum pe to consider
-- `max_pe::Real=3.5`: the maximum pe to consider
-- `n_mixtures::Int=ceil(Int, (max_pe - min_pe) * 4)`: the number of mixtures to fit
-- `nIter::Int=50`: the number of iterations for the EM algorithm
-- `nInit::Int=50`: the number of initializations for the EM algorithm
-- `method::Symbol=:kmeans`: the method to use for initialization
-- `kind::Symbol=:diag`: the kind of covariance matrix to use
-- `Δpe_peak_assignment::Real=0.3`: the range to consider for peak assignment
-- `f_uncal::Function=identity`: the function to use for uncalibration
-- `uncertainty::Bool=true`: whether to calculate the uncertainty
+The mixture is fitted with the expectation-maximization algorithm of
+`GaussianMixtures.jl`. The position of the peak at integer PE value `pe` is
+the weighted mean of the Gaussian centers within `pe ± Δpe_peak_assignment`; its
+resolution is the FWHM of the sum of these Gaussians. Uncertainties are determined from the
+Hessian of the binned likelihood.
 
-# Returns
-- `result`: a tuple with the fit parameters
-- `report`: a tuple with the fit report which can be plotted via a recipe
+## Arguments
+* `pe_cal`: Calibrated amplitudes in PE units.
+* `min_pe`, `max_pe`: Fit range.
+
+## Keywords
+* `n_mixtures::Int`: Number of Gaussians.
+* `nIter::Int = 25`, `nInit::Int = 50`: Number of EM iterations and of initializations.
+* `method::Symbol = :kmeans`: Initialization method of the mixture.
+* `kind = :diag`: Covariance type of the mixture.
+* `Δpe_peak_assignment::Real = 0.3`: Distance in PE within which a Gaussian is assigned to a peak.
+* `f_uncal::Function = identity`: Function that converts calibrated values to uncalibrated ones, to express positions and resolutions in uncalibrated units.
+* `uncertainty::Bool = true`: Calculate uncertainties and goodness of fit.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `μ`, `σ`, `w`: means, standard deviations and weights of the Gaussians (`Measurement`s).
+* `n_mixtures`, `n_pos_mixtures`: number of Gaussians in total and assigned to each peak.
+* `peaks`: integer PE values of the peaks.
+* `positions_cal`, `resolutions_cal`: peak positions and FWHM in PE units.
+* `positions`, `resolutions`: the same in uncalibrated units (via `f_uncal`).
+* `gof`: `pvalue`, `chi2`, `dof` (from [`p_value_poissonll`](@ref)), `covmat` and mean, median and standard deviation of the normalized residuals (empty if `uncertainty` is `false`).
+
+`report` contains the histogram `h_cal`, the fit function `f_fit`, the components `f_fit_components(x, i)`,
+`min_pe`, `max_pe`, `bin_width`, `n_mixtures`, `n_pos_mixtures`, `peaks`, `positions`, `μ` and `gof`,
+for plotting with `LegendMakie.lplot`.
 """
 function fit_sipm_spectrum(pe_cal::Vector{<:Real}, min_pe::Real=0.5, max_pe::Real=3.5;
     n_mixtures::Int=ceil(Int, (max_pe - min_pe) * 4), nIter::Int=25, nInit::Int=50, 

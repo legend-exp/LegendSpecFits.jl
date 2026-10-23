@@ -1,14 +1,29 @@
 
 """
-    cut_single_peak(x::Array, min_x::Float64, max_x::Float64,; n_bins::Int=-1, relative_cut::Float64=0.5)
+    cut_single_peak(
+        x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T;
+        n_bins::Int = -1, relative_cut::Float64 = 0.5, n_tries::Int = 5
+    ) where T<:Unitful.RealOrRealQuantity
 
-Cut out a single peak from the array `x` between `min_x` and `max_x`.
-The number of bins is the number of bins to use for the histogram.
-The relative cut is the fraction of the maximum counts to use for the cut.
-# Returns 
-    * `max`: maximum position of the peak
-    * `low`: lower edge of the cut peak
-    * `high`: upper edge of the cut peak
+Determines a window around the single peak in the values `x` that lie
+strictly between `min_x` and `max_x`.
+
+The values are histogrammed and the window is the range around the highest bin
+where the counts exceed `relative_cut` times the maximum count. If no valid
+window is found, the histogram is rebuilt with finer bins, up to `n_tries`
+times. The output has the unit of `min_x`.
+
+## Keywords
+* `n_bins::Int = -1`: Number of histogram bins. A negative value selects the
+  Freedman-Diaconis bin width.
+* `relative_cut::Float64 = 0.5`: Fraction of the maximum bin content that
+  defines the window edges.
+* `n_tries::Int = 5`: Maximum number of histogram refinements.
+
+## Returns
+A `NamedTuple` `(low, high, max)` with the left bin edge where the counts first
+reach the cut level on the rising side, the left bin edge where they fall to
+the cut level on the falling side, and the left edge of the maximum bin.
 """
 function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T,; n_bins::Int=-1, relative_cut::Float64=0.5, n_tries::Int=5) where T<:Unitful.RealOrRealQuantity
     x_unit = unit(min_x)
@@ -56,19 +71,39 @@ export cut_single_peak
 
 
 """
-    get_centered_gaussian_window_cut(x::Array, min_x::Float64, max_x::Float64, n_σ::Real, center::Float64=0.0, n_bins::Int=500, relative_cut::Float64=0.2, left::Bool=false)
+    get_centered_gaussian_window_cut(
+        x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T, n_σ::Real;
+        center::T = zero(min_x), n_bins::Int = 500, relative_cut::Float64 = 0.2,
+        left::Bool = false, fixed_center::Bool = true
+    ) where T<:Unitful.RealOrRealQuantity
 
-Cut out a single peak from the array `x` between `min_x` and `max_x` by fitting a truncated one-sided Gaussian and extrapolating a window cut with `n_σ` standard deviations.
-The `center` and side of the fit can be specified with `left` and `center` variable.
-# Returns
-    * `low_cut`: lower edge of the cut peak
-    * `high_cut`: upper edge of the cut peak
-    * `µ`: center of the peak
-    * `σ`: standard deviation of the Gaussian
-    * `gof`: goodness of fit
-    * `low_cut_fit`: lower edge of the cut peak from the fit
-    * `high_cut_fit`: upper edge of the cut peak from the fit
-    * `max_cut_fit`: maximum position of the peak
+Determines a symmetric cut window of `±n_σ` standard deviations around a peak
+in the values `x` between `min_x` and `max_x`.
+
+The peak region is found with [`cut_single_peak`](@ref). A one-sided truncated
+Gaussian is fitted to that region, with [`fit_half_centered_trunc_gauss`](@ref)
+(mean fixed to `center`) if `fixed_center` is `true` and with
+[`fit_half_trunc_gauss`](@ref) (free mean) otherwise. The fitted mean and
+standard deviation define the window.
+
+## Keywords
+* `center::T = zero(min_x)`: Mean of the Gaussian if `fixed_center` is `true`.
+* `n_bins::Int = 500`: Number of histogram bins for [`cut_single_peak`](@ref).
+* `relative_cut::Float64 = 0.2`: Relative cut level for [`cut_single_peak`](@ref).
+* `left::Bool = false`: Fit the left side of the peak instead of the right side.
+* `fixed_center::Bool = true`: Fix the mean of the Gaussian to `center`.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `low_cut`, `high_cut`: lower and upper edge of the window, `μ ∓ n_σ * σ`.
+* `μ`, `σ`: fitted mean and standard deviation.
+* `gof`: goodness-of-fit result of the Gaussian fit.
+* `low_cut_fit`, `high_cut_fit`: edges of the region used for the fit.
+* `max_cut_fit`: position of the maximum bin.
+
+All quantities carry the unit of `min_x`. `report` holds the fit function
+`f_fit`, the histogram `h` and the values `μ`, `σ`, `gof`, `low_cut` and
+`high_cut`, for plotting with `LegendMakie.lplot`.
 """
 function get_centered_gaussian_window_cut(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T, n_σ::Real,; center::T=zero(min_x), n_bins::Int=500, relative_cut::Float64=0.2, left::Bool=false, fixed_center::Bool=true) where T<:Unitful.RealOrRealQuantity
     # prepare data

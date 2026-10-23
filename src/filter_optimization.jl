@@ -1,19 +1,32 @@
 """
-    fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int}, min_enc::T, max_enc::T, nbins::Int, rel_cut_fit::T) where T<:Real
+    fit_enc_sigmas(
+        enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen,
+        min_enc::T, max_enc::T, nbins::Int, rel_cut_fit::T
+    ) where T<:Real
 
-Fit the ENC values in `enc_grid` for each RT in `enc_grid_rt` with a Gaussian and return the optimal RT and the corresponding ENC value.
+Finds the rise time (RT) of a trapezoidal filter that minimizes the equivalent
+noise charge (ENC).
 
-# Arguments
-- `enc_grid`: 2D array of ENC values for each RT in `enc_grid_rt`
-- `enc_grid_rt`: 1D array of RT values for which the ENC values in `enc_grid` are calculated
-- `min_enc`: minimum ENC value to consider for the fit
-- `max_enc`: maximum ENC value to consider for the fit
-- `nbins`: number of bins to use for the histogram of ENC values
-- `rel_cut_fit`: relative cut value to use for the fit
+For each RT, the ENC values of that row of `enc_grid` are fitted with a
+truncated Gaussian (see [`fit_single_trunc_gauss`](@ref)) after restricting them
+to a window found with [`cut_single_peak`](@ref). The Gaussian standard
+deviation is the ENC for that RT. Rows that are all zero or all non-finite are
+skipped. An error is thrown if no RT yields a valid fit.
 
-# Returns
-- `rt`: optimal RT value
-- `min_enc`: corresponding ENC value
+## Arguments
+* `enc_grid`: ENC values; row `i` holds the values for `enc_grid_rt[i]`.
+* `enc_grid_rt`: Range of RT values (with time units) of the rows of `enc_grid`.
+* `min_enc`, `max_enc`: Range of ENC values considered in the fit.
+* `nbins`: Number of histogram bins for each fit.
+* `rel_cut_fit`: Relative cut level for [`cut_single_peak`](@ref).
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `rt`: RT with the smallest ENC, with the step of `enc_grid_rt` as uncertainty.
+* `min_enc`: corresponding ENC (a `Measurement`).
+
+`report` contains `rt`, `min_enc`, the RT values `enc_grid_rt` and the ENC
+values `enc` of all successful fits, for plotting with `LegendMakie.lplot`.
 """
 function fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{<:Quantity{<:T}, <:Base.TwicePrecision{<:Quantity{<:T}}, <:Base.TwicePrecision{<:Quantity{<:T}}, Int}, min_enc::T, max_enc::T, nbins::Int, rel_cut_fit::T) where T<:Real
     @assert size(enc_grid, 1) == length(enc_grid_rt) "enc_grid and enc_grid_rt must have the same number of columns"
@@ -73,25 +86,46 @@ end
 export fit_enc_sigmas
 
 """
-    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T, apply_ctc::Bool=true; kwargs...)
-    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e, max_e, rel_cut_fit; kwargs...)
-    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e, max_e, rel_cut_fit; kwargs...)
+    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt, min_e, max_e, rel_cut_fit; kwargs...)
+    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt, min_e, max_e, rel_cut_fit, apply_ctc::Bool = true; kwargs...)
 
-Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshape and return the optimal FT and the corresponding FWHM value. The cut values cut for each flat-top time a window for better histogramming.
-If the `apply_ctc` flag is set to `true`, the CTC correction is applied to the energy values. 
-Othwise, if a `qdrift` vector is provided, the CTC correction is applied to the energy values.
+Finds the flat-top time (FT) of a trapezoidal filter that minimizes the full
+width at half maximum (FWHM) of the 2614.5 keV peak.
 
-# Arguments
-- `e_grid`: 2D array of energy values for each FT in `e_grid_ft`
-- `e_grid_ft`: 1D array of FT values for which the FWHM values in `e_grid` are calculated
-- `rt`: RT value for which the FWHM values in `e_grid` are calculated
-- `min_e`: minimum energy value to consider for the fit
-- `max_e`: maximum energy value to consider for the fit
-- `rel_cut_fit`: relative cut value to use for the fit
+For each FT, the energies in that row of `e_grid` are restricted to a window
+around the peak (see [`cut_single_peak`](@ref)) and the peak is fitted with
+[`fit_single_peak_th228`](@ref). FT values with fewer than 100 energies in
+`[min_e, max_e]` are skipped, and an error is thrown if no FT yields a valid fit.
+The FWHM values are scaled to keV with a linear calibration that places the
+mean peak position of all FTs at `peak`. Among the FT values with an FWHM within
+`ft_fwhm_tol` of the minimum, the smallest FT is selected.
 
-# Returns
-- `ft`: optimal FT value
-- `min_fwhm`: corresponding FWHM value
+In the method with `qdrift`, the charge trapping correction of
+[`ctc_energy`](@ref) is applied to the energies before the FWHM is determined
+if `apply_ctc` is `true`. With `apply_ctc = false`, `qdrift` is ignored. The
+method without `qdrift` applies no correction.
+
+## Arguments
+* `e_grid`: Energies in arbitrary units; row `i` holds the values for `e_grid_ft[i]`.
+* `e_grid_ft`: Range of FT values (with time units) of the rows of `e_grid`.
+* `qdrift::Vector{<:Real}`: Drift-time parameter of each event (columns of `e_grid`) for the correction.
+* `rt`: Rise time of the filter. It is not used in the computation.
+* `min_e`, `max_e`: Energy range (in units of `e_grid`) used to locate the peak.
+* `rel_cut_fit`: Relative cut level for [`cut_single_peak`](@ref).
+
+## Keywords
+* `n_bins::Int = -1`: Number of bins for [`cut_single_peak`](@ref); negative selects the Freedman-Diaconis bin width.
+* `peak::Unitful.Energy = 2614.5u"keV"`: Nominal peak energy.
+* `window::Tuple = (35.0u"keV", 25.0u"keV")`: Fit window around `peak`, used by the correction.
+* `ft_fwhm_tol::Unitful.Energy = 0.1u"keV"`: FWHM tolerance for selecting the smallest FT.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `ft`: FT with the smallest FWHM, with the step of `e_grid_ft` as uncertainty.
+* `min_fwhm`: corresponding FWHM in keV.
+
+`report` contains `ft`, `min_fwhm`, the FT values `e_grid_ft` and the FWHM
+values `fwhm` of all successful fits, for plotting with `LegendMakie.lplot`.
 """
 function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T, apply_ctc::Bool=true; kwargs...) where {T <:Real}
     if apply_ctc
@@ -106,22 +140,9 @@ export fit_fwhm_ft
 
 
 """
-    _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs", ft_fwhm_tol::Unitful.Energy{<:Real} = 0.1u"keV") where {T <:Real}
+    _fit_fwhm_ft(e_grid, e_grid_ft, rt, min_e, max_e, rel_cut_fit; kwargs...)
 
-Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshape and return the optimal FT and the corresponding FWHM value. The cut values cut for each flat-top time a window for better histogramming.
-
-# Arguments
-- `e_grid`: 2D array of energy values for each FT in `e_grid_ft`
-- `e_grid_ft`: 1D array of FT values for which the FWHM values in `e_grid` are calculated
-- `rt`: RT value for which the FWHM values in `e_grid` are calculated
-- `min_e`: minimum energy value to consider for the fit
-- `max_e`: maximum energy value to consider for the fit
-- `nbins`: number of bins to use for the histogram of energy values
-- `rel_cut_fit`: relative cut value to use for the fit
-- `ft_fwhm_tol`: search for lowest "optimal" ft within `minimum(fwhm) + ft_fwhm_tol` to avoid artificially large ft 
-# Returns
-- `ft`: optimal FT value
-- `min_fwhm`: corresponding FWHM value
+Implementation of [`fit_fwhm_ft`](@ref) without a correction of the energies.
 """
 function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T; n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.Energy{<:Real} = 0.1u"keV") where {T <:Real}
     @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"
@@ -209,24 +230,10 @@ end
 
 
 """
-    _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs", peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.Energy{<:Real} = 0.1u"keV") where {T <:Real}
+    _fit_fwhm_ft_ctc(e_grid, e_grid_ft, qdrift, rt, min_e, max_e, rel_cut_fit; kwargs...)
 
-Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshape and return the optimal FT and the corresponding FWHM value. The cut values cut for each flat-top time a window for better histogramming.
-
-# Arguments
-- `e_grid`: 2D array of energy values for each FT in `e_grid_ft`
-- `e_grid_ft`: 1D array of FT values for which the FWHM values in `e_grid` are calculated
-- `qdrift`: drift time values for each energy value in `e_grid`
-- `rt`: RT value for which the FWHM values in `e_grid` are calculated
-- `min_e`: minimum energy value to consider for the fit
-- `max_e`: maximum energy value to consider for the fit
-- `nbins`: number of bins to use for the histogram of energy values
-- `rel_cut_fit`: relative cut value to use for the fit
-- `ft_fwhm_tol`: search for lowest "optimal" ft within `minimum(fwhm) + ft_fwhm_tol` to avoid artificially large ft 
-
-# Returns
-- `ft`: optimal FT value
-- `min_fwhm`: corresponding FWHM value
+Implementation of [`fit_fwhm_ft`](@ref) that applies [`ctc_energy`](@ref) to the
+energies of each FT.
 """
 function _fit_fwhm_ft_ctc(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T; n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.Energy{<:Real} = 0.1u"keV") where {T <:Real}
     @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"

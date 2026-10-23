@@ -1,19 +1,58 @@
 """
-    simple_calibration(e_uncal::Array, th228_lines::Array, window_size::Float64=25.0, n_bins::Int=15000, calib_type::String="th228")
+    simple_calibration(
+        e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}},
+        window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}};
+        calib_type::Symbol, kwargs...
+    )
+    simple_calibration(
+        e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}},
+        left_window_sizes::Vector{<:Unitful.Energy{<:Real}},
+        right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; calib_type::Symbol, kwargs...
+    )
 
+Determines a first, linear energy calibration of the uncalibrated energies
+`e_uncal` from the position of one prominent peak, and builds histograms and
+peak statistics around all `gamma_lines`.
 
-Perform a simple calibration for the uncalibrated energy array `e_uncal` 
-using the calibration type `calib_type` and the calibration lines `th228_lines`. 
-The window size is the size of the window around the calibration line to use for the calibration. 
-The number of bins is the number of bins to use for the histogram.
+The calibration constant is the ratio of the known energy of the selected line
+to the peak position found in the uncalibrated spectrum. The peak search
+histogram uses the Freedman-Diaconis bin width.
 
-Returns 
-    * `h_calsimple`: histogram of the calibrated energy array
-    * `h_uncal`: histogram of the uncalibrated energy array
-    * `c`: calibration factor
-    * `fep_guess`: estimated full energy peak (FEP)
-    * `peakhists`: array of histograms around the calibration lines
-    * `peakstats`: array of statistics for the calibration line fits
+## Arguments
+* `e_uncal`: Uncalibrated energies.
+* `gamma_lines`: Known gamma line energies, e.g. from 228Th.
+* `window_sizes`: One tuple `(left, right)` per line giving the window below and above the line
+  that is histogrammed. Alternatively, vectors of left and right window sizes can be passed separately.
+
+## Keywords
+* `calib_type::Symbol`: Required. `:th228` searches for the 2614.5 keV line and sets the
+  peak-finder parameters `peakfinder_σ = 5.0`, `peakfinder_threshold = 10.0`,
+  `peak_quantile = 0.9..1.0` and `bin_quantile = 0.05..0.5`, overriding any user values.
+  `:gamma` uses the keywords below for generic gamma lines. Other values throw an error.
+* `peaksearch_type::Symbol = :most_prominent`: (`:gamma` only) `:most_prominent` uses the highest
+  peak found, which requires the peak finder to find all `gamma_lines`; `:single` uses only
+  `gamma_lines[peakfinder_gamma]`.
+* `peakfinder_gamma::Int = 1`: Index of the line used for `peaksearch_type = :single`.
+* `binning_peak_window::Unitful.Energy = 10.0u"keV"`: Energy window around each line used to choose the bin width of the peak histograms.
+* `peakfinder_σ::Real = 2.0`, `peakfinder_threshold::Real = 10.0`: Expected peak width (in bins)
+  and detection threshold of `RadiationSpectra.peakfinder`.
+* `peak_quantile`, `bin_quantile`: Quantile ranges (`ClosedInterval`, default `0.0..1.0`)
+  of `e_uncal` for the peak search and for choosing the bin width.
+* `quantile_perc::Float64 = NaN`: If not `NaN`, the peak is set to this quantile of `e_uncal` instead of being searched for.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `h_calsimple`: histogram of the roughly calibrated energies (0 to 3000 keV).
+* `h_uncal`: histogram of the uncalibrated energies used in the peak search.
+* `c`: calibration constant with energy unit (energy per uncalibrated unit).
+* `unit`: energy unit of the calibrated values.
+* `bin_width`, `peakbinwidths`: median and per-line bin width of the peak histograms.
+* `peak_guess`: position of the identified peak in uncalibrated units.
+* `peakhists`: vector of histograms around the lines (in `unit`).
+* `peakstats`: `StructArray` of peak statistics from [`estimate_single_peak_stats`](@ref).
+
+`report` contains `h_calsimple`, `h_uncal`, `c`, `peak_guess`, `peakhists` and
+`peakstats`, for plotting with `LegendMakie.lplot`.
 """
 function simple_calibration end
 export simple_calibration
@@ -78,17 +117,32 @@ end
 
 
 """
-    peakhists_gamma(e::Vector{<:Unitful.Energy{<:Real}}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
-Create histograms around the calibration lines and return the histograms and the peak statistics.
-# input
-    * `e`: energy array
-    * `gamma_lines`: array of gamma lines
-    * `window_sizes`: array of tuples with left and right window sizes around the gamma lines
-## keyword Arguments:
-    * `binning_peak_window::Unitful.Energy{<:Real}`: energy window around each peak that is used to find optimal binning for peakhists
-# output
-    * `peakhists`: array of histograms around the calibration lines
-    * `peakstats`: array of statistics for the calibration line fits
+    peakhists_gamma(
+        e::Vector{<:Unitful.Energy{<:Real}}, gamma_lines::Vector{<:Unitful.Energy{<:Real}},
+        window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}};
+        binning_peak_window::Unitful.Energy{<:Real} = 10.0u"keV"
+    )
+    peakhists_gamma(e, gamma_lines, left_window_sizes, right_window_sizes; binning_peak_window)
+
+Creates histograms of the energies `e` around each of the `gamma_lines` and
+estimates the peak statistics in each window.
+
+## Arguments
+* `e`: Calibrated energies.
+* `gamma_lines`: Gamma line energies.
+* `window_sizes`: One tuple `(left, right)` per line with the window sizes below
+  and above the line. Alternatively, vectors of left and right window sizes can be passed separately.
+
+## Keywords
+* `binning_peak_window::Unitful.Energy = 10.0u"keV"`: Energy window around each
+  line used to choose the Freedman-Diaconis bin width.
+
+## Returns
+A tuple `(peakhists, peakstats, h, bin_widths)` with
+* `peakhists`: vector of histograms around the lines (values in `e_unit`, keV).
+* `peakstats`: `StructArray` of the results of [`estimate_single_peak_stats`](@ref) for each window.
+* `h`: histogram of all of `e` from 0 to 3000 keV with the median bin width.
+* `bin_widths`: bin width of each peak histogram with energy unit.
 """
 function peakhists_gamma(e::Vector{<:Unitful.Energy{<:Real}}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}, window_sizes::Vector{<:Tuple{Unitful.Energy{<:Real}, Unitful.Energy{<:Real}}},; binning_peak_window::Unitful.Energy{<:Real}=10.0u"keV")
     # get optimal binning for simple calibration
@@ -106,21 +160,35 @@ export peakhists_gamma
 peakhists_gamma(e, gamma_lines, left_window_sizes::Vector{<:Unitful.Energy{<:Real}}, right_window_sizes::Vector{<:Unitful.Energy{<:Real}}; kwargs...) = peakhists_gamma(e, gamma_lines, [(l,r) for (l,r) in zip(left_window_sizes, right_window_sizes)],; kwargs...)
 
 """
-     peak_search_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}; peakfinder_σ::Real = 2.0, peakfinder_threshold::Real = 10.0, peak_quantile::ClosedInterval{<:Real} = 0.0..1.0, bin_quantile::ClosedInterval{<:Real} = peak_quantile, quantile_perc::Float64=NaN) 
-peak search in gamma-ray spectrum
-# inputs:
-* `e_uncal`: uncalibrated energy array
-* `gamma_lines`: array of gamma lines
-* keyword arguments:
-        * `peakfinder_σ::Real=2.0`: The expected sigma of a peak in the spectrum. In units of bins. (see RadiationSpectra.peakfinder)
-        * `peakfinder_threshold::Real=10.0``: Threshold for being identified as a peak in the deconvoluted spectrum. A single bin is identified as an peak when its weight exceeds the threshold and the previous bin was not identified as an peak. (see RadiationSpectra.peakfinder)
-        * `peak_quantile::ClosedInterval{<:Real}=0.5..1.0`: quantiles that define energy window that is considered peak search (default: 0.0..1.0 == whole range). All `gamma_lines` have to be within this window.
-        * `bin_quantile::ClosedInterval{<:Real}=0.5..1.0`: quantiles that define energy window that is used to find optimal binning (default same as peak_quantile)
-        * `quantile_perc::Float64=NaN`: If NaN the standard peakfinder is used. If not NaN, the peak for simple calibration is set to given quantile energy. Useful for debugging/testing
-# output: `result` NamedTuple with the following fields:
-* `h_uncal`: histogram of the uncalibrated energy array with the binning that is used in peak search 
-* `c`: simple calibration factor
-* `peak_guess`: estimated peak energy in units of the uncalibrated energy array
+    peak_search_gamma(
+        e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}};
+        peakfinder_σ::Real = 2.0, peakfinder_threshold::Real = 10.0,
+        peak_quantile::ClosedInterval{<:Real} = 0.0..1.0,
+        bin_quantile::ClosedInterval{<:Real} = peak_quantile, quantile_perc::Float64 = NaN
+    )
+
+Searches for the most prominent peak in the uncalibrated spectrum `e_uncal` and
+returns a simple calibration constant that assigns it to the line in `gamma_lines`.
+
+## Keywords
+* `peakfinder_σ::Real = 2.0`: Expected standard deviation of a peak, in bins
+  (see `RadiationSpectra.peakfinder`).
+* `peakfinder_threshold::Real = 10.0`: Threshold in the deconvoluted spectrum above which a bin is
+  identified as a peak if the previous bin was not (see `RadiationSpectra.peakfinder`).
+* `peak_quantile = 0.0..1.0`: Quantile range of `e_uncal` that is searched for peaks.
+  All `gamma_lines` must lie within this window.
+* `bin_quantile = peak_quantile`: Quantile range of `e_uncal` used to choose the bin width.
+* `quantile_perc::Float64 = NaN`: If not `NaN`, the peak is set to this quantile of
+  `e_uncal` and no peak search is done.
+
+If more than one line is given, the number of peaks found must equal the number
+of lines, otherwise an error is thrown.
+
+## Returns
+A `NamedTuple` with the fields
+* `h_uncal`: histogram of `e_uncal` with the bin width used in the peak search.
+* `c`: calibration constant (energy of the line divided by `peak_guess`).
+* `peak_guess`: position of the identified peak in units of `e_uncal`.
 """
 function peak_search_gamma(e_uncal::Vector{<:Real}, gamma_lines::Vector{<:Unitful.Energy{<:Real}}; peakfinder_σ::Real = 2.0, peakfinder_threshold::Real = 10.0, peak_quantile::ClosedInterval{<:Real} = 0.0..1.0, bin_quantile::ClosedInterval{<:Real} = peak_quantile, quantile_perc::Float64=NaN) 
     # find optimal binning for peak search

@@ -1,6 +1,18 @@
 [deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
+LegendMakie = "ce9a434a-d062-4f11-9371-3059ddb1c48a"
+LegendSpecFits = "18221496-77af-46cf-bab8-820da09f7f97"
+Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
+PropDicts = "4dc08600-4268-439e-8673-d706fafbb426"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
 Documenter = "1"
