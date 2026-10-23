@@ -1,16 +1,49 @@
 
 """
-    fit_sipm_wl(trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRangeLen)
+    fit_sipm_wl(
+        trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRangeLen,
+        thresholds::Vector{<:Real} = zeros(length(e_grid_wl));
+        min_pe_peak::Int = 1, max_pe_peak::Int = 5, n_fwhm_noise_cut::Real = 2.0,
+        peakfinder_threshold::Real = 5.0, initial_max_amp::Real = 50.0,
+        initial_max_bin_width_quantile::Real = 0.9999, peakfinder_rtol::Real = 0.1,
+        peakfinder_α::Real = 0.1, peakfinder_σ::Real = -1.0,
+        min_pe_fit::Real = 0.6, max_pe_fit::Real = 3.5, Δpe_peak_assignment::Real = 0.3
+    )
 
-Fit the SiPM spectrum for different window lengths and return the optimal window length.
+Finds the window length of the SiPM trigger filter with the best 1 PE
+separation.
 
-# Arguments
-- `trig_max_grid`: grid of trigger maxima for different window lengths
-- `e_grid_wl`: range of window lengths to sweep through
+For each window length in `e_grid_wl`, the trigger amplitudes are calibrated
+with [`sipm_simple_calibration`](@ref) and fitted with [`fit_sipm_spectrum`](@ref).
+The gain is the distance between the first PE peak and the noise peak in uncalibrated units. The
+window length that minimizes `√(resolution of the 1 PE peak) * √threshold / gain` is selected
+(the threshold factor is 1 if all thresholds are zero). Window lengths that fail are skipped with a warning; an
+error is thrown if none succeeds.
 
-# Returns
-- `result`: optimal window length and corresponding gain, resolution and position of 1pe peak
-- `report`: report with all window lengths and corresponding gains, resolutions and positions of 1pe peaks
+## Arguments
+* `trig_max_grid`: Trigger amplitudes; element `i` belongs to `e_grid_wl[i]`.
+* `e_grid_wl`: Range of window lengths.
+* `thresholds`: Trigger threshold for each window length, used as `initial_min_amp` of the calibration.
+
+## Keywords
+The keywords `min_pe_peak`, `max_pe_peak`, `n_fwhm_noise_cut`, `peakfinder_threshold`,
+`initial_max_amp`, `initial_max_bin_width_quantile`, `peakfinder_rtol`,
+`peakfinder_α` and `peakfinder_σ` are passed to [`sipm_simple_calibration`](@ref).
+`min_pe_fit`, `max_pe_fit` and `Δpe_peak_assignment` are passed to [`fit_sipm_spectrum`](@ref) as
+`min_pe`, `max_pe` and `Δpe_peak_assignment`.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `wl`: optimal window length, with the step of `e_grid_wl` as uncertainty.
+* `obj`: value of the objective at the optimum.
+* `res_1pe`, `pos_1pe`: FWHM and position of the 1 PE peak, in uncalibrated units.
+* `gain`: distance between the 1 PE peak and the noise peak.
+* `threshold`: threshold at the optimum.
+
+`report` contains `wl`, `min_obj`, the values `gain`, `res_1pe` and `pos_1pe`
+for all window lengths (undefined for failed ones), `threshold`, `a_grid_wl_sg`
+and `obj` for the successful window lengths, and `report_simple` and
+`report_fit` of the optimal window length, for plotting with `LegendMakie.lplot`.
 """
 function fit_sipm_wl(trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRangeLen, thresholds::Vector{<:Real}=zeros(length(e_grid_wl));
     min_pe_peak::Int=1, max_pe_peak::Int=5, n_fwhm_noise_cut::Real=2.0, peakfinder_threshold::Real=5.0, initial_max_amp::Real = 50.0, initial_max_bin_width_quantile::Real=0.9999, 
@@ -93,22 +126,27 @@ export fit_sipm_wl
 
 
 """
-    fit_sipm_threshold(thresholds::Vector{<:Real}, min_cut::Real=minimum(thresholds), max_cut::Real=maximum(thresholds); n_bins::Int=-1, relative_cut::Real=0.2, fit_thresholds::Bool=true, uncertainty::Bool=true)
+    fit_sipm_threshold(
+        thresholds::Vector{<:Real}, min_cut::Real = minimum(thresholds), max_cut::Real = maximum(thresholds);
+        n_bins::Int = -1, relative_cut::Real = 0.2, fit_thresholds::Bool = true, uncertainty::Bool = true
+    )
 
-Fit the SiPM threshold spectrum and return the optimal threshold.
+Determines the typical trigger threshold from the vector `thresholds` between
+`min_cut` and `max_cut`. The vector `thresholds` is modified: values outside the range are removed.
 
-# Arguments
-- `thresholds`: vector of thresholds
-- `min_cut`: minimum threshold
-- `max_cut`: maximum threshold
-- `n_bins`: number of bins for histogram
-- `relative_cut`: relative cut for threshold
-- `fit_thresholds`: fit thresholds
-- `uncertainty`: calculate uncertainty
+If `fit_thresholds` is `true`, a truncated Gaussian is fitted to the histogram
+of the thresholds with [`fit_binned_trunc_gauss`](@ref), using a window from [`cut_single_peak`](@ref).
 
-# Returns
-- `result`: optimal threshold and corresponding gain, resolution and position of 1pe peak
-- `report`: report with all thresholds and corresponding gains, resolutions and positions of 1pe peaks
+## Keywords
+* `n_bins::Int = -1`: Number of histogram bins. A value below 1 selects the Freedman-Diaconis bin width.
+* `relative_cut::Real = 0.2`: Relative cut level of [`cut_single_peak`](@ref).
+* `fit_thresholds::Bool = true`: Fit the histogram. Otherwise `μ` and `σ` are the mean and standard deviation.
+* `uncertainty::Bool = true`: Calculate fit uncertainties.
+
+## Returns
+A tuple `(result, report)`. `result` is the result of [`fit_binned_trunc_gauss`](@ref)
+(or `μ` and `σ` only without the fit) extended by `μ_simple` and `σ_simple`, the mean and
+standard deviation of the thresholds. `report` is the report of the fit, or the histogram without the fit.
 """
 function fit_sipm_threshold(thresholds::Vector{<:Real}, min_cut::Real=minimum(thresholds), max_cut::Real=maximum(thresholds); n_bins::Int=-1, relative_cut::Real=0.2, fit_thresholds::Bool=true, uncertainty::Bool=true)
     # cut out thresholds

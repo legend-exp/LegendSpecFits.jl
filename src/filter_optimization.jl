@@ -1,19 +1,32 @@
 """
-    fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int}, min_enc::T, max_enc::T, nbins::Int, rel_cut_fit::T) where T<:Real
+    fit_enc_sigmas(
+        enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen,
+        min_enc::T, max_enc::T, nbins::Int, rel_cut_fit::T
+    ) where T<:Real
 
-Fit the ENC values in `enc_grid` for each RT in `enc_grid_rt` with a Gaussian and return the optimal RT and the corresponding ENC value.
+Finds the rise time (RT) of a trapezoidal filter that minimizes the equivalent
+noise charge (ENC).
 
-# Arguments
-- `enc_grid`: 2D array of ENC values for each RT in `enc_grid_rt`
-- `enc_grid_rt`: 1D array of RT values for which the ENC values in `enc_grid` are calculated
-- `min_enc`: minimum ENC value to consider for the fit
-- `max_enc`: maximum ENC value to consider for the fit
-- `nbins`: number of bins to use for the histogram of ENC values
-- `rel_cut_fit`: relative cut value to use for the fit
+For each RT, the ENC values of that row of `enc_grid` are fitted with a
+truncated Gaussian (see [`fit_single_trunc_gauss`](@ref)) after restricting them
+to a window found with [`cut_single_peak`](@ref). The Gaussian standard
+deviation is the ENC for that RT. Rows that are all zero or all non-finite are
+skipped. An error is thrown if no RT yields a valid fit.
 
-# Returns
-- `rt`: optimal RT value
-- `min_enc`: corresponding ENC value
+## Arguments
+* `enc_grid`: ENC values; row `i` holds the values for `enc_grid_rt[i]`.
+* `enc_grid_rt`: Range of RT values (with time units) of the rows of `enc_grid`.
+* `min_enc`, `max_enc`: Range of ENC values considered in the fit.
+* `nbins`: Number of histogram bins for each fit.
+* `rel_cut_fit`: Relative cut level for [`cut_single_peak`](@ref).
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `rt`: RT with the smallest ENC, with the step of `enc_grid_rt` as uncertainty.
+* `min_enc`: corresponding ENC (a `Measurement`).
+
+`report` contains `rt`, `min_enc`, the RT values `enc_grid_rt` and the ENC
+values `enc` of all successful fits, for plotting with `LegendMakie.lplot`.
 """
 function fit_enc_sigmas(enc_grid::Matrix{T}, enc_grid_rt::StepRangeLen{<:Quantity{<:T}, <:Base.TwicePrecision{<:Quantity{<:T}}, <:Base.TwicePrecision{<:Quantity{<:T}}, Int}, min_enc::T, max_enc::T, nbins::Int, rel_cut_fit::T) where T<:Real
     @assert size(enc_grid, 1) == length(enc_grid_rt) "enc_grid and enc_grid_rt must have the same number of columns"
@@ -132,22 +145,9 @@ export fit_fwhm_ft
 
 
 """
-    _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen{Quantity{<:T}, Base.TwicePrecision{Quantity{<:T}}, Base.TwicePrecision{Quantity{<:T}}, Int}, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, nbins::Int, rel_cut_fit::T; default_ft::Quantity{T}=3.0u"µs", ft_fwhm_tol::Unitful.Energy{<:Real} = 0.1u"keV") where {T <:Real}
+    _fit_fwhm_ft(e_grid, e_grid_ft, rt, min_e, max_e, rel_cut_fit; kwargs...)
 
-Fit the FWHM values in `e_grid` for each FT in `e_grid_ft` with a Gamma Peakshape and return the optimal FT and the corresponding FWHM value. The cut values cut for each flat-top time a window for better histogramming.
-
-# Arguments
-- `e_grid`: 2D array of energy values for each FT in `e_grid_ft`
-- `e_grid_ft`: 1D array of FT values for which the FWHM values in `e_grid` are calculated
-- `rt`: RT value for which the FWHM values in `e_grid` are calculated
-- `min_e`: minimum energy value to consider for the fit
-- `max_e`: maximum energy value to consider for the fit
-- `nbins`: number of bins to use for the histogram of energy values
-- `rel_cut_fit`: relative cut value to use for the fit
-- `ft_fwhm_tol`: search for lowest "optimal" ft within `minimum(fwhm) + ft_fwhm_tol` to avoid artificially large ft 
-# Returns
-- `ft`: optimal FT value
-- `min_fwhm`: corresponding FWHM value
+Implementation of [`fit_fwhm_ft`](@ref) without a correction of the energies.
 """
 function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T; n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.Energy{<:Real} = 0.1u"keV") where {T <:Real}
     @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"

@@ -13,10 +13,12 @@ th228_combined_fit_functions = (
     f_sigWithTail = (x, v) -> signal_peakshape(x, th228_combined_shared_functions.μ(v), v.σ, v.n, th228_combined_shared_functions.skew_fraction(v)) + lowEtail_peakshape(x, th228_combined_shared_functions.μ(v), v.σ, v.n, th228_combined_shared_functions.skew_fraction(v), v.skew_width)
 )
 
-""" 
-    estimate_combined_peak_stats(peakstats::StructArray,; calib_type::Symbol=:th228)
+"""
+    estimate_combined_peak_stats(peakstats::StructArray; calib_type::Symbol = :th228)
 
-Estimate the peak position, FWHM, sigma, counts and background of a peak from a histogram.
+Estimates the starting values for a combined fit of several peaks from the
+single-peak statistics `peakstats`. Only `calib_type = :th228` is accepted;
+other values throw an error.
 """
 function estimate_combined_peak_stats(peakstats::StructArray,; calib_type::Symbol=:th228)
     if calib_type == :th228
@@ -27,7 +29,6 @@ function estimate_combined_peak_stats(peakstats::StructArray,; calib_type::Symbo
         error("Calibration type not supported")
     end
 end
-export estimate_single_peak_stats
 
 
 function estimate_combined_peak_stats_th228(peakstats::StructArray)
@@ -56,10 +57,34 @@ function estimate_combined_peak_stats_th228(peakstats::StructArray)
 end
 
 
-""" 
-    fit_peaks_combined(peakhists::Array, peakstats::StructArray, th228_lines::Array{T},; calib_type::Symbol=:th228, uncertainty::Bool=true, fixed_position::Bool=false) where T<:Real
+"""
+    fit_peaks_combined(
+        peakhists::Array, peakstats::StructArray, th228_lines::Array;
+        calib_type::Symbol = :th228, uncertainty::Bool = true, fixed_position::Bool = false
+    )
 
-Fit the peaks of a histogram to a combined peakshape function while sharring parameters between peaks.
+Fits several peaks simultaneously by maximum likelihood with parameters shared
+between the peaks.
+
+The peak position is a linear function of the line energy `e`,
+`μ = μ_slope * e + μ_intercept`, and the low-energy tail fraction is a linear
+function of `e`, `skew_fraction = skew_fraction_slope * e + skew_fraction_intercept`.
+The width `σ`, amplitude `n`, `step_amplitude`, `skew_width` and `background` are
+fitted separately for each peak. Priors are built from `peakstats`.
+
+## Arguments
+* `peakhists`: One histogram per line.
+* `peakstats`: `StructArray` of initial peak statistics, one entry per line.
+* `th228_lines`: Line energies `e` (as real numbers).
+
+## Keywords
+* `calib_type::Symbol = :th228`: Only `:th228` is supported; other values throw an error.
+* `uncertainty::Bool = true`: Accepted for interface compatibility; no uncertainties are calculated.
+* `fixed_position::Bool = false`: Fix the peak positions to the positions in `peakstats`.
+
+## Returns
+A tuple `(v_ml, opt_r)` with the best-fit parameters as a `NamedTuple` and the
+optimizer result.
 """
 function fit_peaks_combined(peakhists::Array, peakstats::StructArray, th228_lines::Array,; calib_type::Symbol=:th228, uncertainty::Bool=true, fixed_position::Bool=false)
     if calib_type == :th228

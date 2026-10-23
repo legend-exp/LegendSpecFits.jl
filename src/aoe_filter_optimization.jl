@@ -1,12 +1,21 @@
 
 
 """
-    prepare_sep_peakhist(e::Array{T}, dep::T,; relative_cut::T=0.5, n_bins_cut::Int=500) where T<:Real
+    prepare_sep_peakhist(
+        e::Vector{<:T}; sep::Unitful.Energy{<:Real} = 2103.53u"keV",
+        window::Vector{<:Unitful.Energy{<:Real}} = [25.0, 25.0]u"keV", relative_cut::T = 0.5,
+        n_bins_cut::Int = -1, fit_func::Symbol = :gamma_def, uncertainty::Bool = true
+    ) where T<:Real
 
-Prepare an array of uncalibrated SEP energies for parameter extraction and calibration.
-# Returns
-- `result`: Result of the initial fit
-- `report`: Report of the initial fit
+Fits the single escape peak (SEP) at energy `sep` in the uncalibrated energies
+`e` and derives a calibration constant from its position.
+
+A simple calibration from [`cut_single_peak`](@ref) selects the histogram range
+`sep ± window`, and the peak is fitted with [`fit_single_peak_th228`](@ref).
+
+## Returns
+A tuple `(result, report)` of the fit result and report, where `result` is
+extended by `m_calib`, the calibration constant `sep / μ`.
 """
 function prepare_sep_peakhist(e::Vector{<:T}; sep::Unitful.Energy{<:Real}=2103.53u"keV", window::Vector{<:Unitful.Energy{<:Real}}=[25.0, 25.0]u"keV", relative_cut::T=0.5, n_bins_cut::Int=-1, fit_func::Symbol=:gamma_def, uncertainty::Bool=true) where T<:Real
     # get cut window around peak
@@ -27,18 +36,50 @@ function prepare_sep_peakhist(e::Vector{<:T}; sep::Unitful.Energy{<:Real}=2103.5
 end
 
 """
-    fit_sf_wl(dep_sep_data, a_grid_wl_sg, optimization_config)
+    fit_sf_wl(
+        e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real},
+        e_sep::Vector{<:Real}, aoe_sep::ArrayOfSimilarArrays{<:Real}, a_grid_wl_sg::StepRangeLen;
+        dep = 1592.53u"keV", dep_window = [12.0, 10.0]u"keV",
+        sep = 2103.53u"keV", sep_window = [25.0, 25.0]u"keV", sep_rel_cut::Real = 0.5,
+        min_aoe_quantile::Real = 0.1, max_aoe_quantile::Real = 0.99,
+        min_aoe_offset = 0.0u"keV^-1", max_aoe_offset = 0.05u"keV^-1",
+        dep_cut_search_fit_func::Symbol = :gamma_def, sep_cut_search_fit_func::Symbol = :gamma_def,
+        uncertainty::Bool = false
+    )
 
-Fit a A/E filter window length for the SEP data and return the optimal window length and the corresponding survival fraction.
+Finds the window length of the A/E filter that minimizes the survival fraction
+of the single escape peak (SEP) when the A/E cut keeps a fixed fraction of the
+double escape peak (DEP).
 
-# Arguments
-- `dep_sep_data`: NamedTuple with the DEP and SEP data
-- `a_grid_wl_sg`: range of window lengths to sweep through
-- `optimization_config`: configuration dictionary
+For each window length in `a_grid_wl_sg`, the A/E cut is determined on the DEP
+with [`get_low_aoe_cut`](@ref) and applied to the SEP, whose survival fraction
+is determined with [`get_peak_survival_fraction`](@ref). Only survival fractions
+between 1 % and 100 % are considered. The energies are calibrated with a simple
+calibration constant from the SEP fit ([`fit_single_peak_th228`](@ref)). An error is thrown if no
+window length gives a valid survival fraction.
 
-# Returns
-- `result`: optimal window length and corresponding survival fraction
-- `report`: report with all window lengths and survival fractions
+## Arguments
+* `e_dep`, `e_sep`: Uncalibrated energies of the DEP and SEP events.
+* `aoe_dep`, `aoe_sep`: A/E values of those events for each window length; element `i` of
+  the flattened array corresponds to `a_grid_wl_sg[i]`.
+* `a_grid_wl_sg`: Range of window lengths.
+
+## Keywords
+* `dep`, `dep_window`, `sep`, `sep_window`: Energies of the peaks and lower and upper widths of the fit windows.
+* `sep_rel_cut`: Relative cut level for locating the SEP.
+* `min_aoe_quantile`, `max_aoe_quantile`: Quantiles of the DEP A/E values that bound the cut search.
+* `min_aoe_offset`, `max_aoe_offset`: Offsets added to those bounds.
+* `dep_cut_search_fit_func`, `sep_cut_search_fit_func`: Peak shapes for the DEP and SEP fits (see [`fit_single_peak_th228`](@ref)).
+* `uncertainty::Bool = false`: Calculate fit uncertainties.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `wl`: optimal window length, with the step of `a_grid_wl_sg` as uncertainty.
+* `sf`: SEP survival fraction at that window length, in percent.
+* `n_dep`, `n_sep`: number of DEP and SEP events.
+
+`report` contains `wl`, `min_sf`, the window lengths `a_grid_wl_sg` and the
+survival fractions `sfs` of all successful window lengths, for plotting with `LegendMakie.lplot`.
 """
 function fit_sf_wl(e_dep::Vector{<:Real}, aoe_dep::ArrayOfSimilarArrays{<:Real}, e_sep::Vector{<:Real}, aoe_sep::ArrayOfSimilarArrays{<:Real}, a_grid_wl_sg::StepRangeLen; 
                     dep::T=1592.53u"keV", dep_window::Vector{<:T}=[12.0, 10.0]u"keV", 

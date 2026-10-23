@@ -1,11 +1,22 @@
 
 """
-    get_sf_after_aoe_cut(aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple; uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
+    get_sf_after_aoe_cut(
+        aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity},
+        e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple;
+        uncertainty::Bool = true, fit_func::Symbol = :gamma_def
+    ) where T<:Unitful.Energy{<:Real}
 
-Get the survival fraction after a AoE cut value `aoe_cut` for a given `peak` and `window` size from a combined fit to the survived and cut histograms.
+Calculates the signal survival fraction of a peak after the A/E cut value
+`aoe_cut` (events with `aoe >= aoe_cut` survive).
 
-# Returns
-- `sf`: Survival fraction after the cut
+The energies `e` in the window `[peak - window[1], peak + window[2]]` are
+histogrammed with the bin width `bin_width` separately for the surviving and
+the cut events. Both histograms are fitted simultaneously with
+[`fit_subpeaks_th228`](@ref), using the fit result `result_before` of the peak
+before the cut as fixed parameters.
+
+## Returns
+The survival fraction `sf` as a fraction between 0 and 1 (a `Measurement` if `uncertainty` is `true`).
 """
 function get_sf_after_aoe_cut(aoe_cut::Unitful.RealOrRealQuantity, aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T}, peak::T, window::Vector{T}, bin_width::T, result_before::NamedTuple; uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
     # get energy after cut and create histogram
@@ -20,17 +31,52 @@ export get_sf_after_aoe_cut
 
 
 """
-    get_low_aoe_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; 
-            dep::T=1592.53u"keV", window::Vector{<:T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, rtol::Float64=0.001, maxiters::Int=300, sigma_high_sided::Float64=Inf,
-            cut_search_interval::Tuple{<:Unitful.RealOrRealQuantity, <:Unitful.RealOrRealQuantity}=(-25.0*unit(first(aoe)), 1.0*unit(first(aoe))), 
-            bin_width_window::T=3.0u"keV", max_e_plot::T=3000.0u"keV",  plot_window::Vector{<:T}=[12.0, 50.0]u"keV",
-            fixed_position::Bool=true, fit_func::Symbol=:gamma_def, uncertainty::Bool=true) where T<:Unitful.Energy{<:Real}
-Get the AoE cut value for a given `dep` and `window` size while performing a peak fit with fixed position. The AoE cut value is determined by finding the cut value for which the number of counts after the cut is equal to `dep_sf` times the number of counts before the cut.
-The algorhithm utilizes a root search algorithm to find the cut value with a relative tolerance of `rtol`.
-# Returns
-- `cut`: AoE cut value
-- `n0`: Number of counts before the cut
-- `nsf`: Number of counts after the cut
+    get_low_aoe_cut(
+        aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T};
+        dep::T = 1592.53u"keV", window::Vector{<:T} = [12.0, 10.0]u"keV", dep_sf::Float64 = 0.9,
+        rtol::Float64 = 0.001, maxiters::Int = 300, sigma_high_sided::Float64 = Inf,
+        cut_search_interval::Tuple = (-25.0 * unit(first(aoe)), 1.0 * unit(first(aoe))),
+        bin_width_window::T = 3.0u"keV", max_e_plot::T = 3000.0u"keV",
+        plot_window::Vector{<:T} = [12.0, 50.0]u"keV",
+        fixed_position::Bool = true, fit_func::Symbol = :gamma_def, uncertainty::Bool = true
+    ) where T<:Unitful.Energy{<:Real}
+
+Determines the lower A/E cut value at which a fraction `dep_sf` of the events in
+the double escape peak (DEP) survives.
+
+The DEP at energy `dep` is fitted with [`fit_single_peak_th228`](@ref) in the
+window `[dep - window[1], dep + window[2]]`. A bisection root search in
+`cut_search_interval` with relative tolerance `rtol` then finds the cut value
+for which the survival fraction from [`get_sf_after_aoe_cut`](@ref) equals
+`dep_sf`.
+
+## Keywords
+* `dep::T = 1592.53u"keV"`: Energy of the double escape peak.
+* `window::Vector{<:T} = [12.0, 10.0]u"keV"`: Lower and upper width of the fit window around `dep`.
+* `dep_sf::Float64 = 0.9`: Target survival fraction of the peak.
+* `rtol::Float64 = 0.001`, `maxiters::Int = 300`: Relative tolerance and maximum number of iterations of the root search.
+* `sigma_high_sided::Float64 = Inf`: Upper A/E cut value (in the unit of `aoe`); `Inf` applies no upper cut.
+* `cut_search_interval`: Interval of A/E values searched for the lower cut.
+* `bin_width_window::T = 3.0u"keV"`: Half-width of the energy window around `dep` that is used to
+  determine the Freedman-Diaconis bin width.
+* `max_e_plot::T = 3000.0u"keV"`, `plot_window::Vector{<:T} = [12.0, 50.0]u"keV"`: Energy range of the
+  full-spectrum histograms and lower and upper width of the DEP histograms in `report`.
+* `fixed_position::Bool = true`: Fix the fitted peak position to `dep`.
+* `fit_func::Symbol = :gamma_def`: Peak shape (see [`fit_single_peak_th228`](@ref)).
+* `uncertainty::Bool = true`: Calculate fit uncertainties.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `lowcut`: lower A/E cut value, with `rtol * lowcut` as uncertainty.
+* `highcut`: upper A/E cut value (`sigma_high_sided`, with the unit of `aoe`).
+* `n0`: number of counts in the peak before the cut (from the fit).
+* `nsf`: number of counts in the peak after the cut.
+* `sf`: survival fraction after the cut, in percent.
+
+`report` contains the histograms `h_before`, `h_after_low` (lower cut only) and
+`h_after_ds` (lower and upper cut) of the full spectrum and `dep_h_before`,
+`dep_h_after_low`, `dep_h_after_ds` around the DEP, together with `sf`, `n0`,
+`lowcut`, `highcut`, `e_unit` and `bin_width`, for plotting with `LegendMakie.lplot`.
 """
 function get_low_aoe_cut(aoe::Vector{<:Unitful.RealOrRealQuantity}, e::Vector{<:T},; 
             dep::T=1592.53u"keV", window::Vector{<:T}=[12.0, 10.0]u"keV", dep_sf::Float64=0.9, rtol::Float64=0.001, maxiters::Int=300, sigma_high_sided::Float64=Inf,
@@ -86,15 +132,36 @@ export get_low_aoe_cut
 
 
 """
-    get_peaks_survival_fractions(e::AbstractVector{<:T}, peaks::AbstractVector{<:T}, peak_names::AbstractVector{Symbol}, windows::AbstractVector{<:Tuple{T, T}}, survival_flag::AbstractVector{Bool}; kwargs...) where T<:Unitful.Energy{<:Real}
-    get_peaks_survival_fractions(cut_parameter::AbstractVector{<:Unitful.RealOrRealQuantity}, e::AbstractVector{<:T}, peaks::AbstractVector{<:T}, peak_names::AbstractVector{Symbol}, windows::AbstractVector{<:Tuple{T, T}}; kwargs...) where T<:Unitful.Energy{<:Real}
+    get_peaks_survival_fractions(e, peaks, peak_names, windows, survival_flag; uncertainty, bin_width_window, fit_funcs)
+    get_peaks_survival_fractions(e, peaks, peak_names, left_window_sizes, right_window_sizes, survival_flag; kwargs...)
+    get_peaks_survival_fractions(cut_parameter, e, peaks, peak_names, windows; low_cut, high_cut, selection, kwargs...)
+    get_peaks_survival_fractions(cut_parameter, e, peaks, peak_names, left_window_sizes, right_window_sizes; kwargs...)
 
-Fit survival fractions for several peaks. Each window is a tuple of lower and
-upper energy widths. The overloads accepting separate vectors of widths construct
-those tuples and forward. The primary method accepts the final event
-selection directly. The interval-based method constructs that flag and forwards to
-the primary method. Either bound may be omitted; with both omitted, finite cut
-parameter values survive. Bounds are exclusive.
+Fits the survival fraction of several peaks after an event selection, with
+[`get_peak_survival_fraction`](@ref) for each peak. The peaks are processed in parallel on the available threads.
+
+## Arguments
+* `e`: Energies of all events, as `Unitful.Energy` values.
+* `peaks`: Peak energies.
+* `peak_names::AbstractVector{Symbol}`: Names used as keys of the result.
+* `windows`: One tuple `(lower, upper)` of window widths below and above each peak. Alternatively, the
+  vectors `left_window_sizes` and `right_window_sizes` hold the widths.
+* `survival_flag::AbstractVector{Bool}`: `true` for each event that survives the selection.
+* `cut_parameter`: Instead of `survival_flag`, a parameter (such as A/E) from which the selection is built:
+  an event survives if `low_cut < cut_parameter < high_cut` and `selection` is `true`.
+
+## Keywords
+* `uncertainty::Bool = true`: Calculate fit uncertainties.
+* `bin_width_window::T = 2.0u"keV"`: Half-width of the energy window around each peak that is used to
+  determine the Freedman-Diaconis bin width.
+* `fit_funcs::AbstractVector{Symbol}`: Peak shape for each peak (see [`fit_single_peak_th228`](@ref)).
+  Default is `:gamma_def` for all peaks.
+* `low_cut`, `high_cut`: Exclusive bounds on `cut_parameter` (cut-parameter methods). Default is no bound.
+* `selection::AbstractVector{Bool}`: Additional selection (cut-parameter methods). Default selects all events.
+
+## Returns
+A tuple `(result, report)` of two `OrderedDict`s keyed by `peak_names`. The values are the
+`result` and `report` `NamedTuple`s of [`get_peak_survival_fraction`](@ref).
 """
 function get_peaks_survival_fractions(e::AbstractVector{<:T}, peaks::AbstractVector{<:T}, peak_names::AbstractVector{Symbol}, windows::AbstractVector{<:Tuple{T, T}}, survival_flag::AbstractVector{Bool};
     uncertainty::Bool=true, bin_width_window::T=2.0u"keV", fit_funcs::AbstractVector{Symbol}=fill(:gamma_def, length(peaks))) where T<:Unitful.Energy{<:Real}
@@ -126,23 +193,51 @@ get_peaks_survival_fractions(cut_parameter::AbstractVector{<:Unitful.RealOrRealQ
 Base.@deprecate get_peaks_surrival_fractions(args...; kwargs...) get_peaks_survival_fractions(args...; kwargs...)
 export get_peaks_survival_fractions, get_peaks_surrival_fractions
 
+"""Deprecated alias of [`get_peaks_survival_fractions`](@ref)."""
+get_peaks_surrival_fractions
+
 
 """
-    get_peak_survival_fraction(h_before::Histogram{<:Real, 1}, h_survived::Histogram{<:Real, 1}, h_cut::Histogram{<:Real, 1}; uncertainty::Bool=true, fit_func::Symbol=:gamma_def)
-    get_peak_survival_fraction(e::AbstractVector{<:T}, survival_flag::AbstractVector{Bool}; uncertainty::Bool=true, fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
-    get_peak_survival_fraction(e::AbstractVector{<:T}, peak::T, window::Tuple{T, T}, survival_flag::AbstractVector{Bool}; uncertainty::Bool=true, bin_width_window::T=2.0u"keV", fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
-    get_peak_survival_fraction(cut_parameter::AbstractVector{<:Unitful.RealOrRealQuantity}, e::AbstractVector{<:T}, peak::T, window::Tuple{T, T}; low_cut::Unitful.RealOrRealQuantity=-Inf*unit(first(cut_parameter)), high_cut::Unitful.RealOrRealQuantity=Inf*unit(first(cut_parameter)), selection::AbstractVector{Bool}=trues(length(cut_parameter)), kwargs...) where T<:Unitful.Energy{<:Real}
+    get_peak_survival_fraction(h_before, h_survived, h_cut; uncertainty, fit_func)
+    get_peak_survival_fraction(e, survival_flag; uncertainty, fit_func)
+    get_peak_survival_fraction(e, peak, window, survival_flag; uncertainty, bin_width_window, fit_func)
+    get_peak_survival_fraction(cut_parameter, e, peak, window; low_cut, high_cut, selection, kwargs...)
 
-Fit a peak before and after an arbitrary event selection. The histogram method accepts
-one-dimensional count histograms for all, surviving, and rejected events with the
-same unitless energy binning; the latter two must partition the first. It returns
-fit results and reports without a nominal `peak` label.
+Fits a peak before and after an event selection and calculates the fraction of
+the peak counts that survives.
 
-The two-vector method bins the supplied peak-region energies and returns the
-histogram method's outputs. The center/window method accepts a tuple of lower
-and upper energy widths and adds `peak` to both outputs. The cut-parameter method
-constructs the selection and forwards to the center/window method. Cut bounds
-are exclusive.
+The peak is first fitted with [`fit_single_peak_th228`](@ref) before the
+selection and then the surviving and rejected events are fitted simultaneously
+with [`fit_subpeaks_th228`](@ref).
+
+## Arguments
+* `h_before`, `h_survived`, `h_cut`: One-dimensional histograms (unitless energy) of all, surviving
+  and rejected events with the same binning. The latter two must add up to the first.
+* `e`: Energies of the events in the peak region, as `Unitful.Energy` values. Without `peak` and
+  `window`, the whole range of `e` is histogrammed and fitted.
+* `survival_flag::AbstractVector{Bool}`: `true` for each event that survives.
+* `peak`, `window`: Peak energy and a tuple `(lower, upper)` of window widths below and above it.
+* `cut_parameter`: Instead of `survival_flag`, a parameter (such as A/E) from which the selection is built:
+  an event survives if `low_cut < cut_parameter < high_cut` and `selection` is `true`.
+
+## Keywords
+* `uncertainty::Bool = true`: Calculate fit uncertainties.
+* `fit_func::Symbol = :gamma_def`: Peak shape (see [`fit_single_peak_th228`](@ref)).
+* `bin_width_window::T = 2.0u"keV"`: Half-width of the energy window around `peak` that is used to
+  determine the Freedman-Diaconis bin width.
+* `low_cut`, `high_cut`: Exclusive bounds on `cut_parameter`. Default is no bound.
+* `selection::AbstractVector{Bool}`: Additional selection. Default selects all events.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `peak`: the peak energy (methods with `peak` only).
+* `fit_func`: the peak shape that was used.
+* `n_before`, `n_after`: number of counts in the peak before and after the selection.
+* `sf`: survival fraction in percent.
+* `gof`: goodness-of-fit results `before` and `after`.
+
+`report` contains `peak` (methods with `peak` only), `n_before`, `n_after`,
+`sf` and the reports `before` and `after` of the fits, for plotting with `LegendMakie.lplot`.
 """
 function get_peak_survival_fraction(e::AbstractVector{<:T}, peak::T, window::Tuple{T, T}, survival_flag::AbstractVector{Bool};
     uncertainty::Bool=true, bin_width_window::T=2.0u"keV", fit_func::Symbol=:gamma_def) where T<:Unitful.Energy{<:Real}
@@ -199,17 +294,42 @@ end
 Base.@deprecate get_peak_surrival_fraction(args...; kwargs...) get_peak_survival_fraction(args...; kwargs...)
 export get_peak_survival_fraction, get_peak_surrival_fraction
 
+"""Deprecated alias of [`get_peak_survival_fraction`](@ref)."""
+get_peak_surrival_fraction
+
 
 
 """
-    get_continuum_survival_fraction(e, center, window, survival_flag; low_flag=survival_flag)
-    get_continuum_survival_fraction(cut_parameter, e, center, window; low_cut=-Inf, high_cut=Inf, selection=trues(length(cut_parameter)))
+    get_continuum_survival_fraction(e, center, window, survival_flag; low_flag = survival_flag)
+    get_continuum_survival_fraction(cut_parameter, e, center, window; low_cut, high_cut, selection)
 
-Count events in the continuum window before and after a selection. The interval
-overload forwards a Boolean flag to the counting method. The report retains the
-existing `h_after_low` and `h_after_ds` fields: the former applies only the lower
-bound, while the latter always represents the final selection, including `high_cut`
-and `selection`.
+Counts the events in a continuum window before and after an event selection and
+calculates the survival fraction.
+
+The window is `center ± window`. Unlike for peaks, no fit is made.
+
+## Arguments
+* `e`: Energies of all events, as `Unitful.Energy` values.
+* `center`, `window`: Center and half-width of the energy window.
+* `survival_flag::AbstractVector{Bool}`: `true` for each event that survives.
+* `cut_parameter`: Instead of `survival_flag`, a parameter (such as A/E) from which the selection is built:
+  an event survives if `low_cut < cut_parameter < high_cut` and `selection` is `true`.
+
+## Keywords
+* `low_flag::AbstractVector{Bool} = survival_flag`: Events that pass the lower cut only; used for the
+  report histogram `h_after_low`.
+* `low_cut`, `high_cut`: Exclusive bounds on `cut_parameter`. Default is no bound. `h_after_low` applies
+  `low_cut` only, `h_after_ds` applies the final selection including `high_cut` and `selection`.
+* `selection::AbstractVector{Bool}`: Additional selection. Default selects all events.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `window`: `center ± window`.
+* `n_before`, `n_after`: event counts with Poisson uncertainty `√n`.
+* `sf`: survival fraction in percent, with binomial uncertainty.
+
+`report` contains the histograms `h_before`, `h_after_low` and `h_after_ds` (in keV)
+and `window`, `n_before`, `n_after`, `sf`, `e_unit` and `bin_width`, for plotting with `LegendMakie.lplot`.
 """
 function get_continuum_survival_fraction(e::AbstractVector{<:T}, center::T, window::T, survival_flag::AbstractVector{Bool};
     low_flag::AbstractVector{Bool}=survival_flag) where T<:Unitful.Energy{<:Real}
@@ -254,3 +374,7 @@ end
 
 Base.@deprecate get_continuum_surrival_fraction(args...; kwargs...) get_continuum_survival_fraction(args...; kwargs...)
 export get_continuum_survival_fraction, get_continuum_surrival_fraction
+
+"""Deprecated alias of [`get_continuum_survival_fraction`](@ref)."""
+get_continuum_surrival_fraction
+

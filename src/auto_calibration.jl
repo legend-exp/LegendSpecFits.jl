@@ -2,9 +2,41 @@
 
 
 """
-    autocal_energy(e::AbstractArray{<:Real}, photon_lines::Vector{<:Unitful.RealOrRealQuantity}; min_e::Real=100, max_e_binning_quantile::Real=0.5, σ::Real = 2.0, threshold::Real = 50.0, min_n_peaks::Int = length(photon_lines), max_n_peaks::Int = 4 * length(photon_lines), α::Real = 0.01, rtol::Real = 5e-3)
+    autocal_energy(
+        e::AbstractArray{<:Real}, photon_lines::Vector{<:Unitful.Energy{<:Real}};
+        mode::Symbol = :fit, min_e::Real = 100, max_e::Real = maximum(e),
+        max_e_binning_quantile::Real = 0.5, σ::Real = 2.0, threshold::Real = 50.0,
+        min_n_peaks::Int = length(photon_lines), max_n_peaks::Int = 4 * length(photon_lines),
+        α::Real = 0.01, rtol::Real = 5e-3
+    )
 
-Compute an energy calibration from raw reconstructed energy deposition values based on a given number of known photon lines which are contained in the spectrum
+Determines a linear energy calibration constant from uncalibrated energies `e`
+by matching peaks in the spectrum to the known photon energies `photon_lines`.
+
+The uncalibrated spectrum is histogrammed with the Freedman-Diaconis bin width
+of the values between `min_e` and the `max_e_binning_quantile` quantile of `e`.
+The peak matching is done by `RadiationSpectra.calibrate_spectrum` (`mode = :fit`)
+or `RadiationSpectra.determine_calibration_constant_through_peak_ratios`
+(`mode = :ratio`).
+
+## Keywords
+* `mode::Symbol = :fit`: Matching method, `:fit` or `:ratio`. Other values throw an `ArgumentError`.
+* `min_e::Real = 100`: Lower end of the histogrammed range (uncalibrated units).
+* `max_e::Real = maximum(e)`: Upper end of the histogrammed range.
+* `max_e_binning_quantile::Real = 0.5`: Quantile of `e` that limits the data used to choose the bin width.
+* `σ::Real = 2.0`, `threshold::Real = 50.0`: Expected peak width (in bins) and
+  detection threshold of the peak finder.
+* `min_n_peaks::Int`, `max_n_peaks::Int`: Minimum and maximum number of peaks to search for.
+* `α::Real = 0.01`, `rtol::Real = 5e-3`: Significance level and relative tolerance of the peak matching.
+
+## Returns
+A tuple `(result, report)` in which both are the same `NamedTuple` with the fields
+* `f_calib`: function that multiplies uncalibrated values by the calibration constant, giving values in keV.
+* `h_cal`: histogram of the calibrated energies from 0 to 3000 keV in 0.5 keV bins.
+* `h_uncal`: histogram of the uncalibrated energies.
+* `c`: calibration constant in keV per uncalibrated unit.
+* `peak_positions`: positions of the identified peaks in uncalibrated units.
+* `threshold`: peak finder threshold that was used.
 """
 function autocal_energy(e::AbstractArray{<:Real}, photon_lines::Vector{<:Unitful.Energy{<:Real}}; mode::Symbol=:fit, min_e::Real=100, max_e::Real=maximum(e), max_e_binning_quantile::Real=0.5, σ::Real = 2.0, threshold::Real = 50.0, min_n_peaks::Int = length(photon_lines), max_n_peaks::Int = 4 * length(photon_lines), α::Real = 0.01, rtol::Real = 5e-3)
     # binning based on fd with max cut off at certain quantile
