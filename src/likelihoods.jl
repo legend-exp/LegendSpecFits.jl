@@ -4,12 +4,12 @@
 """
     hist_loglike(f_fit::Base.Callable, h::Histogram{<:Real,1})
 
-Calculate the Poisson log-likelihood of a fit function `f_fit(x)` and a
-histogram `h`. `f_fit` must accept all values `x` on the horizontal axis
-of the histogram.
+Calculates the Poisson log-likelihood of the bin counts of the histogram `h`
+given the density `f_fit(x)`. `f_fit` must accept all values `x` on the
+horizontal axis of `h`.
 
-Currently uses a simple midpoint-rule integration of `f_fit` over the
-bins of `h`.
+The expected count in each bin is `f_fit` at the bin center times the bin
+width (midpoint rule).
 """
 function hist_loglike(f_fit::Base.Callable, h::Histogram{<:Real,1})
     bin_edges = first(h.edges)

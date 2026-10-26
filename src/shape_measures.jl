@@ -33,7 +33,7 @@ _normalize_shape(m::SpectralShape, mass) = throw(ArgumentError("Cannot normalize
 """
     GaussPeak(μ, σ) <: SpectralShape
 
-Gaussian peak shape with unit total mass.
+Gaussian peak shape with mean `μ`, standard deviation `σ > 0` and unit total mass.
 """
 struct GaussPeak{T<:Real} <: SpectralShape
     μ::T
@@ -78,9 +78,10 @@ end
 """
     LowETailPeak(μ, σ, θ) <: SpectralShape
 
-Exponentially modified Gaussian peak shape with unit total mass and
-low-energy tail of scale `θ` (the LEGEND low-energy tail orientation).
-The shape underlying [`lowEtail_peakshape`](@ref).
+Exponentially modified Gaussian peak shape with unit total mass, Gaussian
+mean `μ` and standard deviation `σ > 0`, and an exponential tail of scale
+`θ >= 0` toward lower energies. The shape underlying
+[`lowEtail_peakshape`](@ref).
 """
 struct LowETailPeak{T<:Real} <: SpectralShape
     μ::T
@@ -113,8 +114,9 @@ MeasureBase.massof(::LowETailPeak) = true
 """
     HighETailPeak(μ, σ, θ) <: SpectralShape
 
-Exponentially modified Gaussian peak shape with unit total mass and
-high-energy tail of scale `θ`, the mirror image of [`LowETailPeak`](@ref).
+Exponentially modified Gaussian peak shape with unit total mass, Gaussian
+mean `μ` and standard deviation `σ > 0`, and an exponential tail of scale
+`θ >= 0` toward higher energies, the mirror image of [`LowETailPeak`](@ref).
 The shape underlying [`highEtail_peakshape`](@ref).
 """
 struct HighETailPeak{T<:Real} <: SpectralShape

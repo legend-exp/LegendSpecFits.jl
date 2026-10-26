@@ -31,11 +31,11 @@ end
 """
     binned_poisson_likelihood(model, h::Histogram{<:Real,1})
 
-Binned Poisson likelihood of the observed histogram `h`: the likelihood of
-`BinnedPoissonProcess(model(p), h.edges)` given the observed bin counts
-`h.weights`, `model` being a Markov kernel that maps parameters to an
+Constructs the binned Poisson likelihood of the observed histogram `h`, i.e. the
+likelihood of `BinnedPoissonProcess(model(p), h.edges)` given the bin counts
+`h.weights`. `model` is a Markov kernel that maps parameters to an
 intensity measure (e.g. a `@pf` property function combining shape measures,
-see [`GaussPeak`](@ref) etc.).
+see [`GaussPeak`](@ref)).
 
 A fixed intensity measure instead of `model` yields a parameter-independent
 likelihood.

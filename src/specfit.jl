@@ -1,11 +1,41 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 
 """
-    fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Array,; calib_type::Symbol=:th228, uncertainty::Bool=true, low_e_tail::Bool=true)
-Perform a fit of the peakshape to the data in `peakhists` using the initial values in `peakstats` to the calibration lines in `th228_lines`. 
-# Returns
-    * `peak_fit_plots`: array of plots of the peak fits
-    * `return_vals`: dictionary of the fit results
+    fit_peaks(
+        peakhists::Array, peakstats::StructArray, th228_lines::Vector;
+        calib_type::Symbol, kwargs...
+    )
+
+Fits a gamma peak shape to each histogram in `peakhists`, one per calibration
+line in `th228_lines`, using [`fit_single_peak_th228`](@ref) with the initial
+values in `peakstats`. The fits run in parallel on the available threads.
+
+## Arguments
+* `peakhists`: One histogram per line.
+* `peakstats`: `StructArray` of initial peak statistics, one entry per line, as returned by
+  [`estimate_single_peak_stats`](@ref) (`:th228` variant).
+* `th228_lines`: Calibration line energies; they are used as keys of the result.
+
+## Keywords
+* `calib_type::Symbol`: Required. Only `:th228` is supported; other values throw an error.
+* `e_unit::Union{Nothing, Unitful.EnergyUnits} = nothing`: Energy unit attached to the fitted
+  `μ`, `σ`, `fwhm` and `centroid`. Without it, they are unitless.
+* `uncertainty::Bool = true`: Calculate parameter uncertainties and goodness of fit.
+* `low_e_tail::Bool = true`: Fit the low-energy tail.
+* `iterative_fit::Bool = false`: If `true` and the covariance matrix of a fit is not
+  positive definite, repeat that fit without low-energy tail.
+* `fit_func::Vector{Symbol}`: Fit function of each line (see [`fit_single_peak_th228`](@ref)).
+  Default is `:gamma_def` for all lines.
+* `pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true)`: Replaces fields of the default
+  prior of every fit (see [`fit_single_peak_th228`](@ref)).
+* `m_cal_simple = 1.0`: Simple calibration constant; `μ`, `σ`, `fwhm` and `centroid` are
+  divided by it, which converts them back to the scale before the simple calibration.
+
+## Returns
+A tuple `(result, report)` of two `OrderedDict`s keyed by the line energies in
+`th228_lines`. The values of `result` are the `result` `NamedTuple`s of
+[`fit_single_peak_th228`](@ref) and the values of `report` are its `report`
+`NamedTuple`s, for plotting with `LegendMakie.lplot`.
 """
 function fit_peaks(peakhists::Array, peakstats::StructArray, th228_lines::Vector; kwargs...)
     # remove calib type from kwargs
@@ -68,12 +98,58 @@ end
 
 
 """
-    fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}};, uncertainty::Bool=true, fixed_position::Bool=false, low_e_tail::Bool=true) where T<:Real
-Perform a fit of the peakshape to the data in `h` using the initial values in `ps` while using the `gamma_peakshape` with low-E tail.
-Also, FWHM is calculated from the fitted peakshape with MC error propagation. The peak position can be fixed to the value in `ps` by setting `fixed_position=true`. If the low-E tail should not be fitted, it can be disabled by setting `low_e_tail=false`.
-# Returns
-    * `result`: NamedTuple of the fit results containing values and errors
-    * `report`: NamedTuple of the fit report which can be plotted
+    fit_single_peak_th228(
+        h::Histogram, ps::NamedTuple;
+        uncertainty::Bool = true, low_e_tail::Bool = true, fixed_position::Bool = false,
+        pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true),
+        fit_func::Symbol = :gamma_def, background_center = ps.peak_pos, m_cal_simple::Real = 1.0
+    )
+
+Fits a gamma peak shape to the histogram `h` by maximizing the binned Poisson
+likelihood, starting from the peak statistics `ps`, and calculates the FWHM of
+the fitted shape.
+
+`ps` is the `NamedTuple` returned by [`estimate_single_peak_stats`](@ref) for
+`calib_type = :th228`, with the fields `peak_pos`, `peak_fwhm`, `peak_sigma`,
+`peak_counts`, `bin_width`, `mean_background`, `mean_background_step` and
+`mean_background_std`. It sets the location and width of the default prior of
+each parameter. The FWHM and its uncertainty are determined by Monte Carlo
+error propagation with [`get_peak_fwhm_th228`](@ref).
+
+## Keywords
+* `uncertainty::Bool = true`: Calculate parameter uncertainties (from the Hessian of the
+  likelihood) and goodness of fit. The uncertainties are `NaN` if `false` or if the fit did not converge.
+* `low_e_tail::Bool = true`: Fit the low- and high-energy tails. If `false`, the tail fractions are fixed to zero.
+* `fixed_position::Bool = false`: Fix the peak position `μ` to `ps.peak_pos`.
+* `pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true)`: Replaces fields of the default prior.
+  Its keys must be parameters of `fit_func`.
+* `fit_func::Symbol = :gamma_def`: Peak shape, built from [`gamma_peakshape`](@ref):
+  - `:gamma_def`: Gaussian signal, low-energy tail, flat background and step background.
+  - `:gamma_tails`: `:gamma_def` plus a high-energy tail (`skew_fraction_highE`, `skew_width_highE`).
+  - `:gamma_bckSlope`: `:gamma_def` plus a linear background slope (`background_slope`).
+  - `:gamma_bckExp`: `:gamma_def` plus an exponential background (`background_exp`).
+  - `:gamma_bckFlat`: `:gamma_def` without the step background (no `step_amplitude`).
+  - `:gamma_tails_bckFlat`: `:gamma_tails` without the step background.
+  - `:gamma_minimal`: Gaussian signal and flat background only (`μ`, `σ`, `n`, `background`).
+* `background_center::Union{Real, Nothing} = ps.peak_pos`: Reference position of the slope and
+  exponential background terms.
+* `m_cal_simple::Real = 1.0`: Simple calibration constant; `μ`, `σ`, `fwhm` and `centroid`
+  are divided by it after the fit.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with
+* the fit parameters of `fit_func` (`μ`, `σ`, `n`, `skew_fraction`, `skew_width`, `background`,
+  `step_amplitude`, ...) as `Measurement`s;
+* `fwhm`: FWHM of the fitted signal including the low-energy tail;
+* `centroid`: mean position of the peak including the tails (see [`peak_centroid`](@ref));
+* `fit_func`: the peak shape that was used;
+* `gof`: `NamedTuple` with `converged` and, if the uncertainties were calculated, `pvalue`,
+  `chi2`, `dof` (Poisson likelihood-ratio based, see [`p_value_poissonll`](@ref)), `covmat`,
+  and `mean_residuals`, `median_residuals`, `std_residuals` of the normalized residuals.
+
+`report` contains the best-fit values `v`, the histogram `h`, the fit function
+`f_fit`, the peak components `f_components` and `gof` (including `residuals`
+and `residuals_norm`), for plotting with `LegendMakie.lplot`.
 """
 function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :bin_width, :mean_background, :mean_background_step, :mean_background_std), NTuple{8, T}}; 
     uncertainty::Bool=true, low_e_tail::Bool=true, fixed_position::Bool=false, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true),
@@ -191,7 +267,12 @@ export fit_single_peak_th228
 
 """
     peak_centroid(v::NamedTuple)
-calculate centroid of gamma peak from fit parameters
+
+Calculates the centroid (mean position) of a gamma peak from the fit parameters
+`v`: the Gaussian position `μ` shifted by the low-energy tail,
+`-skew_fraction * μ * skew_width`, and by the high-energy tail,
+`+skew_fraction_highE * μ * skew_width_highE`. A tail is only included if its
+parameters are fields of `v`.
 """
 function peak_centroid(v::NamedTuple)
     centroid = if haskey(v, :skew_fraction)
@@ -206,11 +287,13 @@ function peak_centroid(v::NamedTuple)
 end
 export peak_centroid
 """
-    estimate_fwhm(v::NamedTuple, v_err::NamedTuple)
-Get the FWHM of a peak from the fit parameters.
+    estimate_fwhm(v::NamedTuple)
 
-# Returns
-    * `fwhm`: the FWHM of the peak
+Calculates the FWHM of a peak from the fit parameters `v`.
+
+If `v` has the field `skew_fraction`, the FWHM is determined numerically from the
+Gaussian signal plus low-energy tail. Otherwise it is `2√(2 ln 2) σ`. Returns
+`NaN` if the half-maximum positions cannot be found or `v` has no field `σ`.
 """
 function estimate_fwhm(v::NamedTuple)
     if haskey(v, :skew_fraction)
@@ -235,12 +318,17 @@ function estimate_fwhm(v::NamedTuple)
     end
 end
 """
-    get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::NamedTuple)
-Get the FWHM of a peak from the fit parameters while performing a MC error propagation.
+    get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix, NamedTuple}, uncertainty::Bool = true)
 
-# Returns
-    * `fwhm`: the FWHM of the peak
-    * `fwhm_err`: the uncertainty of the FWHM of the peak
+Calculates the FWHM of a gamma peak from the best-fit parameters `v_ml` and its
+uncertainty by Monte Carlo error propagation.
+
+`v_ml_err` is either the covariance matrix of the parameters (10 000 correlated
+samples) or a `NamedTuple` of standard deviations (1000 independent samples).
+With `uncertainty = false`, no sampling is done and the uncertainty is `NaN`.
+
+## Returns
+A tuple `(fwhm, fwhm_err)` of the FWHM and its standard deviation over the finite samples.
 """
 function get_peak_fwhm_th228(v_ml::NamedTuple, v_ml_err::Union{Matrix,NamedTuple}, uncertainty::Bool=true)
     # get fwhm for peak fit
@@ -264,13 +352,33 @@ export get_peak_fwhm_th228
 
 
 """
-    fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background), NTuple{5, T}};, uncertainty::Bool=true, fixed_position::Bool=false, low_e_tail::Bool=true) where T<:Real
-    
-Perform a simultaneous fit of two peaks (`h_survived` and `h_cut`) that together would form a histogram `h`, from which the result `h_result` was already determined using `fit_single_peak_th228`.
-Also, FWHM is calculated from the fitted peakshape with MC error propagation. The peak position can be fixed to the value in `ps` by setting `fixed_position=true`. If the low-E tail should not be fitted, it can be disabled by setting `low_e_tail=false`.
-# Returns
-    * `result`: NamedTuple of the fit results containing values and errors, in particular the signal survival fraction `sf` and the background survival frachtion `bsf`.
-    * `report`: NamedTuple of the fit report which can be plotted
+    fit_subpeaks_th228(
+        h_survived::Histogram, h_cut::Histogram, h_result::NamedTuple;
+        uncertainty::Bool = false, low_e_tail::Bool = true, fix_σ::Bool = true,
+        fix_skew_fraction::Bool = true, fix_skew_width::Bool = true,
+        pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true),
+        fit_func::Symbol = :gamma_def, background_center::Real = h_result.μ
+    )
+
+Fits the two histograms `h_survived` and `h_cut`, which together form a
+histogram that was already fitted with [`fit_single_peak_th228`](@ref) (result
+`h_result`), simultaneously. The fit determines the signal survival fraction
+`sf` and the background survival fraction `bsf` (the fraction of the peak and
+background of `h_result` that remains in `h_survived`).
+
+The position, amplitude and background level are fixed to the values in
+`h_result`. `fix_σ`, `fix_skew_fraction` and `fix_skew_width` fix the peak width
+and the tail parameters of both histograms to the values in `h_result`; if
+`false`, they are fitted separately for each histogram.
+
+## Returns
+A tuple `(result, report)`. `result` holds the fit parameters as `Measurement`s,
+in particular the signal survival fraction `sf` and the background survival
+fraction `bsf` (and `sasf`, the survival fraction of the step amplitude, if
+`h_result` has a `step_amplitude`), the `fwhm`, the `fit_func` and `gof` with
+`converged` and the entries `survived` and `cut` (`pvalue`, `chi2`, `dof`, `covmat`).
+`report` has the entries `survived` and `cut` (each with `v`, `h`, `f_fit`,
+`f_components`, `gof`) and `sf` and `bsf`.
 """
 function fit_subpeaks_th228(
     h_survived::Histogram, h_cut::Histogram, h_result::NamedTuple; 

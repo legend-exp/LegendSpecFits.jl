@@ -1,17 +1,31 @@
 @. f_aoe_sigma(x, p) = sqrt(p[1]^2 + p[2]^2/x^2)
 f_aoe_mu(x, p) = p[1] .+ p[2].*x
 """
-fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real})
+    fit_aoe_corrections(
+        e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real};
+        aoe_expression::Union{String, Symbol} = "a / e", e_expression::Union{String, Symbol} = "e"
+    )
 
-Fit the corrections for the AoE value of the detector.
-# Returns
-- `e`: Energy values
-- `μ`: Mean values
-- `σ`: Sigma values
-- `μ_scs`: Fit result for the mean values
-- `f_μ_scs`: Fit function for the mean values
-- `σ_scs`: Fit result for the sigma values
-- `f_σ_scs`: Fit function for the sigma values
+Fits the energy dependence of the mean `μ` and standard deviation `σ` of the
+A/E distribution in energy bands (Compton bands) centered at `e`, to obtain a
+correction that normalizes A/E to mean 0 and standard deviation 1.
+
+`μ` and `σ` are vectors of `Measurement`s. Points whose uncertainty is zero are
+dropped. The mean is fitted with a linear function `μ(E) = p1 + p2 E` and the
+standard deviation with `σ(E) = √(p1² + p2² / E²)`, both with [`chi2fit`](@ref).
+
+## Keywords
+* `aoe_expression`: Name of the A/E variable in the returned `func`.
+* `e_expression`: Name of the energy variable in the returned expressions.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `μ_compton`: [`chi2fit`](@ref) result of the mean fit, extended by `par` (with units), `func` (expression string) and `μ`.
+* `σ_compton`: the same for the standard deviation fit, with `σ` instead of `μ`.
+* `compton_bands`: `NamedTuple` with the energy values `e` (unitless, in the unit of the input).
+* `func`: the normalized A/E, `(a - μ(E)) / σ(E)`, as a Julia expression string.
+
+`report` contains `report_μ` and `report_σ`, for plotting with `LegendMakie.lplot`.
 """
 function fit_aoe_corrections(e::Array{<:Unitful.Energy{<:Real}}, μ::Array{<:Real}, σ::Array{<:Real}; aoe_expression::Union{String,Symbol}="a / e", e_expression::Union{String,Symbol}="e")
 
