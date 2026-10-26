@@ -1,14 +1,14 @@
 # This file is a part of LegendSpecFits.jl, licensed under the MIT License (MIT).
 
 # Objectives accepted by `objective_value`, `fit_fwhm_ft` and `optimize_rtft`.
-const energy_objectives = (:w90, :fwhm, :asym, :fwhm_asym)
+const energy_objectives = (:w90, :fwhm, :asym, :fwhm_asym, :fwhm_ct)
 
 # Row recorded by the scan and search drivers for an evaluation that threw.
 # Field names and types equal those returned by `evaluate_energy_point`.
 const nan_energy_point = (
     fwhm_before = NaN * e_unit, fwhm = NaN * e_unit, w90 = NaN * e_unit, asym = NaN,
     tail_fraction = NaN, tail_scale = NaN * e_unit, centroid = NaN * e_unit,
-    fct = NaN, m_cal_simple = NaN * e_unit, ctc_converged = false, n_events = 0
+    fct = NaN, ct_spread = NaN * e_unit, m_cal_simple = NaN * e_unit, ctc_converged = false, n_events = 0
 )
 
 """
@@ -84,17 +84,29 @@ end
 export peak_width_metrics
 
 """
-    objective_value(metrics::NamedTuple, objective::Symbol)
+    objective_value(metrics::NamedTuple, objective::Symbol; ctc_rel_uncertainty=nothing)
 
 Value of `objective` for a row of metrics as returned by `peak_width_metrics` or
-`evaluate_energy_point`: `metrics.w90`, `metrics.fwhm`, `metrics.asym`, or
-`metrics.fwhm * metrics.asym` for `:fwhm_asym`. Throws an `ArgumentError` for any other symbol.
+`evaluate_energy_point`: `metrics.w90`, `metrics.fwhm`, `metrics.asym`,
+`metrics.fwhm * metrics.asym` for `:fwhm_asym`, or `sqrt(fwhm^2 + (k * ct_spread)^2)` with
+`k = ctc_rel_uncertainty` for `:fwhm_ct`. `:fwhm_ct` combines the FWHM after the charge-trapping
+correction in quadrature with the fraction `k` of the drift-time broadening that the correction
+removes (`metrics.ct_spread`); `k` is the assumed relative error of the correction. The keyword is
+ignored by the other objectives.
+
+Throws an `ArgumentError` for any other symbol, and for `:fwhm_ct` if `ctc_rel_uncertainty` is
+`nothing`, negative or not finite.
 """
-function objective_value(metrics::NamedTuple, objective::Symbol)
+function objective_value(metrics::NamedTuple, objective::Symbol; ctc_rel_uncertainty=nothing)
     objective == :w90 && return metrics.w90
     objective == :fwhm && return metrics.fwhm
     objective == :asym && return metrics.asym
     objective == :fwhm_asym && return metrics.fwhm * metrics.asym
+    if objective == :fwhm_ct
+        k = ctc_rel_uncertainty
+        (k isa Real && isfinite(k) && k >= 0) || throw(ArgumentError("objective :fwhm_ct requires ctc_rel_uncertainty to be a finite number >= 0, got $k"))
+        return sqrt(metrics.fwhm^2 + (k * metrics.ct_spread)^2)
+    end
     throw(ArgumentError("objective must be one of $energy_objectives, got :$objective"))
 end
 export objective_value
@@ -137,12 +149,16 @@ fitted with the same histogram as the uncorrected fit inside `ctc_energy`.
 
 # Returns
 A NamedTuple row `(fwhm_before, fwhm, w90, asym, tail_fraction, tail_scale, centroid, fct,
-m_cal_simple, ctc_converged, n_events)`:
+ct_spread, m_cal_simple, ctc_converged, n_events)`:
 - `fwhm_before`, `fwhm`, `w90`, `tail_scale`, `centroid`: `Unitful` energies in keV. Each is the
   value from the fit in `m_cal_simple`-calibrated keV multiplied by `peak / μ`, where `μ` is the
   fitted peak position of that same fit (the uncorrected fit for `fwhm_before`, the fit after the
   correction for the others). The fitted peak therefore sits at `peak`, and `centroid == peak`
   for a symmetric peak.
+- `ct_spread`: `Unitful` energy in keV, the FWHM-equivalent spread of the linear drift-time term
+  removed by the correction, `2 * sqrt(2 * log(2)) * |fct| * m_cal_simple * std(qdrift)` times
+  `peak / μ` of the fit after the correction, with `std(qdrift)` taken over the events inside the
+  correction window `(peak - first(window), peak + last(window))` of the calibrated energies
 - `asym`, `tail_fraction`: unitless
 - `fct`: first-order element of `ctc_energy`'s `result.fct` in ADC per `qdrift` unit, such that
   `e + fct * qdrift` is the corrected energy in ADC
@@ -150,7 +166,7 @@ m_cal_simple, ctc_converged, n_events)`:
 - `ctc_converged`: convergence flag of the correction
 - `n_events`: number of events in the 15-half-width window
 
-With `apply_ctc=false`, `fct` is `0.0`, `ctc_converged` is `true` and `fwhm_before == fwhm`.
+With `apply_ctc=false`, `fct` and `ct_spread` are zero, `ctc_converged` is `true` and `fwhm_before == fwhm`.
 
 Throws an `ErrorException` naming the cause if fewer than 100 selected events lie in
 `(min_e, max_e)`, if the peak-statistics guess has a non-positive entry, or if the peak fit
@@ -180,6 +196,8 @@ function evaluate_energy_point(e::AbstractVector{<:Real}, qdrift::AbstractVector
         v = ctc_report.report_after.v
         fwhm_before = mvalue(ustrip(e_unit, ctc_result.fwhm_before)) * e_unit * (ustrip(e_unit, peak) / mvalue(ctc_report.report_before.v.μ))
         fct = first(ctc_result.fct)
+        in_ctc_window = peak - first(window) .< e_cal .< peak + last(window)
+        qdrift_std = std(qdrift_win[in_ctc_window])
         ctc_converged = ctc_result.converged
     else
         e_peak = ustrip.(e_unit, filter(x -> peak - first(window) < x < peak + last(window), e_cal))
@@ -188,6 +206,7 @@ function evaluate_energy_point(e::AbstractVector{<:Real}, qdrift::AbstractVector
         _, fit_report = fit_single_peak_th228(h_peak, estimate_single_peak_stats(h_peak); uncertainty=false)
         v = fit_report.v
         fct = 0.0
+        qdrift_std = 0.0
         ctc_converged = true
     end
     isfinite(v.σ) && v.σ > 0 || error("evaluate_energy_point: peak fit returned σ = $(v.σ)")
@@ -195,20 +214,22 @@ function evaluate_energy_point(e::AbstractVector{<:Real}, qdrift::AbstractVector
     metrics = peak_width_metrics(v; containment)
     scale = ustrip(e_unit, peak) / mvalue(v.μ) * e_unit
     fwhm = metrics.fwhm * scale
+    ct_spread = 2 * sqrt(2 * log(2)) * abs(fct) * ustrip(e_unit, m_cal_simple) * qdrift_std * scale
     return (
         fwhm_before = apply_ctc ? fwhm_before : fwhm, fwhm = fwhm, w90 = metrics.w90 * scale,
         asym = metrics.asym, tail_fraction = metrics.tail_fraction, tail_scale = metrics.tail_scale * scale,
-        centroid = metrics.centroid * scale, fct = fct, m_cal_simple = m_cal_simple,
+        centroid = metrics.centroid * scale, fct = fct, ct_spread = ct_spread, m_cal_simple = m_cal_simple,
         ctc_converged = ctc_converged, n_events = length(e_win)
     )
 end
 export evaluate_energy_point
 
 """
-    optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0, ft0; rt_bounds::Tuple{Any,Any}, ft_bounds::Tuple{Any,Any}, feasible=(rt, ft) -> true, step0::Tuple{Any,Any}, lattice, objective::Symbol=:w90, rel_tol::Real=0.005, max_evals::Int=60, eval_kwargs...)
+    optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0, ft0; rt_bounds::Tuple{Any,Any}, ft_bounds::Tuple{Any,Any}, feasible=(rt, ft) -> true, step0::Tuple{Any,Any}, lattice, objective::Symbol=:fwhm, ctc_rel_uncertainty=nothing, rel_tol::Real=0.005, max_evals::Int=60, eval_kwargs...)
 
 Joint search of rise time `rt` and flat-top time `ft` minimizing `objective` (see
-`objective_value`) of `evaluate_energy_point`.
+`objective_value`) of `evaluate_energy_point`. The objective `:fwhm_ct` requires
+`ctc_rel_uncertainty`, the assumed relative error of the correction, and `apply_ctc = true`.
 
 `f_energy(rt, ft)` returns the energies (ADC) of the waveform set at one filter setting, aligned
 with `qdrift`; it is called concurrently from several threads. `rt0`, `ft0`, the bounds, `step0` and
@@ -233,21 +254,23 @@ An evaluation that throws is recorded with its error text in `status` and `NaN` 
 search continues.
 
 # Returns
-- `result`: `(rt, ft, fwhm, w90, asym, fct, min_objective, objective, n_evals, converged)`
-- `report`: `(rt, ft, objective, table, path)`, where `table` is a `TypedTables.Table` with one
+- `result`: `(rt, ft, fwhm, w90, asym, fct, ct_spread, min_objective, objective, n_evals, converged)`
+- `report`: `(rt, ft, objective, table, path, objective_values)`, where `table` is a `TypedTables.Table` with one
   row per evaluation and columns `rt, ft, stage, step_rt, step_ft, status, fwhm_before, fwhm, w90,
-  asym, tail_fraction, tail_scale, centroid, fct, m_cal_simple, ctc_converged, n_events`
-  (`stage` is `:seed` or `:neighbor`), and `path` is the vector of accepted `(rt, ft)`
-  positions starting with the seed.
+  asym, tail_fraction, tail_scale, centroid, fct, ct_spread, m_cal_simple, ctc_converged, n_events`
+  (`stage` is `:seed` or `:neighbor`), `path` is the vector of accepted `(rt, ft)`
+  positions starting with the seed, and `objective_values` are the values of `objective` for the
+  rows of `table` (`NaN` for failed rows).
 
-Throws an `ArgumentError` for an unknown `objective`, `lattice <= 0`, `max_evals < 1`,
+Throws an `ArgumentError` for an unknown `objective`, for `objective == :fwhm_ct` with a missing,
+negative or non-finite `ctc_rel_uncertainty` or with `apply_ctc = false`, `lattice <= 0`, `max_evals < 1`,
 non-positive `step0`, `rt0` or `ft0` outside their bounds, a seed that rounds to an infeasible or
 out-of-bounds lattice point, or missing or unsupported `eval_kwargs`. Throws an `ErrorException`
 if the seed evaluation fails.
 """
 function optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0::Unitful.Time{<:Real}, ft0::Unitful.Time{<:Real};
         rt_bounds::Tuple{Any,Any}, ft_bounds::Tuple{Any,Any}, feasible=(rt, ft) -> true, step0::Tuple{Any,Any}, lattice::Unitful.Time{<:Real},
-        objective::Symbol=:w90, rel_tol::Real=0.005, max_evals::Int=60, eval_kwargs...)
+        objective::Symbol=:fwhm, ctc_rel_uncertainty::Union{Nothing, Real}=nothing, rel_tol::Real=0.005, max_evals::Int=60, eval_kwargs...)
     objective in energy_objectives || throw(ArgumentError("objective must be one of $energy_objectives, got :$objective"))
     lattice > zero(lattice) || throw(ArgumentError("optimize_rtft: lattice must be positive, got $lattice"))
     0 <= rel_tol < Inf || throw(ArgumentError("optimize_rtft: rel_tol must satisfy 0 <= rel_tol < Inf, got $rel_tol"))
@@ -262,6 +285,11 @@ function optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0::Unitful.Ti
     unsupported = filter(k -> !(k in (required..., :n_bins, :apply_ctc, :containment)), keys(kw))
     isempty(unsupported) || throw(ArgumentError("optimize_rtft: unsupported eval_kwargs $unsupported"))
     point_kwargs = Base.structdiff(kw, NamedTuple{required})
+    if objective == :fwhm_ct
+        get(kw, :apply_ctc, true) || throw(ArgumentError("optimize_rtft: objective :fwhm_ct requires apply_ctc = true"))
+        (ctc_rel_uncertainty isa Real && isfinite(ctc_rel_uncertainty) && ctc_rel_uncertainty >= 0) ||
+            throw(ArgumentError("optimize_rtft: objective :fwhm_ct requires ctc_rel_uncertainty to be a finite number >= 0, got $ctc_rel_uncertainty"))
+    end
 
     to_lattice(t) = uconvert(NoUnits, t / lattice)
     rt_range = ceil(Int, to_lattice(first(rt_bounds)) - 1e-6):floor(Int, to_lattice(last(rt_bounds)) + 1e-6)
@@ -299,7 +327,7 @@ function optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0::Unitful.Ti
         end
     end
     is_ok(k) = haskey(cache, k) && records[cache[k]].status == "ok"
-    obj(k) = ustrip(objective_value(records[cache[k]], objective))
+    obj(k) = ustrip(objective_value(records[cache[k]], objective; ctc_rel_uncertainty))
 
     evaluate!([seed], :seed, steps)
     is_ok(seed) || error("optimize_rtft: seed evaluation failed: $(records[cache[seed]].status)")
@@ -331,11 +359,12 @@ function optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0::Unitful.Ti
     final = [current; filter(k -> admissible(k) && is_ok(k), neighbors(current, steps))]
     best_row = records[cache[final[select_optimum([obj(k) for k in final], final; rel_tol)]]]
     result = (
-        rt = best_row.rt, ft = best_row.ft, fwhm = best_row.fwhm, w90 = best_row.w90, asym = best_row.asym, fct = best_row.fct,
-        min_objective = objective_value(best_row, objective), objective = objective,
+        rt = best_row.rt, ft = best_row.ft, fwhm = best_row.fwhm, w90 = best_row.w90, asym = best_row.asym, fct = best_row.fct, ct_spread = best_row.ct_spread,
+        min_objective = objective_value(best_row, objective; ctc_rel_uncertainty), objective = objective,
         n_evals = length(records), converged = converged
     )
-    report = (rt = result.rt, ft = result.ft, objective = objective, table = Table(records), path = path)
+    report = (rt = result.rt, ft = result.ft, objective = objective, table = Table(records), path = path,
+        objective_values = [objective_value(r, objective; ctc_rel_uncertainty) for r in records])
     return result, report
 end
 export optimize_rtft

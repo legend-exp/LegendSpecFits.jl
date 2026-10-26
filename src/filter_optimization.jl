@@ -73,7 +73,7 @@ end
 export fit_enc_sigmas
 
 """
-    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt, min_e, max_e, rel_cut_fit, apply_ctc::Bool=true; n_bins=-1, peak=2614.5u"keV", window=(35.0u"keV", 25.0u"keV"), objective=:w90, containment=0.9, rel_tol=0.005, ft_fwhm_tol=0.1u"keV")
+    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt, min_e, max_e, rel_cut_fit, apply_ctc::Bool=true; n_bins=-1, peak=2614.5u"keV", window=(35.0u"keV", 25.0u"keV"), objective=:fwhm, ctc_rel_uncertainty=nothing, containment=0.9, rel_tol=0.005, ft_fwhm_tol=0.1u"keV")
     fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt, min_e, max_e, rel_cut_fit; kwargs...)
 
 Scan the flat-top times `e_grid_ft` at the rise time `rt` and select the optimal flat-top time.
@@ -81,8 +81,9 @@ Scan the flat-top times `e_grid_ft` at the rise time `rt` and select the optimal
 With `qdrift`, row `i` of `e_grid` (energies in ADC at `e_grid_ft[i]`) is evaluated with
 `evaluate_energy_point`, in parallel across flat-top times, with the linear charge-trapping
 correction if `apply_ctc` is `true`. Widths are calibrated per flat-top time, scaled to the
-fitted peak position of that point (see `evaluate_energy_point`). The optimum minimizes `objective` (one of `:w90, :fwhm, :asym, :fwhm_asym`, see
-`objective_value`); flat-top times whose objective lies within `rel_tol` of the minimum tie and
+fitted peak position of that point (see `evaluate_energy_point`). The optimum minimizes `objective` (one of `:fwhm, :w90, :asym, :fwhm_asym, :fwhm_ct`, see
+`objective_value`); `:fwhm_ct` requires `apply_ctc=true` and `ctc_rel_uncertainty`, the assumed
+relative error of the correction. Flat-top times whose objective lies within `rel_tol` of the minimum tie and
 the shortest one wins (`select_optimum`). `legacy_ft` is the shortest flat-top time whose FWHM
 lies within `ft_fwhm_tol` of the minimum FWHM. A flat-top time whose evaluation throws is
 recorded in `report.table` with its error text in `status` and `NaN` metrics.
@@ -94,19 +95,28 @@ with the `ft_fwhm_tol` rule; the result is `(ft, min_fwhm)`.
 - `result`: `(ft, min_fwhm, min_objective, objective, legacy_ft)`; `ft` and `legacy_ft` carry
   `step(e_grid_ft)` as uncertainty, `min_fwhm` is the FWHM at `ft`
 - `report`: `(ft, min_fwhm, min_objective, objective, legacy_ft, e_grid_ft, fwhm, w90, asym, fct,
-  table)`; `e_grid_ft, fwhm, w90, asym, fct` hold the successful flat-top times, `table` is a
-  `TypedTables.Table` with one row per flat-top time and columns `ft, status, fwhm_before, fwhm,
-  w90, asym, tail_fraction, tail_scale, centroid, fct, m_cal_simple, ctc_converged, n_events`
+  ct_spread, objective_values, table)`; `e_grid_ft, fwhm, w90, asym, fct, ct_spread,
+  objective_values` hold the successful flat-top times (`objective_values` are the values of
+  `objective` used for the selection), `table` is a `TypedTables.Table` with one row per
+  flat-top time and columns `ft, status, fwhm_before, fwhm, w90, asym, tail_fraction, tail_scale,
+  centroid, fct, ct_spread, m_cal_simple, ctc_converged, n_events`
 
-Throws an `ArgumentError` for an unknown `objective` or a `rel_tol` outside `[0, Inf)`, a `DimensionMismatch` if the rows of
+Throws an `ArgumentError` for an unknown `objective`, a `rel_tol` outside `[0, Inf)`, and for
+`objective == :fwhm_ct` if `ctc_rel_uncertainty` is missing, negative or not finite or if
+`apply_ctc` is `false`; throws a `DimensionMismatch` if the rows of
 `e_grid` do not match `e_grid_ft`, and an `ErrorException` if no flat-top time is evaluated
 successfully.
 """
 function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::Real, max_e::Real, rel_cut_fit::Real, apply_ctc::Bool=true;
         n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"),
-        objective::Symbol=:w90, containment::Real=0.9, rel_tol::Real=0.005, ft_fwhm_tol::Unitful.Energy{<:Real}=0.1u"keV")
+        objective::Symbol=:fwhm, ctc_rel_uncertainty::Union{Nothing, Real}=nothing, containment::Real=0.9, rel_tol::Real=0.005, ft_fwhm_tol::Unitful.Energy{<:Real}=0.1u"keV")
     objective in energy_objectives || throw(ArgumentError("objective must be one of $energy_objectives, got :$objective"))
     0 <= rel_tol < Inf || throw(ArgumentError("fit_fwhm_ft: rel_tol must satisfy 0 <= rel_tol < Inf, got $rel_tol"))
+    if objective == :fwhm_ct
+        apply_ctc || throw(ArgumentError("fit_fwhm_ft: objective :fwhm_ct requires apply_ctc = true"))
+        (ctc_rel_uncertainty isa Real && isfinite(ctc_rel_uncertainty) && ctc_rel_uncertainty >= 0) ||
+            throw(ArgumentError("fit_fwhm_ft: objective :fwhm_ct requires ctc_rel_uncertainty to be a finite number >= 0, got $ctc_rel_uncertainty"))
+    end
     axes(e_grid, 1) == eachindex(e_grid_ft) || throw(DimensionMismatch("e_grid has $(size(e_grid, 1)) rows, e_grid_ft has $(length(e_grid_ft)) entries"))
 
     fts = collect(e_grid_ft)
@@ -129,19 +139,21 @@ function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:R
         @error "No valid FWHM found." status
         throw(ErrorException("No valid FWHM found, could not determine optimal FT"))
     end
-    i_best = select_optimum([ustrip(objective_value(row, objective)) for row in rows], [(ft,) for ft in fts]; rel_tol)
+    objective_values = [objective_value(row, objective; ctc_rel_uncertainty) for row in rows]
+    i_best = select_optimum(ustrip.(objective_values), [(ft,) for ft in fts]; rel_tol)
     min_fwhm_all = minimum(rows[i].fwhm for i in ok)
     i_legacy = argmin(i -> fts[i], filter(i -> rows[i].fwhm - min_fwhm_all < ft_fwhm_tol, ok))
 
     best = rows[i_best]
     result = (
         ft = measurement(fts[i_best], step(e_grid_ft)), min_fwhm = best.fwhm,
-        min_objective = objective_value(best, objective), objective = objective,
+        min_objective = objective_values[i_best], objective = objective,
         legacy_ft = measurement(fts[i_legacy], step(e_grid_ft))
     )
     report = merge(result, (
         e_grid_ft = fts[ok], fwhm = [rows[i].fwhm for i in ok], w90 = [rows[i].w90 for i in ok],
         asym = [rows[i].asym for i in ok], fct = [rows[i].fct for i in ok],
+        ct_spread = [rows[i].ct_spread for i in ok], objective_values = objective_values[ok],
         table = Table([merge((ft = fts[i], status = status[i]), rows[i]) for i in eachindex(fts)])
     ))
     return result, report

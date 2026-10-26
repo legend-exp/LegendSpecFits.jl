@@ -78,12 +78,19 @@ using Unitful
     end
 
     @testset "objective_value" begin
-        m = (fwhm = 2.0u"keV", w90 = 3.0u"keV", asym = 1.5, tail_fraction = 0.1, tail_scale = 5.0u"keV", centroid = 2614.0u"keV")
+        m = (fwhm = 2.0u"keV", w90 = 3.0u"keV", asym = 1.5, tail_fraction = 0.1, tail_scale = 5.0u"keV", centroid = 2614.0u"keV", ct_spread = 1.5u"keV")
         @test objective_value(m, :w90) == 3.0u"keV"
         @test objective_value(m, :fwhm) == 2.0u"keV"
         @test objective_value(m, :asym) == 1.5
         @test objective_value(m, :fwhm_asym) == 3.0u"keV"
-        @test_throws "objective must be one of (:w90, :fwhm, :asym, :fwhm_asym)" objective_value(m, :sigma)
+        @test objective_value(m, :fwhm_ct; ctc_rel_uncertainty = 0.5) ≈ sqrt(2.0^2 + 0.75^2) * 1.0u"keV"
+        @test objective_value(m, :fwhm_ct; ctc_rel_uncertainty = 0) == m.fwhm
+        @test objective_value(m, :w90; ctc_rel_uncertainty = NaN) == 3.0u"keV"
+        for bad in (nothing, -0.1, NaN, Inf)
+            @test_throws ArgumentError objective_value(m, :fwhm_ct; ctc_rel_uncertainty = bad)
+            @test_throws "requires ctc_rel_uncertainty to be a finite number >= 0" objective_value(m, :fwhm_ct; ctc_rel_uncertainty = bad)
+        end
+        @test_throws "objective must be one of (:w90, :fwhm, :asym, :fwhm_asym, :fwhm_ct)" objective_value(m, :sigma)
     end
 
     @testset "select_optimum" begin
@@ -116,7 +123,7 @@ using Unitful
         e = μ .+ 0.8 .* randn(rng, n) .- slope .* (qdrift .- 200)
         row = evaluate_energy_point(e, qdrift, peak, window, 2400.0, 2800.0, 0.5)
         row_raw = evaluate_energy_point(e, qdrift, peak, window, 2400.0, 2800.0, 0.5; apply_ctc = false)
-        @test keys(row) == (:fwhm_before, :fwhm, :w90, :asym, :tail_fraction, :tail_scale, :centroid, :fct, :m_cal_simple, :ctc_converged, :n_events)
+        @test keys(row) == (:fwhm_before, :fwhm, :w90, :asym, :tail_fraction, :tail_scale, :centroid, :fct, :ct_spread, :m_cal_simple, :ctc_converged, :n_events)
         @test row.fct ≈ slope rtol = 0.2
         @test row.ctc_converged
         @test row.w90 < row_raw.w90
@@ -133,6 +140,13 @@ using Unitful
         @test abs(sum(e_ctc[low]) / count(low) - sum(e_ctc[high]) / count(high)) < 0.3
         # without correction: same histogram as the uncorrected fit inside ctc_energy
         @test row_raw.fct == 0.0
+        @test row_raw.ct_spread == 0.0u"keV"
+        # FWHM-equivalent spread of the removed linear term: 2 sqrt(2 ln 2) * slope * std(qdrift in window)
+        std(x) = sqrt(sum(abs2, x .- sum(x) / length(x)) / (length(x) - 1))
+        in_window = peak - first(window) .< e .* row.m_cal_simple .< peak + last(window)
+        @test unit(row.ct_spread) == u"keV"
+        @test row.ct_spread ≈ 2 * sqrt(2 * log(2)) * slope * std(qdrift[in_window]) * u"keV" rtol = 0.2
+        @test row.ct_spread ≈ 2 * sqrt(2 * log(2)) * row.fct * ustrip(u"keV", row.m_cal_simple) * std(qdrift[in_window]) * u"keV" rtol = 0.02
         @test row_raw.fwhm_before == row_raw.fwhm
         @test row_raw.fwhm ≈ row.fwhm_before rtol = 1e-8
         @test evaluate_energy_point(view(e, :), view(qdrift, :), peak, window, 2400.0, 2800.0, 0.5; apply_ctc = false) == row_raw
@@ -153,8 +167,14 @@ using Unitful
         result, report = fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false)
         @test abs(mvalue(result.ft) - 2.0u"µs") <= step(e_grid_ft) * (1 + 1e-9)
         @test abs(mvalue(result.legacy_ft) - 2.0u"µs") <= step(e_grid_ft) * (1 + 1e-9)
-        @test result.objective == :w90
-        @test result.min_objective <= minimum(report.w90) * 1.005
+        @test result.objective == :fwhm
+        @test keys(report) == (:ft, :min_fwhm, :min_objective, :objective, :legacy_ft, :e_grid_ft, :fwhm, :w90, :asym, :fct, :ct_spread, :objective_values, :table)
+        @test report.objective_values == report.fwhm
+        @test all(iszero, report.ct_spread)
+        @test result.min_objective <= minimum(report.fwhm) * 1.005
+        result_w90, _ = fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; objective = :w90)
+        @test result_w90.objective == :w90
+        @test result_w90.min_objective <= minimum(report.w90) * 1.005
         @test report.table isa Table
         @test length(report.table) == length(e_grid_ft)
         @test report.table.ft == collect(e_grid_ft)
@@ -166,6 +186,11 @@ using Unitful
         result_fwhm, _ = fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; objective = :fwhm)
         @test result_fwhm.min_objective == result_fwhm.min_fwhm
 
+        @test_throws "requires apply_ctc = true" fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; objective = :fwhm_ct, ctc_rel_uncertainty = 0.1)
+        @test_throws "requires ctc_rel_uncertainty" fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5; objective = :fwhm_ct)
+        for bad in (-0.1, Inf, NaN)
+            @test_throws "requires ctc_rel_uncertainty" fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5; objective = :fwhm_ct, ctc_rel_uncertainty = bad)
+        end
         @test_throws "No valid FWHM found" fit_fwhm_ft(fill(NaN, 2, n), e_grid_ft[1:2], qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false)
         @test_throws "objective must be one of" fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; objective = :sigma)
 
@@ -179,6 +204,14 @@ using Unitful
         result_ctc, report_ctc = fit_fwhm_ft(e_grid_ctc, fts_ctc, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5)
         @test abs(mvalue(result_ctc.ft) - 2.0u"µs") <= step(fts_ctc) * (1 + 1e-9)
         @test all(isapprox.(report_ctc.table.fct, 0.01; rtol = 0.2))
+        @test all(>(0u"keV"), report_ctc.ct_spread)
+        result_ct, report_ct = fit_fwhm_ft(e_grid_ctc, fts_ctc, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5; objective = :fwhm_ct, ctc_rel_uncertainty = 0.1)
+        @test result_ct.objective == :fwhm_ct
+        @test report_ct.objective_values ≈ sqrt.(report_ct.fwhm .^ 2 .+ (0.1 .* report_ct.ct_spread) .^ 2)
+        @test result_ct.min_objective ≈ minimum(report_ct.objective_values) rtol = 0.005
+        @test result_ct.min_objective >= result_ct.min_fwhm
+        @test keys(report_ct) == keys(report)
+        @test report_ct.table.ct_spread == report_ctc.table.ct_spread
     end
 
     @testset "optimize_rtft" begin
@@ -200,7 +233,11 @@ using Unitful
         @test result.converged
         @test abs(result.rt - 4.0u"µs") <= lattice * (1 + 1e-9)
         @test abs(result.ft - 2.0u"µs") <= lattice * (1 + 1e-9)
-        @test result.objective == :w90 && report.objective == :w90
+        @test result.objective == :fwhm && report.objective == :fwhm
+        @test keys(result) == (:rt, :ft, :fwhm, :w90, :asym, :fct, :ct_spread, :min_objective, :objective, :n_evals, :converged)
+        @test keys(report) == (:rt, :ft, :objective, :table, :path, :objective_values)
+        @test report.objective_values == report.table.fwhm
+        @test :ct_spread in keys(report.table[1])
         @test result.n_evals == length(report.table) <= 60
         @test unique_points(report.table)
         @test count(==(:seed), report.table.stage) == 1
@@ -235,6 +272,8 @@ using Unitful
         result_fail, report_fail = optimize_rtft(f_fail, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
         failed = report_fail.table.status .!= "ok"
         @test any(failed)
+        @test all(isnan, report_fail.objective_values[failed])
+        @test !any(isnan, report_fail.objective_values[.!failed])
         @test all(isnan, report_fail.table.w90[failed])
         @test result_fail.ft <= 1.6u"µs" + lattice / 2
 
@@ -288,5 +327,16 @@ using Unitful
         @test_throws "eval_kwargs must contain (:peak,)" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; Base.structdiff(kw, NamedTuple{(:peak,)})...)
         @test_throws "unsupported eval_kwargs (:bogus,)" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw..., bogus = 1)
         @test_throws "objective must be one of" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw..., objective = :sigma)
+        @test_throws "requires apply_ctc = true" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw..., objective = :fwhm_ct, ctc_rel_uncertainty = 0.1)
+        kw_ctc = merge(kw, (apply_ctc = true, max_evals = 4))
+        @test_throws "requires ctc_rel_uncertainty" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw_ctc..., objective = :fwhm_ct)
+        for bad in (-0.1, Inf, NaN)
+            @test_throws "requires ctc_rel_uncertainty" optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; kw_ctc..., objective = :fwhm_ct, ctc_rel_uncertainty = bad)
+        end
+        f_slope(rt, ft) = f_bowl(rt, ft) .- 0.01 .* (qdrift .- 200)
+        result_ct, report_ct = optimize_rtft(f_slope, qdrift, 3.5u"µs", 1.6u"µs"; kw_ctc..., objective = :fwhm_ct, ctc_rel_uncertainty = 0.1)
+        @test result_ct.objective == :fwhm_ct && result_ct.ct_spread > 0u"keV"
+        @test report_ct.objective_values ≈ sqrt.(report_ct.table.fwhm .^ 2 .+ (0.1 .* report_ct.table.ct_spread) .^ 2)
+        @test result_ct.min_objective >= result_ct.fwhm
     end
 end
