@@ -5,9 +5,11 @@
 """
 ## TO DO: Still needs to be updated once finalized
 
-    ctc_aoe(aoe_all::Array{T}, ecal_all::Array{T}, qdrift_e_all::Array{T}, compton_bands::Array{T}, peak::T, window::T) where T<:Real
+    ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.Energy}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.Energy}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; compton_window::Unitful.Energy = 20.0u"keV", kwargs...)
 
-Correct for the drift time dependence of A/E parameter
+Correct for the drift time dependence of A/E parameter, using the events with a calibrated
+energy `ecal_all` in one of the Compton bands `[band, band + compton_window]` for `band` in
+`compton_bands`.
 
 # Returns (but may change):
     * `peak`: peak position
@@ -18,13 +20,13 @@ Correct for the drift time dependence of A/E parameter
     * `func`: function to correct aoe
     * `func_generic`: generic function to correct aoe
 """
-function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.RealOrRealQuantity}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.RealOrRealQuantity}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; aoe_expression::Union{Symbol, String}="aoe", qdrift_expression::Union{Symbol, String} = "qdrift / e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), fit_func::Symbol=:aoe_two_bck, pol_order::Int=1) # deleted m_cal since no calibration
+function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.Energy{<:Real}}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.Energy{<:Real}}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; compton_window::Unitful.Energy{<:Real} = 20.0u"keV", aoe_expression::Union{Symbol, String}="aoe", qdrift_expression::Union{Symbol, String} = "qdrift / e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), fit_func::Symbol=:aoe_two_bck, pol_order::Int=1) # deleted m_cal since no calibration
 
-    # distribution compton band entries
-    compton_start = ustrip.(compton_bands)
-    compton_end = compton_start .+ 20
-    # create mask (make sure everything is unitless)
-    mask = map(e -> any(i -> compton_start[i] <= ustrip(e) <= compton_end[i], eachindex(compton_start, compton_end)), ecal_all)
+    # select the events in the Compton bands [band, band + compton_window], with all energies in units of `e_unit`
+    e_unit = unit(first(ecal_all))
+    compton_start = ustrip.(e_unit, compton_bands)
+    compton_end = compton_start .+ ustrip(e_unit, compton_window)
+    mask = map(e -> any(i -> compton_start[i] <= ustrip(e_unit, e) <= compton_end[i], eachindex(compton_start, compton_end)), ecal_all)
     # Filter the energies, aoe and qdrift values based on the mask
     aoe = aoe_all[mask]
     qdrift_e = qdrift_e_all[mask]
