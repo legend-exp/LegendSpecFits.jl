@@ -1,55 +1,53 @@
 
 """
-    cut_single_peak(x::Array, min_x::Float64, max_x::Float64,; n_bins::Int=-1, relative_cut::Float64=0.5)
+    cut_single_peak(x::AbstractVector, min_x, max_x,; n_bins::Int=-1, relative_cut::Float64=0.5, n_tries::Int=5)
 
 Cut out a single peak from the array `x` between `min_x` and `max_x`.
 The number of bins is the number of bins to use for the histogram.
 The relative cut is the fraction of the maximum counts to use for the cut.
+If the lower edge of the cut window does not lie below the peak maximum, the histogram is
+rebinned with `i`-times finer bins, `i = 2, ..., n_tries`; a warning is issued if no such
+window is found.
 # Returns 
     * `max`: maximum position of the peak
     * `low`: lower edge of the cut peak
     * `high`: upper edge of the cut peak
 """
-function cut_single_peak(x::Vector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T,; n_bins::Int=-1, relative_cut::Float64=0.5, n_tries::Int=5) where T<:Unitful.RealOrRealQuantity
+function cut_single_peak(x::AbstractVector{<:Unitful.RealOrRealQuantity}, min_x::T, max_x::T,; n_bins::Int=-1, relative_cut::Float64=0.5, n_tries::Int=5) where T<:Unitful.RealOrRealQuantity
     x_unit = unit(min_x)
-    x, min_x, max_x = ustrip.(x_unit, x), ustrip(x_unit, min_x), ustrip(x_unit, max_x)
+    min_x, max_x = ustrip(x_unit, min_x), ustrip(x_unit, max_x)
 
     # cut out window of interest
-    x = x[(x .> min_x) .&& (x .< max_x)]
+    x = ustrip.(x_unit, filter(xi -> min_x < ustrip(x_unit, xi) < max_x, x))
+    x_min, x_max = extrema(x)
+    bin_width = n_bins < 0 ? get_friedman_diaconis_bin_width(x) : zero(x_min)
 
-    # fit histogram
-    if n_bins < 0
-        bin_width = get_friedman_diaconis_bin_width(x)
-        h = fit(Histogram, x, minimum(x):bin_width:maximum(x))
-    else
-        h = fit(Histogram, x, nbins=n_bins)
-    end
-
-    # initialize cut window
-    cut_low, cut_high, cut_max = Array(h.edges[1])[1] * x_unit, Array(h.edges[1])[1] * x_unit, Array(h.edges[1])[1] * x_unit
+    # retry with finer binning until the lower edge of the cut window lies below the peak maximum
+    cut_low, cut_high, cut_max = x_min * x_unit, x_min * x_unit, x_min * x_unit
     for i in 1:n_tries
         # fit histogram
         if n_bins < 0
-            h = fit(Histogram, x, minimum(x):bin_width/i:maximum(x))
+            h = fit(Histogram, x, x_min:bin_width/i:x_max)
         else
             h = fit(Histogram, x, nbins=n_bins*i)
         end
-        # determine cut
-        if !(cut_low < cut_max < cut_high)
-            i > 1 && @warn "Cut window not found, trying again"
-            
-            # find peak
-            cts_argmax = mapslices(argmax, h.weights, dims=1)[1]
-            cts_max    = h.weights[cts_argmax]
+        edges = first(h.edges)
 
-            # find left and right edge of peak
-            cut_low_arg  = findfirst(w -> w >= relative_cut*cts_max, h.weights[1:cts_argmax])
-            cut_high_arg = findfirst(w -> w <= relative_cut*cts_max, h.weights[cts_argmax:end]) + cts_argmax - 1
-            cut_low, cut_high, cut_max = Array(h.edges[1])[cut_low_arg] * x_unit, Array(h.edges[1])[cut_high_arg] * x_unit, Array(h.edges[1])[cts_argmax] * x_unit
-        else
+        # find peak
+        cts_argmax = argmax(h.weights)
+        cts_max    = h.weights[cts_argmax]
+
+        # find left and right edge of peak
+        cut_low_arg  = findfirst(w -> w >= relative_cut*cts_max, h.weights[1:cts_argmax])
+        cut_high_arg = findfirst(w -> w <= relative_cut*cts_max, h.weights[cts_argmax:end]) + cts_argmax - 1
+        cut_low, cut_high, cut_max = edges[cut_low_arg] * x_unit, edges[cut_high_arg] * x_unit, edges[cts_argmax] * x_unit
+        if cut_low < cut_max < cut_high
             @debug "Cut window: [$cut_low, $cut_high]"
+            break
         end
+        @debug "Cut window not found with histogram $i of $n_tries"
     end
+    cut_low < cut_max < cut_high || @warn "Cut window not found after $n_tries histograms with finer binning, returning [$cut_low, $cut_high] around $cut_max"
     return (low = cut_low, high = cut_high, max = cut_max)
 end
 export cut_single_peak

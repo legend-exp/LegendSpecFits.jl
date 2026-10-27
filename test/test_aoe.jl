@@ -4,7 +4,8 @@ using LegendSpecFits
 using Test
 using Measurements: value as mvalue
 using Distributions
-using Unitful 
+using Unitful
+using Random
 
 include("test_utils.jl")
 
@@ -43,4 +44,26 @@ include("test_utils.jl")
         @test isapprox(abs(mvalue(result_fit_combined.σA)), σA, rtol = 0.1)
         @test isapprox(abs(mvalue(result_fit_combined.σB)), σB, rtol = 0.1)
     end
+end
+
+@testset "A/E charge trapping correction" begin
+
+    # normalized A/E with a linear drift-time dependence, at uniformly distributed energies
+    rng = Random.Xoshiro(2)
+    n_events = 150_000
+    e_cal = (500 .+ 2000 .* rand(rng, n_events)) .* u"keV"
+    qdrift_e = 100 .+ 10 .* randn(rng, n_events)
+    aoe = randn(rng, n_events) .- [rand(rng) < 0.2 ? 5 * randexp(rng) : 0.0 for _ in 1:n_events] .- 0.02 .* (qdrift_e .- 100)
+    compton_bands = collect((550:70:2350)u"keV")
+
+    result, _ = LegendSpecFits.ctc_aoe(aoe, e_cal, qdrift_e, compton_bands; compton_window = 30u"keV", aoe_expression = "aoe", qdrift_expression = "qdrift / e")
+    @test result.converged
+
+    # the selection of the Compton band events does not depend on the units of the energies
+    result_mev, _ = LegendSpecFits.ctc_aoe(aoe, uconvert.(u"MeV", e_cal), qdrift_e, compton_bands; compton_window = 0.03u"MeV",
+                                           aoe_expression = "aoe", qdrift_expression = "qdrift / e")
+    @test result_mev.fct ≈ result.fct
+
+    # energies must be energies
+    @test_throws MethodError LegendSpecFits.ctc_aoe(aoe, ustrip.(u"keV", e_cal), qdrift_e, compton_bands)
 end
