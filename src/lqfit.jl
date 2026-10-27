@@ -78,8 +78,8 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
     v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function
-    f_loglike = let f_fit=f_lq_compton, h=h
-        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    f_loglike = let f_fit = f_lq_compton, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+        v -> ll(x -> x in interval ? f_fit(x, v) : 0)
     end
 
     # MLE
@@ -93,8 +93,8 @@ function fit_single_lq_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=t
     # best fit results
     v_ml = inverse(f_trafo)(res.u)
 
-    f_loglike_array = let f_fit=aoe_compton_peakshape, h=h
-        v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v...) : 0, h)
+    f_loglike_array = let f_fit = aoe_compton_peakshape, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+        v -> - ll(x -> x in interval ? f_fit(x, v...) : 0)
     end
 
     if uncertainty && converged

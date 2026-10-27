@@ -414,8 +414,8 @@ function fit_binned_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low, :hig
     v_init = Vector(mean(f_trafo.target_dist))
     
     # create loglikehood function
-    f_loglike = let f_fit=f_fit, h=h
-        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    f_loglike = let f_fit = f_fit, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+        v -> ll(x -> x in interval ? f_fit(x, v) : 0)
     end
 
     # MLE
@@ -536,8 +536,8 @@ function fit_binned_half_trunc_gauss(h_nocut::Histogram, cuts::NamedTuple{(:low,
     v_init = Vector(mean(f_trafo.target_dist))
     
     # create loglikehood function
-    f_loglike = let f_fit=f_fit, h=h
-        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    f_loglike = let f_fit = f_fit, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+        v -> ll(x -> x in interval ? f_fit(x, v) : 0)
     end
 
     # MLE
@@ -643,8 +643,8 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
     v_init = Vector(mean(f_trafo.target_dist))
 
     # create loglikehood function
-    f_loglike = let f_fit=f_double_gauss, h=h
-        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    f_loglike = let f_fit = f_double_gauss, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+        v -> ll(x -> x in interval ? f_fit(x, v) : 0)
     end
 
     # MLE
@@ -659,8 +659,8 @@ function fit_binned_double_gauss(h::Histogram, ps::NamedTuple; uncertainty::Bool
     v_ml = inverse(f_trafo)(res.u)
 
     if uncertainty && converged
-        f_loglike_array = let f_fit=double_gaussian, h=h
-            v -> - hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v...) : 0, h)
+        f_loglike_array = let f_fit = double_gaussian, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+            v -> - ll(x -> x in interval ? f_fit(x, v...) : 0)
         end
 
     

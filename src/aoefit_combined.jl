@@ -25,8 +25,8 @@ function fit_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram, μ::Number, �
     fit_function = get_aoe_fit_functions(; background_center = background_center)[fit_func]
 
     # create loglikehood function
-    f_loglike = let f_fit=fit_function, h=h
-        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    f_loglike = let f_fit = fit_function, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+        v -> ll(x -> x in interval ? f_fit(x, v) : 0)
     end
 
     # MLE
@@ -121,8 +121,8 @@ function neg_log_likelihood_single_aoe_compton_with_fixed_μ_and_σ(h::Histogram
     fit_function = get_aoe_fit_functions(; background_center = background_center)[fit_func]
 
     # create loglikehood function
-    f_loglike = let f_fit=fit_function, h=h
-        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    f_loglike = let f_fit = fit_function, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+        v -> ll(x -> x in interval ? f_fit(x, v) : 0)
     end
 
     # MLE
@@ -246,8 +246,8 @@ function fit_aoe_compton_combined(peakhists::Vector{<:Histogram}, peakstats::Str
             fit_function = get_aoe_fit_functions(; background_center = f_aoe_mu(e, (v_ml.μA, v_ml.μB)))[fit_func]
 
             # create loglikehood function
-            f_loglike = let f_fit=fit_function, h=h
-                v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+            f_loglike = let f_fit = fit_function, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+                v -> ll(x -> x in interval ? f_fit(x, v) : 0)
             end
             - f_loglike(vi)
         end
