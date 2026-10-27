@@ -15,6 +15,8 @@ logger = ConsoleLogger(stderr, Logging.Info)
 @testset "Energy calibration" begin
     # Seeded, since peak identification fails for some random data sets:
     rng = Xoshiro(1234)
+    # the peak fits sample the FWHM uncertainties from the global random number generator
+    Random.seed!(1234)
     ecal = filter(x -> x <= 265_000, vcat(rand(rng, Distributions.Exponential(70_000),97_000), 261_450 .+ 200 .* randn(rng, 2_000), 210_350 .+ 185 .* randn(rng, 500), 159_300 .+ 170 .* randn(rng, 500)))
     lines = [:Tl208DEP, :Tl208SEP, :Tl208FEP]
     energies = [1592.513, 2103.512, 2614.511]u"keV"
