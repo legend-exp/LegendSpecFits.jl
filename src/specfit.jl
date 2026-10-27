@@ -91,8 +91,8 @@ function fit_single_peak_th228(h::Histogram, ps::NamedTuple{(:peak_pos, :peak_fw
     fit_function = get_th228_fit_functions(; background_center = background_center)[fit_func]
 
     # create loglikehood function: f_loglike(v) that can be evaluated for any set of v (fit parameter)
-    f_loglike = let f_fit = fit_function, h = h
-        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    f_loglike = let f_fit = fit_function, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+        v -> ll(x -> x in interval ? f_fit(x, v) : 0)
     end
 
     # MLE

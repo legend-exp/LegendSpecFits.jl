@@ -173,8 +173,8 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
     fit_function = get_aoe_fit_functions(; )[fit_func]
 
     # create loglikehood function
-    f_loglike = let f_fit=fit_function, h=h
-        v -> hist_loglike(x -> x in Interval(extrema(h.edges[1])...) ? f_fit(x, v) : 0, h)
+    f_loglike = let f_fit = fit_function, ll = HistLogLike(h), interval = Interval(extrema(h.edges[1])...)
+        v -> ll(x -> x in interval ? f_fit(x, v) : 0)
     end
 
     # MLE
