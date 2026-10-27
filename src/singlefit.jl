@@ -134,8 +134,8 @@ function fit_half_centered_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, 
 
     # get peak stats
     bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
-    x_min, x_max = minimum(x), maximum(x)
-    x_nocut = copy(x)
+    x_min, x_max = extrema(x)
+    x_nocut = x
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
     ps = estimate_single_peak_stats_simple(h_nocut)
     @debug "Peak stats: $ps"
@@ -254,8 +254,8 @@ function fit_half_trunc_gauss(x::Vector{<:Unitful.RealOrRealQuantity}, cuts::Nam
 
     # get peak stats
     bin_width = get_friedman_diaconis_bin_width(x[cut_low .<= x .<= cut_high])
-    x_min, x_max = minimum(x), maximum(x)
-    x_nocut = copy(x)
+    x_min, x_max = extrema(x)
+    x_nocut = x
     h_nocut = fit(Histogram, x, x_min:bin_width:x_max)
     ps = estimate_single_peak_stats_simple(h_nocut)
     @debug "Peak stats: $ps"
