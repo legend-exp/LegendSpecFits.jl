@@ -19,5 +19,6 @@ Test.@testset "Package LegendSpecFits" begin
     include("test_survival_fractions.jl")
     include("test_simplecal.jl")
     include("test_sipm.jl")
+    include("test_pmtfit.jl")
     isempty(Test.detect_ambiguities(LegendSpecFits))
 end # testset
