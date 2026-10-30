@@ -24,9 +24,12 @@ kwargs:
 
 Returns `(result, report)`. `result` carries the calibration (`f_simple_calib`,
 `c`, `offset`, `peakpos`, `noisepeakpos`, `noisepeakwidth`, `noise_threshold`,
-`noise_threshold_cal`). `report` carries plotting data (`peakpos*`, `h_uncal`,
-`h_calsimple`, `h_*_full` for the unfiltered all-trigger spectra,
-`noise_threshold*`, `valley_found`).
+`noise_threshold_cal`, `trigger_threshold`, `trigger_threshold_cal`: the
+minimum of the single-trigger spectrum between the noise cut and the 1 PE peak,
+the middle of a wide valley, or the noise cut if the spectrum only rises above
+it). `report` carries plotting data (`peakpos*`,
+`h_uncal`, `h_calsimple`, `h_*_full` for the unfiltered all-trigger spectra,
+`noise_threshold*`, `valley_found`, `trigger_threshold*`).
 """
 function sipm_simple_calibration end
 export sipm_simple_calibration
@@ -205,13 +208,46 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     h_uncal = fit(Histogram, pe_uncal, 0.0:bin_width_uncal:f_simple_uncal(max_pe_peak + 1))
 
     noise_threshold_cal = f_simple_calib(noise_threshold)
+    trigger_threshold_cal = _find_trigger_threshold(h_calsimple, noise_threshold_cal, first(peakpos_cal))
+    trigger_threshold = f_simple_uncal(trigger_threshold_cal)
     noisepeakpos, noisepeakwidth = cuts_1pe.max, cuts_1pe.high - cuts_1pe.low
     result = (; pe_simple_cal, peakpos, f_simple_calib, f_simple_uncal, c, offset,
-                noisepeakpos, noisepeakwidth, noise_threshold, noise_threshold_cal)
+                noisepeakpos, noisepeakwidth, noise_threshold, noise_threshold_cal, trigger_threshold, trigger_threshold_cal)
     # `h_*_full` duplicate `h_*` here so that both methods return the same report fields (the plot recipe dispatches on
     # them); the VoV method replaces them with the unfiltered all-trigger spectra.
     report = (; peakpos, peakpos_cal, h_uncal, h_calsimple,
                 h_uncal_full = h_uncal, h_calsimple_full = h_calsimple,
-                noise_threshold, noise_threshold_cal, valley_found)
+                noise_threshold, noise_threshold_cal, valley_found, trigger_threshold, trigger_threshold_cal)
     return result, report
+end
+
+# Trigger threshold: the minimum of the smoothed single-trigger spectrum between the noise cut and the 1 PE peak
+# (or the first sub-peak of a split 1 PE peak: the search stops at the first local maximum that rises to twice the
+# minimum before it). A wide valley is a plateau of bins at the minimum level and gives its middle, like
+# `_find_noise_threshold`; a narrow valley is refined by a bisection on the smoothed derivative. A minimum at the
+# noise cut itself means the spectrum only rises above the cut: the trigger threshold is then the noise cut.
+# `smooth_width` (in PE) is the Savitzky-Golay window, wider than the ADC comb period of low-gain channels.
+function _find_trigger_threshold(h::Histogram, noise_threshold_cal::Real, pe1_pos::Real; smooth_width::Real = 0.15)
+    x = StatsBase.midpoints(first(h.edges))
+    lo = something(findfirst(>=(noise_threshold_cal), x), length(x))
+    hi = something(findfirst(>=(pe1_pos), x), length(x))
+    window = max(7, round(Int, smooth_width / step(first(h.edges))))
+    isodd(window) || (window += 1)
+    hi - lo > window || return noise_threshold_cal
+    # smooth only the range above the cut: the single-trigger spectrum starts at the cut with a step that would
+    # make the smoothing ring
+    xs, w = x[lo:hi], h.weights[lo:hi]
+    y = savitzky_golay(w, window, 1).y
+    dy = savitzky_golay(w, window, 3; deriv = 1).y
+    ymin = accumulate(min, y)
+    imax = something(findfirst(j -> dy[j] > 0 && dy[j+1] <= 0 && y[j] > 2 * ymin[j], 2:length(y)-1), length(y) - 2) + 1
+    imin = argmin(view(y, 1:imax))
+    imin == 1 && return noise_threshold_cal
+    level = max(1.5 * y[imin], y[imin] + 1.0)
+    i0 = something(findlast(j -> y[j] > level, 1:imin), 1)
+    i1 = something(findfirst(j -> y[j] > level, imin:imax), imax - imin + 1) + imin - 1
+    i1 - i0 > 3 && return (xs[i0] + xs[i1]) / 2
+    dy[i0] < 0 < dy[i1] || return xs[imin]
+    d = t -> dy[i0] + (dy[i1] - dy[i0]) * (t - xs[i0]) / (xs[i1] - xs[i0])
+    return find_zero(d, (xs[i0], xs[i1]), Bisection())
 end
