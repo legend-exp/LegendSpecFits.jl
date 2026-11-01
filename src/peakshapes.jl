@@ -14,7 +14,7 @@ The PDF of an
 [Exponentially modified Gaussian distribution](https://en.wikipedia.org/wiki/Exponentially_modified_Gaussian_distribution)
 with Gaussian parameters `μ`, `σ` and exponential scale `θ` at `x`.
 
-It is the PDF of the distribution that descibes the random process
+It is the PDF of the distribution that describes the random process
 `rand(Normal(μ, σ)) + rand(Exponential(θ))`.
 """
 function ex_gauss_pdf(x::Real, μ::Real, σ::Real, θ::Real)
@@ -40,7 +40,7 @@ end
 """
     step_gauss(x::Real, μ::Real, σ::Real)
 
-Evaluates the convulution of a Heaviside step function and the
+Evaluates the convolution of a Heaviside step function and the
 PDF of `Normal(μ, σ)` at `x`.
 
 The result does not correspond to a PDF as it is not normalizable.
@@ -65,7 +65,7 @@ export linear_function
 Evaluates an exponential decay function at `x` with parameters `amplitude`, `decay` and `offset`.
 """
 function exponential_decay(
-    x::Real, amplitude::Real, decay::Real, offset::Real 
+    x::Real, amplitude::Real, decay::Real, offset::Real
 )
     return amplitude * exp(-decay * x) + offset
 end
@@ -75,13 +75,13 @@ export exponential_decay
     gamma_peakshape(
         x::Real, μ::Real, σ::Real, n::Real,
         step_amplitude::Real, skew_fraction::Real, skew_width::Real,
-        background::Real;  
-        skew_fraction_highE::Real = 0.0, skew_width_highE::Real= 0.0, 
-        background_kwargs... 
+        background::Real;
+        skew_fraction_highE::Real = 0.0, skew_width_highE::Real= 0.0,
+        background_kwargs...
     )
-    
+
 Standard gamma peakshape: Describes the shape of a typical gamma peak in a detector.
-Components: 
+Components:
 - Gaussian signal peak with `μ`, `σ`, `n - skew_fraction - skew_fraction_highE`
 - low-energy tail: `skew_fraction`, `skew_width`
 - high-energy tail: `skew_fraction_highE`, `skew_width_highE` (optional, default off)
@@ -94,9 +94,9 @@ Components:
 function gamma_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
     step_amplitude::Real, skew_fraction::Real, skew_width::Real,
-    background::Real;  
-    skew_fraction_highE::Real = 0.0, skew_width_highE::Real= 0.0, 
-    background_kwargs... 
+    background::Real;
+    skew_fraction_highE::Real = 0.0, skew_width_highE::Real= 0.0,
+    background_kwargs...
 )
     return  signal_peakshape(x, μ, σ, n, skew_fraction; skew_fraction_highE = skew_fraction_highE) +
             lowEtail_peakshape(x, μ, σ, n, skew_fraction, skew_width) +
@@ -110,7 +110,7 @@ export gamma_peakshape
         x::Real, μ::Real, σ::Real, n::Real,
         skew_fraction::Real;  skew_fraction_highE::Real = 0.0
     )
-    
+
 Describes the signal part of the shape of a typical gamma peak in a detector.
 """
 function signal_peakshape(x::Real, μ::Real, σ::Real, n::Real, skew_fraction::Real;  skew_fraction_highE::Real = 0.0)
@@ -120,20 +120,20 @@ export signal_peakshape
 
 """
     background_peakshape(
-    x::Real, μ::Real, σ::Real, 
-    step_amplitude::Real, background::Real; 
+    x::Real, μ::Real, σ::Real,
+    step_amplitude::Real, background::Real;
     background_slope::Real = 0.0, background_exp = 0.0, background_center::Real = µ
 )
 
-Describes the background part of the shape of a typical gamma peak in a detector:  components: 
+Describes the background part of the shape of a typical gamma peak in a detector:  components:
 - step-function scaled with `step_amplitude``
 - energy-independent background: `background``
 - linear slope: `background_slope` (optional)
 - exponential decay:  `background_exp` (optional)
 """
 function background_peakshape(
-    x::Real, μ::Real, σ::Real, 
-    step_amplitude::Real, background::Real; 
+    x::Real, μ::Real, σ::Real,
+    step_amplitude::Real, background::Real;
     background_slope::Real = 0.0, background_exp = 0.0, background_center::Real = μ
 )
     step_amplitude * step_gauss(-x, -μ, σ) + background * exp(-background_exp * (x - background_center)) + background_slope * (x - background_center)
@@ -145,7 +145,7 @@ export background_peakshape
         x::Real, μ::Real, σ::Real, n::Real,
         skew_fraction::Real, skew_width::Real,
     )
-    
+
 Describes the low-E signal tail part of the shape of a typical gamma peak in a detector.
 """
 function lowEtail_peakshape(
@@ -162,8 +162,8 @@ export lowEtail_peakshape
         x::Real, μ::Real, σ::Real, n::Real,
         skew_fraction::Real, skew_width::Real,
     )
-    
-Describes the high-E signal tail part of the shape 
+
+Describes the high-E signal tail part of the shape
 """
 function highEtail_peakshape(
     x::Real, μ::Real, σ::Real, n::Real,
@@ -180,7 +180,7 @@ export highEtail_peakshape
 Evaluates an extended step gauss model at `x` with parameters `l`, `k`, `t` and `d`.
 """
 function ex_step_gauss(
-    x::Real, l::Real, k::Real, 
+    x::Real, l::Real, k::Real,
     t::Real, d::Real
 )
     # `+ l` as published in GERDA Eq. (1), EPJC 73 (2013) 2583 (l ≈ 1 in
@@ -238,17 +238,17 @@ export aoe_compton_background_peakshape
 
 """
     double_gaussian(
-        x::Real, μ1::Real, σ1::Real, n1::Real, 
+        x::Real, μ1::Real, σ1::Real, n1::Real,
         μ2::Real, σ2::Real, n2::Real
     )
 
 Evaluates the sum of two gaussians at `x` with parameters `μ1`, `σ1`, `n1`, `μ2`, `σ2`, `n2`.
 """
 function double_gaussian(
-    x::Real, μ1::Real, σ1::Real, n1::Real, 
+    x::Real, μ1::Real, σ1::Real, n1::Real,
     μ2::Real, σ2::Real, n2::Real
 )
-    return n1 * gauss_pdf(x, μ1, σ1) + n2 * gauss_pdf(x, μ2, σ2)  
+    return n1 * gauss_pdf(x, μ1, σ1) + n2 * gauss_pdf(x, μ2, σ2)
 end
 export double_gaussian
 
@@ -258,8 +258,8 @@ export double_gaussian
 ###############################################################
 
 function two_emg_aoe_compton_peakshape( # total fit function with two EMGs
-    x::Real, 
-    μ::Real, σ::Real, n::Real, background::Real, δ::Real, 
+    x::Real,
+    μ::Real, σ::Real, n::Real, background::Real, δ::Real,
     μ2::Real, σ2::Real, background2_fraction::Real, δ2::Real
 )
     return iszero(σ) || iszero(σ2) ? zero(x) : n * gauss_pdf(x, μ, σ) + background * ( (1 - background2_fraction) * ex_gauss_pdf(-x, -μ, σ, δ) + background2_fraction * ex_gauss_pdf(-x, -μ2, σ2, δ2))
@@ -267,7 +267,7 @@ end
 export two_emg_aoe_compton_peakshape
 
 function two_emg_aoe_compton_background_peakshape( # background function with two EMGs
-    x::Real, 
+    x::Real,
     μ::Real, σ::Real, background::Real, δ::Real,
     μ2::Real, σ2::Real, background2_fraction::Real, δ2::Real
 )

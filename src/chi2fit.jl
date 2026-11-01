@@ -6,18 +6,18 @@ Least square fit with chi2 minimization
 - x : x-values
 - y : y-values
 - yerr : 1 sigma uncertainty on y
-- f_fit : fit/model function. e.g. for a linear function: f_lin(x,p1,p2)  = p1 .* x .+ p2   
-The numer of fit parameter is determined with `first(methods(f_fit)).nargs - 2`. That's why it's important that f_fit has the synthax f(x,arg1,arg2,arg3,...)
+- f_fit : fit/model function. e.g. for a linear function: f_lin(x,p1,p2)  = p1 .* x .+ p2
+The number of fit parameter is determined with `first(methods(f_fit)).nargs - 2`. That's why it's important that f_fit has the synthax f(x,arg1,arg2,arg3,...)
 pull_t : pull term, a vector of NamedTuple with fields `mean` and `std`. A Gaussian pull term is added to the chi2 function to account for systematic uncertainties. If left blank, no pull term is used.
 v_init : initial value for fit parameter optimization. If left blank, the initial value is set to 1 or guessed roughly for all fit parameters
 correlated : if `true`, the returned parameters carry their full covariance, so that uncertainties of quantities derived from them, including `report.f_fit`, account for the parameter correlations. If `false`, the parameters are independent measurements with the same marginal uncertainties, which overestimates the uncertainty of derived quantities whenever the parameters are correlated.
 # Return:
 - result : NamedTuple with the optimized fit parameter and the fit function
-- report: 
+- report:
 
-""" 
-function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}}; 
-                    pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), first(methods(f_fit)).nargs - 2), 
+"""
+function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:Real}}}, y::AbstractVector{<:Union{Real,Measurement{<:Real}}};
+                    pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), first(methods(f_fit)).nargs - 2),
                     v_init::Vector{<:Real} = ones(length(pull_t)),
                     lower_bound::Vector{<:Real}=fill(-Inf, length(pull_t)),
                     upper_bound::Vector{<:Real}=fill(Inf, length(pull_t)),
@@ -43,17 +43,17 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
         BAT.DistributionTransform(Normal, pseudo_prior)
     end
 
-    # get rid of measurements 
+    # get rid of measurements
     X_val = mvalue.(x)
     Y_val = mvalue.(y)
     X_err= muncert.(x)
     Y_err = muncert.(y)
     if all(X_err .== 0) && all(Y_err .== 0)
         Y_err = ones(length(Y_val))
-    end 
+    end
     # muncert_res(x) = x==0 ? 1.0 : muncert(x) # if uncertainties are zero use 1.0 instead (equal weights)
 
-    # chi2-function 
+    # chi2-function
     function chi2xy(f_fit, x_val, x_err, y_val, y_err, pars)
         dual_x = ForwardDiff.Dual{UncertTag}(x_val, x_err)
         dual_y = f_fit(dual_x, pars...)
@@ -63,12 +63,12 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
         return chi2
     end
 
-    # function that is minimized -> chi-squared with pull terms 
+    # function that is minimized -> chi-squared with pull terms
     f_opt = let X_val = X_val, Y_val = Y_val, X_err = X_err, Y_err = Y_err, f_pull = pull_t_sum, f_fit = f_fit
         v -> sum(chi2xy.(Ref(f_fit), X_val, X_err, Y_val, Y_err, Ref(v))) + f_pull(v)
     end
 
-    # init guess for fit parameter: this could be improved. 
+    # init guess for fit parameter: this could be improved.
     npar = length(pull_t) # number of fit parameter (including nuisance parameters)
 
     # minimize in the pseudo-prior space u, where one unit is one prior standard deviation
@@ -86,12 +86,12 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     # get best fit results
     u_chi2 = collect(m.values)
     v_chi2 = f_inv(u_chi2)
-    
+
     if !converged @warn "Fit did not converge" end
     par = measurement.(v_chi2,Ref(NaN)) # if ucnertainty is not calculated, return NaN
     result = (par = par, converged = converged) # fit function with optimized parameters
     report = (par = result.par, f_fit = x -> f_fit(x, v_chi2...), x = x, y = y, gof = NamedTuple())
-    
+
     if uncertainty && converged
         try
             # cov = 2 H⁻¹ for a χ², in the fit parameters: the prior transform is too nonlinear in its
@@ -103,18 +103,18 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
             else
                 measurement.(v_chi2, sqrt.(diag(covmat)))
             end
-            
+
             @debug "Best Fit parameters: $par"
-            # gof 
+            # gof
             chi2min = m.fval
             # each pull term constrains one parameter like an additional data point
             dof = length(x) - length(v_chi2) + count(!isempty, pull_t)
             pvalue = if iszero(dof)
                 @warn "The number of fit parameters is equivalent to number of data points --> dof = 0 ; p-value not meaningful, set to NaN"
                 NaN
-            else 
+            else
                 ccdf(Chisq(dof), chi2min)
-            end 
+            end
 
             function get_y_pred_err(f_fit, x_val, x_err, pars)  # get final uncertainties for normalized residuals
                 dual_x = ForwardDiff.Dual{UncertTag}(x_val, x_err)
@@ -139,15 +139,15 @@ function chi2fit(f_fit::Function, x::AbstractVector{<:Union{Real,Measurement{<:R
     else
         @debug "Best Fit parameters: $par"
     end
-    return result, report 
+    return result, report
 end
 
-function chi2fit(n_poly::Int, x, y; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), n_poly+1), kwargs...) 
+function chi2fit(n_poly::Int, x, y; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), n_poly+1), kwargs...)
     @assert length(pull_t) == n_poly+1 "Length of pull_t does not match the order of the polynomial"
     chi2fit((x, a...) -> PolCalFunc(a...).(x), x, y; pull_t = pull_t, kwargs...)
 end
 
-function chi2fit(f_outer::Function, n_poly::Int, x, y; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), n_poly + 1), kwargs...) 
+function chi2fit(f_outer::Function, n_poly::Int, x, y; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), n_poly + 1), kwargs...)
     @assert length(pull_t) == n_poly + 1 "Length of pull_t does not match the order of the polynomial"
     chi2fit((x, a...) -> f_outer.(PolCalFunc(a...).(x)), x, y; pull_t = pull_t, kwargs...)
 end

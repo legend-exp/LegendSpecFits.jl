@@ -7,7 +7,7 @@ MaybeWithEnergyUnits = Union{Real, Unitful.Energy{<:Real}}
 
 
 function get_aoe_fit_functions(; background_center::Union{Real,Nothing} = nothing)
-    merge( 
+    merge(
         (aoe_one_bck = (x, v) -> aoe_compton_peakshape(x, v.μ, v.σ, v.n, v.B, v.δ),
         aoe_two_bck = (x, v) -> two_emg_aoe_compton_peakshape(x, v.μ, v.σ, v.n, v.B, v.δ, v.μ2, v.σ2, v.B2f, v.δ2),
         ),
@@ -15,14 +15,14 @@ function get_aoe_fit_functions(; background_center::Union{Real,Nothing} = nothin
         NamedTuple()
     else
         NamedTuple()
-    end   
+    end
     )
 end
 
 """
-    aoe_compton_peakshape_components(fit_func::Symbol; background_center::Real) 
-This function defines the components (signal, low/high-energy tail, backgrounds) of the fit function used in gamma specfits. 
-These component functions are used in the fit-report and in plot receipes 
+    aoe_compton_peakshape_components(fit_func::Symbol; background_center::Real)
+This function defines the components (signal, low/high-energy tail, backgrounds) of the fit function used in gamma specfits.
+These component functions are used in the fit-report and in plot recipes
 """
 function aoe_compton_peakshape_components(fit_func::Symbol; background_center::Union{Real,Nothing} = nothing)
     if fit_func == :aoe_one_bck
@@ -38,7 +38,7 @@ function aoe_compton_peakshape_components(fit_func::Symbol; background_center::U
         labels = (f_sig = "Signal", f_bck_one = "First EMG", f_bck_two = "Second EMG")
         colors = (f_sig = :orangered1, f_bck_one = :dodgerblue2, f_bck_two = :green)
         linestyles = (f_sig = :solid, f_bck_one = :dash, f_bck_two = :dashdot)
-    end 
+    end
     return (funcs = funcs, labels = labels, colors = colors, linestyles = linestyles)
 end
 

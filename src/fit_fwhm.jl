@@ -31,9 +31,9 @@ const e_fit_fwhm_unit = u"MeV"
 
 function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}}; e_type_cal::Symbol=:e_cal, e_expression::Union{Symbol, String}="e", uncertainty::Bool=true, correlated::Bool=true, pull_fano::Bool=false)
     @assert length(peaks) == length(fwhm) "Peaks and FWHM must have the same length"
-    @assert pol_order == 1 || pol_order == 2 "Only 1, 2 order polynominal calibration is supported"
+    @assert pol_order == 1 || pol_order == 2 "Only 1, 2 order polynomial calibration is supported"
 
-    @debug "Fit resolution curve with $(pol_order)-order polynominal function"
+    @debug "Fit resolution curve with $(pol_order)-order polynomial function"
     # initial guess for the polynomial coefficients (ENC, Fano term, quadratic term) from a pre-fit
     par_guess = _get_enc_fano_guess(peaks, fwhm, pol_order)
     @debug "Initial guess for fit parameters: $par_guess"
@@ -79,7 +79,7 @@ function fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm:
     func_cal = "sqrt($p_str_cal)"
     func_cal_err = "sqrt($p_str_cal) ± (sqrt($d_str_cal) / (2 * sqrt($p_str_cal)))"
 
-    # get fwhm at Qbb 
+    # get fwhm at Qbb
     # Qbb from: https://www.researchgate.net/publication/253446083_Double-beta-decay_Q_values_of_74Se_and_76Ge
     qbb = report_chi2.f_fit(measurement(2039.061, 0.007)) * e_unit
     result = merge(result_chi2, (par = par_fit, qbb = qbb, func = func, func_err = func_err, func_cal = func_cal, func_cal_err = func_cal_err, peaks = peaks, fwhm = fwhm))
@@ -144,6 +144,6 @@ function get_fit_fwhm_pseudo_prior(pol_order::Int, par_guess::AbstractVector{<:M
         ct = truncated(_weibull(par_guess[3]).untruncated, 0, mvalue(par_guess[2])^2 / (4 * mvalue(par_guess[1])))
         NamedTupleDist(; enc, fano, ct)
     else
-        throw(ArgumentError("Only 1, 2 order polynominal calibration is supported"))
+        throw(ArgumentError("Only 1, 2 order polynomial calibration is supported"))
     end)
 end
