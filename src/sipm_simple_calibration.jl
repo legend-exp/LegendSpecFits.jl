@@ -24,9 +24,12 @@ kwargs:
 
 Returns `(result, report)`. `result` carries the calibration (`f_simple_calib`,
 `c`, `offset`, `peakpos`, `noisepeakpos`, `noisepeakwidth`, `noise_threshold`,
-`noise_threshold_cal`). `report` carries plotting data (`peakpos*`, `h_uncal`,
-`h_calsimple`, `h_*_full` for the unfiltered all-trigger spectra,
-`noise_threshold*`, `valley_found`).
+`noise_threshold_cal`, `trigger_threshold`, `trigger_threshold_cal`: the
+lowest minimum of the single-trigger spectrum between the noise cut and the
+1 PE peak, or the noise cut if there is none below the spectrum at the cut).
+`report` carries plotting data (`peakpos*`,
+`h_uncal`, `h_calsimple`, `h_*_full` for the unfiltered all-trigger spectra,
+`noise_threshold*`, `valley_found`, `trigger_threshold*`).
 """
 function sipm_simple_calibration end
 export sipm_simple_calibration
@@ -66,6 +69,34 @@ function _find_noise_threshold(pe_data, cuts_1pe, n_fwhm_noise_cut, initial_min_
     # Plateau too short → no real valley (e.g. noise tail blends into the 1PE rising flank). Fall back to N×FWHM above the noise peak.
     length(plateau) < 4 && return cuts_1pe.max + 3.0 * fwhm_noise, false
     return edges[(first(plateau) + last(plateau)) ÷ 2 + 1], true
+end
+
+# Trigger threshold: the lowest minimum of the smoothed single-trigger spectrum between the noise cut and the 1 PE
+# peak, or the noise cut if there is no minimum below the spectrum at the cut. Smoothing starts at the cut, where the
+# single-trigger spectrum begins with a step that would make it ring; `smooth_width` (in PE) is wider than the ADC
+# comb period of low-gain channels.
+function _find_trigger_threshold(h::Histogram, noise_threshold_cal::Real, pe1_pos::Real; smooth_width::Real = 0.15)
+    x = StatsBase.midpoints(first(h.edges))
+    lo = something(findfirst(>=(noise_threshold_cal), x), length(x))
+    hi = something(findfirst(>=(pe1_pos), x), length(x))
+    # smoothing window in bins (odd, as savitzky_golay requires; it throws if the window is too short for order 2)
+    window = round(Int, smooth_width / step(first(h.edges)))
+    isodd(window) || (window += 1)
+    # the noise cut is closer to the 1 PE peak than one smoothing window: no valley can be resolved in between
+    hi - lo > window || return noise_threshold_cal
+    xs, w = x[lo:hi], h.weights[lo:hi]
+    y = savitzky_golay(w, window, 2).y
+    dy = savitzky_golay(w, window, 2; deriv = 1).y
+    # minima: the slope changes from falling to rising between bin j and j+1
+    minima = filter(j -> dy[j] < 0 <= dy[j+1], 1:length(y)-1)
+    # no minimum: the spectrum only rises from the noise cut into the 1 PE peak, its lowest point is the cut itself
+    isempty(minima) && return noise_threshold_cal
+    # several minima (wiggles, or a dip inside a split 1 PE peak): the deepest one is the valley before the 1 PE peak
+    j = minima[argmin(y[minima])]
+    # a minimum higher than the spectrum at the cut is only a wiggle on the rising flank, the cut itself is lower
+    y[j] < first(y) || return noise_threshold_cal
+    # zero of the slope between bin j and j+1, linearly interpolated
+    return xs[j] - dy[j] * (xs[j+1] - xs[j]) / (dy[j+1] - dy[j])
 end
 
 function sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real};
@@ -205,13 +236,15 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     h_uncal = fit(Histogram, pe_uncal, 0.0:bin_width_uncal:f_simple_uncal(max_pe_peak + 1))
 
     noise_threshold_cal = f_simple_calib(noise_threshold)
+    trigger_threshold_cal = _find_trigger_threshold(h_calsimple, noise_threshold_cal, min_pe_peak)
+    trigger_threshold = f_simple_uncal(trigger_threshold_cal)
     noisepeakpos, noisepeakwidth = cuts_1pe.max, cuts_1pe.high - cuts_1pe.low
     result = (; pe_simple_cal, peakpos, f_simple_calib, f_simple_uncal, c, offset,
-                noisepeakpos, noisepeakwidth, noise_threshold, noise_threshold_cal)
+                noisepeakpos, noisepeakwidth, noise_threshold, noise_threshold_cal, trigger_threshold, trigger_threshold_cal)
     # `h_*_full` duplicate `h_*` here so that both methods return the same report fields (the plot recipe dispatches on
     # them); the VoV method replaces them with the unfiltered all-trigger spectra.
     report = (; peakpos, peakpos_cal, h_uncal, h_calsimple,
                 h_uncal_full = h_uncal, h_calsimple_full = h_calsimple,
-                noise_threshold, noise_threshold_cal, valley_found)
+                noise_threshold, noise_threshold_cal, valley_found, trigger_threshold, trigger_threshold_cal)
     return result, report
 end
