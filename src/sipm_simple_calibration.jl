@@ -239,7 +239,7 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     trigger_threshold_cal = _find_trigger_threshold(h_calsimple, noise_threshold_cal, min_pe_peak)
     trigger_threshold = f_simple_uncal(trigger_threshold_cal)
     noisepeakpos, noisepeakwidth = cuts_1pe.max, cuts_1pe.high - cuts_1pe.low
-    result = (; pe_simple_cal, peakpos, f_simple_calib, f_simple_uncal, c, offset,
+    result = (; pe_simple_cal, peakpos, c, offset,
                 noisepeakpos, noisepeakwidth, noise_threshold, noise_threshold_cal, trigger_threshold, trigger_threshold_cal)
     # `h_*_full` duplicate `h_*` here so that both methods return the same report fields (the plot recipe dispatches on
     # them); the VoV method replaces them with the unfiltered all-trigger spectra.
