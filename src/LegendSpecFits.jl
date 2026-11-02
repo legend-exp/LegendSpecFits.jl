@@ -19,6 +19,7 @@ using DensityInterface
 using DensityInterface: densityof
 using FunctionChains: ffcomp
 using Distributions
+using FFTW: rfft, irfft, rfftfreq
 using FillArrays
 using Format
 using ForwardDiff
@@ -93,6 +94,8 @@ include("calfunc.jl")
 include("sipm_simple_calibration.jl")
 include("sipmfit.jl")
 include("sipm_filter_optimization.jl")
+include("sipm_template.jl")
+include("sipm_kernel.jl")
 abstract type UncertTag end
 ForwardDiff.:(≺)(::Type{<:ForwardDiff.Tag}, ::Type{UncertTag}) = true
 ForwardDiff.:(≺)(::Type{UncertTag}, ::Type{<:ForwardDiff.Tag}) = false
