@@ -34,7 +34,7 @@ function fit_sipm_wl(trig_max_grid::VectorOfVectors{<:Real}, e_grid_wl::StepRang
                                             min_pe_peak=min_pe_peak, max_pe_peak=max_pe_peak, n_fwhm_noise_cut=n_fwhm_noise_cut, peakfinder_threshold=peakfinder_threshold, 
                                             peakfinder_rtol=peakfinder_rtol, peakfinder_α=peakfinder_α, peakfinder_σ=peakfinder_σ)
 
-            result_fit, report_fit = fit_sipm_spectrum(result_simple.pe_simple_cal, min_pe_fit, max_pe_fit; f_uncal=result_simple.f_simple_uncal, Δpe_peak_assignment=Δpe_peak_assignment)
+            result_fit, report_fit = fit_sipm_spectrum(report_simple.pe_simple_cal, min_pe_fit, max_pe_fit; f_uncal=report_simple.f_simple_uncal, Δpe_peak_assignment=Δpe_peak_assignment)
 
             # gain_wl[w] = minimum(result_simple.peakpos) - ifelse(threshold == 0.0, result_simple.noisepeakpos, threshold)
             gain_wl[w] = minimum(result_simple.peakpos) - result_simple.noisepeakpos

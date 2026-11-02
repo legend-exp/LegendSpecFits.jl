@@ -14,7 +14,7 @@ using StatsBase
         @test result.c ≈ 1 / 1.4 rtol = 0.1
         @test result.noise_threshold == 0.3
         @test result.trigger_threshold_cal == result.noise_threshold_cal
-        @test result.trigger_threshold ≈ result.f_simple_uncal(result.trigger_threshold_cal)
+        @test result.trigger_threshold ≈ report.f_simple_uncal(result.trigger_threshold_cal)
         @test haskey(report, :trigger_threshold) && haskey(report, :trigger_threshold_cal)
     end
 
@@ -24,7 +24,7 @@ using StatsBase
         @test result.c ≈ 1 / 1.4 rtol = 0.1
         # the valley lies between the noise tail (ends around 0.6 PE) and the 1 PE peak (σ = 0.2 PE)
         @test result.noise_threshold_cal < result.trigger_threshold_cal < 1 - 2 * 0.3 / 1.4
-        @test result.trigger_threshold ≈ result.f_simple_uncal(result.trigger_threshold_cal)
+        @test result.trigger_threshold ≈ report.f_simple_uncal(result.trigger_threshold_cal)
     end
 
     @testset "wide empty valley: trigger threshold in its middle" begin

@@ -22,14 +22,15 @@ kwargs:
     * `single_trigger_only` (VoV only)
     * `min_pe_peak`, `max_pe_peak`, `peakfinder_*`: peakfinder controls
 
-Returns `(result, report)`. `result` carries the calibration (`f_simple_calib`,
-`c`, `offset`, `peakpos`, `noisepeakpos`, `noisepeakwidth`, `noise_threshold`,
+Returns `(result, report)`. `result` carries the calibration (`c`, `offset`:
+`x_cal = x * c + offset`, `peakpos`, `noisepeakpos`, `noisepeakwidth`, `noise_threshold`,
 `noise_threshold_cal`, `trigger_threshold`, `trigger_threshold_cal`: the
 lowest minimum of the single-trigger spectrum between the noise cut and the
 1 PE peak, or the noise cut if there is none below the spectrum at the cut).
 `report` carries plotting data (`peakpos*`,
 `h_uncal`, `h_calsimple`, `h_*_full` for the unfiltered all-trigger spectra,
-`noise_threshold*`, `valley_found`, `trigger_threshold*`).
+`noise_threshold*`, `valley_found`, `trigger_threshold*`) and the simple calibrated amplitudes
+`pe_simple_cal` with the calibration functions `f_simple_calib`, `f_simple_uncal`.
 """
 function sipm_simple_calibration end
 export sipm_simple_calibration
@@ -123,7 +124,7 @@ function sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real};
     # and carries this threshold in its result and report; add the valley flag and the unfiltered all-trigger spectra.
     result, report = sipm_simple_calibration(pe_uncal; initial_min_amp=noise_threshold, initial_max_amp, relative_cut_noise_cut, n_fwhm_noise_cut=0.0, kwargs...)
     h_uncal_full = fit(Histogram, cut_pool, first(report.h_uncal.edges))
-    h_calsimple_full = fit(Histogram, result.f_simple_calib.(cut_pool), first(report.h_calsimple.edges))
+    h_calsimple_full = fit(Histogram, report.f_simple_calib.(cut_pool), first(report.h_calsimple.edges))
     return result, merge(report, (; valley_found, h_uncal_full, h_calsimple_full))
 end
 
@@ -239,12 +240,13 @@ function sipm_simple_calibration(pe_uncal::Vector{<:Real};
     trigger_threshold_cal = _find_trigger_threshold(h_calsimple, noise_threshold_cal, min_pe_peak)
     trigger_threshold = f_simple_uncal(trigger_threshold_cal)
     noisepeakpos, noisepeakwidth = cuts_1pe.max, cuts_1pe.high - cuts_1pe.low
-    result = (; pe_simple_cal, peakpos, c, offset,
+    result = (; peakpos, c, offset,
                 noisepeakpos, noisepeakwidth, noise_threshold, noise_threshold_cal, trigger_threshold, trigger_threshold_cal)
     # `h_*_full` duplicate `h_*` here so that both methods return the same report fields (the plot recipe dispatches on
     # them); the VoV method replaces them with the unfiltered all-trigger spectra.
     report = (; peakpos, peakpos_cal, h_uncal, h_calsimple,
                 h_uncal_full = h_uncal, h_calsimple_full = h_calsimple,
-                noise_threshold, noise_threshold_cal, valley_found, trigger_threshold, trigger_threshold_cal)
+                noise_threshold, noise_threshold_cal, valley_found, trigger_threshold, trigger_threshold_cal,
+                pe_simple_cal, f_simple_calib, f_simple_uncal)
     return result, report
 end
