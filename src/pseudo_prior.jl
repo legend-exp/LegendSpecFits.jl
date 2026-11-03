@@ -5,9 +5,6 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
     # base priors common with all functions
     window_left = ps.peak_pos - minimum(h.edges[1])
     window_right = maximum(h.edges[1]) - ps.peak_pos
-    # A step estimate below the per-bin background scatter is noise. Using the scatter as the
-    # median keeps the 68.27 % quantile within 6 medians (Weibull shape ≥ 0.28), so the
-    # transformed step amplitude stays finite for the optimizer.
     step_median = max(ps.mean_background_step, ps.mean_background_std)
     # base priors common with all functions
     pprior_base = NamedTupleDist(
