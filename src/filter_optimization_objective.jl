@@ -112,25 +112,26 @@ end
 export objective_value
 
 """
-    select_optimum(objective_values::AbstractVector{<:Real}, params::AbstractVector{<:Tuple}; rel_tol::Real)
+    select_optimum(objective_values::AbstractVector{<:Real}, keys::AbstractVector{<:Tuple}; rel_tol::Real)
 
 Index of the selected optimum. Candidates whose objective lies within `min * (1 + rel_tol)` of the
-smallest objective tie; among ties the lexicographically smallest parameter tuple wins, i.e. the
-smallest first element, then the smallest second. `NaN` objectives are never selected. The
-returned index belongs to `eachindex(objective_values, params)`.
+smallest objective tie; among ties the lexicographically smallest key tuple wins, i.e. the
+smallest first element, then the smallest second. To prefer a larger value, pass its negative
+(`(rt, -ft)` selects the shortest `rt`, then the longest `ft`). `NaN` objectives are never selected. The
+returned index belongs to `eachindex(objective_values, keys)`.
 
 Throws an `ArgumentError` if all objectives are `NaN`, if the smallest objective is not positive
 and finite, or if `rel_tol` is not in `[0, Inf)`; throws a `DimensionMismatch` if the two vectors have different
 indices.
 """
-function select_optimum(objective_values::AbstractVector{<:Real}, params::AbstractVector{<:Tuple}; rel_tol::Real)
+function select_optimum(objective_values::AbstractVector{<:Real}, keys::AbstractVector{<:Tuple}; rel_tol::Real)
     0 <= rel_tol < Inf || throw(ArgumentError("select_optimum: rel_tol must satisfy 0 <= rel_tol < Inf, got $rel_tol"))
-    valid = filter(i -> !isnan(objective_values[i]), eachindex(objective_values, params))
+    valid = filter(i -> !isnan(objective_values[i]), eachindex(objective_values, keys))
     isempty(valid) && throw(ArgumentError("select_optimum: all objective values are NaN"))
     best = minimum(objective_values[i] for i in valid)
     0 < best < Inf || throw(ArgumentError("select_optimum: smallest objective must be positive and finite, got $best"))
     ties = filter(i -> objective_values[i] <= best * (1 + rel_tol), valid)
-    return argmin(i -> params[i], ties)
+    return argmin(i -> keys[i], ties)
 end
 export select_optimum
 
@@ -248,7 +249,7 @@ if no admissible neighbor exists at the final point or at least one admissible n
 evaluated successfully, and with `converged = false` if all admissible neighbors failed. It also
 stops with `converged = false` when `max_evals` evaluations are reached. The optimum is chosen with
 `select_optimum` among the final point and its evaluated neighbors at the final steps, so ties
-within `rel_tol` go to the shortest `rt`, then the shortest `ft`.
+within `rel_tol` go to the shortest `rt`, then the longest `ft`.
 
 An evaluation that throws is recorded with its error text in `status` and `NaN` metrics, and the
 search continues.
@@ -357,7 +358,7 @@ function optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0::Unitful.Ti
     end
 
     final = [current; filter(k -> admissible(k) && is_ok(k), neighbors(current, steps))]
-    best_row = records[cache[final[select_optimum([obj(k) for k in final], final; rel_tol)]]]
+    best_row = records[cache[final[select_optimum([obj(k) for k in final], [(rt, -ft) for (rt, ft) in final]; rel_tol)]]]
     result = (
         rt = best_row.rt, ft = best_row.ft, fwhm = best_row.fwhm, w90 = best_row.w90, asym = best_row.asym, fct = best_row.fct, ct_spread = best_row.ct_spread,
         min_objective = objective_value(best_row, objective; ctc_rel_uncertainty), objective = objective,

@@ -94,14 +94,20 @@ using Unitful
     end
 
     @testset "select_optimum" begin
-        params = [(2, 1), (1, 3), (1, 2), (3, 0)]
-        # all four within 0.5 % of the minimum: shortest first, then second element
-        @test select_optimum([1.0, 1.002, 1.003, 0.999], params; rel_tol = 0.005) == 3
-        @test select_optimum([1.0, 1.002, 1.003, 0.999], params; rel_tol = 0.0) == 4
-        @test select_optimum([1.0, 1.02, 1.004, 1.03], params; rel_tol = 0.005) == 3
-        # NaN is never selected, even when its parameters are the shortest
-        @test select_optimum([1.0, 1.0, NaN, 1.0], params; rel_tol = 0.005) == 2
-        @test select_optimum([NaN, 2.0, NaN, 1.0], params; rel_tol = 0.005) == 4
+        # keys are (rt, -ft): shortest rt first, then the longest ft
+        keys = [(2, -1), (1, -3), (1, -2), (3, 0)]
+        # all four within 0.5 % of the minimum
+        @test select_optimum([1.0, 1.002, 1.003, 0.999], keys; rel_tol = 0.005) == 2
+        @test select_optimum([1.0, 1.002, 1.003, 0.999], keys; rel_tol = 0.0) == 4
+        @test select_optimum([1.0, 1.02, 1.004, 1.03], keys; rel_tol = 0.005) == 3
+        # ties in rt and ft separately: rt decides first, ft only breaks rt ties
+        @test select_optimum([1.001, 1.0, 1.002, 1.003], [(1, -1), (2, -9), (1, -5), (1, -3)]; rel_tol = 0.005) == 3
+        @test select_optimum([1.0, 1.001, 1.002], [(1, -2), (1, -2), (1, -2)]; rel_tol = 0.005) == 1
+        # a single-element key selects the longest ft
+        @test select_optimum([1.001, 1.0, 1.003], [(-1,), (-3,), (-2,)]; rel_tol = 0.005) == 2
+        # NaN is never selected, even when its keys are the smallest
+        @test select_optimum([1.0, 1.0, NaN, 1.0], keys; rel_tol = 0.005) == 2
+        @test select_optimum([NaN, 2.0, NaN, 1.0], keys; rel_tol = 0.005) == 4
         @test_throws "all objective values are NaN" select_optimum([NaN, NaN], [(1, 1), (2, 2)]; rel_tol = 0.005)
         @test_throws DimensionMismatch select_optimum([1.0, 2.0], [(1, 1)]; rel_tol = 0.005)
         # indices follow the input axes
@@ -257,11 +263,11 @@ using Unitful
         @test abs(result_f.ft - 2.3u"µs") <= lattice * (1 + 1e-9)
         @test unique_points(report_f.table)
 
-        # flat objective: all points tie, the shortest rt, then ft, of the final neighborhood wins
+        # flat objective: all points tie, the shortest rt, then the longest ft, of the final neighborhood wins
         f_flat(rt, ft) = μ .+ 0.8 .* z
         result_flat, _ = optimize_rtft(f_flat, qdrift, 3.5u"µs", 1.6u"µs"; kw...)
         @test result_flat.converged
-        @test to_steps.((result_flat.rt, result_flat.ft)) == (34, 15)
+        @test to_steps.((result_flat.rt, result_flat.ft)) == (34, 17)
 
         result_short, report_short = optimize_rtft(f_bowl, qdrift, 3.5u"µs", 1.6u"µs"; merge(kw, (max_evals = 5,))...)
         @test !result_short.converged

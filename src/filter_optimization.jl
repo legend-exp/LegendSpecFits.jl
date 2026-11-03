@@ -84,7 +84,7 @@ correction if `apply_ctc` is `true`. Widths are calibrated per flat-top time, sc
 fitted peak position of that point (see `evaluate_energy_point`). The optimum minimizes `objective` (one of `:fwhm, :w90, :asym, :fwhm_asym, :fwhm_ct`, see
 `objective_value`); `:fwhm_ct` requires `apply_ctc=true` and `ctc_rel_uncertainty`, the assumed
 relative error of the correction. Flat-top times whose objective lies within `rel_tol` of the minimum tie and
-the shortest one wins (`select_optimum`). `legacy_ft` is the shortest flat-top time whose FWHM
+the longest one wins (`select_optimum`). `legacy_ft` is the shortest flat-top time whose FWHM
 lies within `ft_fwhm_tol` of the minimum FWHM. A flat-top time whose evaluation throws is
 recorded in `report.table` with its error text in `status` and `NaN` metrics.
 
@@ -140,7 +140,7 @@ function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:R
         throw(ErrorException("No valid FWHM found, could not determine optimal FT"))
     end
     objective_values = [objective_value(row, objective; ctc_rel_uncertainty) for row in rows]
-    i_best = select_optimum(ustrip.(objective_values), [(ft,) for ft in fts]; rel_tol)
+    i_best = select_optimum(ustrip.(objective_values), [(-ft,) for ft in fts]; rel_tol)
     min_fwhm_all = minimum(rows[i].fwhm for i in ok)
     i_legacy = argmin(i -> fts[i], filter(i -> rows[i].fwhm - min_fwhm_all < ft_fwhm_tol, ok))
 
