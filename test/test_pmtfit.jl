@@ -49,6 +49,11 @@ using Random
     x_tail = vcat(abs.(rand(rng, Normal(0.8, 0.3), 100_000)), rand(rng, Exponential(3.0), 5_000))
     @test_throws ArgumentError fit_pmt_spe(x_tail)
 
+    # ranges as vectors, as they come from a YAML config
+    result_vec, _ = fit_pmt_spe(x; hist_range = [0, 100], peak_search_range = [6, 60])
+    @test mvalue(result_vec.μ1) ≈ mvalue(result.μ1)
+    @test_throws ArgumentError fit_pmt_spe(x; peak_search_range = [6, 30, 60])
+
     # pedestal only: no signal above the pedestal
     @test_throws ArgumentError fit_pmt_spe(abs.(rand(rng, Normal(0.8, 0.3), 10_000)))
     @test_throws ArgumentError fit_pmt_spe(x; peak_search_range = (6, 200))

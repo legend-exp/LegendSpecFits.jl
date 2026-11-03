@@ -26,13 +26,15 @@ maximized. The bounds of the parameters follow from the arguments: `μ1` in
 between `bin_width / 2` and the fit range, `r2` in `[0, 1]`; `n_exp` and `n_1` are positive.
 
 # Keywords
-- `hist_range`: range of the histogram, in the unit of `x`; a whole number of bins
+- `hist_range`: range of the histogram, in the unit of `x`, as two numbers (e.g. a tuple or a
+  vector); a whole number of bins
   (default `(0, 100)`)
 - `bin_width`: bin width (default `1`)
-- `peak_search_range`: range in which the valley and the 1 p.e. peak are searched
+- `peak_search_range`: range in which the valley and the 1 p.e. peak are searched, as two
+  numbers
   (default `(6, 60)`)
 - `x_min_offset`: distance of the fit start below the valley (default `2`)
-- `σ1_init`: start value of `σ1` relative to the start value of `μ1` (default `0.33`)
+- `σ1_rel_init`: start value of `σ1` relative to the start value of `μ1` (default `0.33`)
 - `τ_init`: start value of `τ` (default `5`)
 - `r2_init`: start value of `r2` (default `0.1`)
 - `min_counts`: minimum number of entries above `x_min` (default `50`)
@@ -53,10 +55,12 @@ Throws an `ArgumentError` if the smoothed spectrum does not rise again in `peak_
 - `report`: `h` (histogram of all of `hist_range`), `f_fit` (model in counts per unit of `x`,
   `NaN` below `x_min`), `f_components` (`exponential`, `pe1`, `pe2`), `x_min`, `μ1`, `gof`
 """
-function fit_pmt_spe(x::AbstractVector{<:Real}; hist_range::Tuple{<:Real,<:Real} = (0.0, 100.0), bin_width::Real = 1.0,
-                     peak_search_range::Tuple{<:Real,<:Real} = (6.0, 60.0), x_min_offset::Real = 2.0, σ1_init::Real = 0.33,
+function fit_pmt_spe(x::AbstractVector{<:Real}; hist_range = (0.0, 100.0), bin_width::Real = 1.0, peak_search_range = (6.0, 60.0),
+                     x_min_offset::Real = 2.0, σ1_rel_init::Real = 0.33,
                      τ_init::Real = 5.0, r2_init::Real = 0.1, min_counts::Real = 50, uncertainty::Bool = true)
-    lo, hi = float.(peak_search_range)
+    length(hist_range) == 2 || throw(ArgumentError("fit_pmt_spe: hist_range must have two elements, got $hist_range"))
+    length(peak_search_range) == 2 || throw(ArgumentError("fit_pmt_spe: peak_search_range must have two elements, got $peak_search_range"))
+    lo, hi = float(first(peak_search_range)), float(last(peak_search_range))
     first(hist_range) <= lo < hi <= last(hist_range) ||
         throw(ArgumentError("fit_pmt_spe: peak_search_range $peak_search_range must lie within hist_range $hist_range"))
     edges = float(first(hist_range)):float(bin_width):float(last(hist_range))
@@ -94,7 +98,7 @@ function fit_pmt_spe(x::AbstractVector{<:Real}; hist_range::Tuple{<:Real,<:Real}
     # start values from the data and the keywords, inside the bounds
     σ1_lo, σ1_hi = bin_width / 2, hi - lo
     τ_lo, τ_hi = bin_width / 2, last(edges) - x_fit_min
-    σ1_seed = clamp(σ1_init * μ1_seed, σ1_lo, σ1_hi)
+    σ1_seed = clamp(σ1_rel_init * μ1_seed, σ1_lo, σ1_hi)
     n1_seed = max(sum(counts[findall(c -> abs(c - μ1_seed) <= σ1_seed, centers)]) / 0.68, 1.0)
     nexp_seed = max(n_fit - n1_seed, 1.0)
     inside(v, a, b) = clamp(v, a + 1e-3 * (b - a), b - 1e-3 * (b - a))
@@ -160,6 +164,6 @@ function fit_pmt_spe(x::AbstractVector{<:Real}; hist_range::Tuple{<:Real,<:Real}
                               pe1 = x -> v_ml.n_1 * gauss_pdf(x, v_ml.μ1, v_ml.σ1),
                               pe2 = x -> v_ml.r2 * v_ml.n_1 * gauss_pdf(x, 2 * v_ml.μ1, sqrt(2) * v_ml.σ1)),
               x_min = x_fit_min, μ1 = result.μ1, gof = gof)
-    return (result = result, report = report)
+    return result, report
 end
 export fit_pmt_spe
