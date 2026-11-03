@@ -61,3 +61,19 @@ end
     end
 
 end
+
+@testset "step_amplitude pseudo prior" begin
+    h = fit(Histogram, Float64[], 1600.0:0.4:1640.0)
+    ps = (peak_pos = 1620.0, peak_fwhm = 2.355, peak_sigma = 1.0, peak_counts = 500.0, bin_width = 0.4,
+          mean_background = 40.0, mean_background_step = 0.01, mean_background_std = 8.0)
+    step_prior(step) = LegendSpecFits.get_pseudo_prior(h, merge(ps, (mean_background_step = step,)), :gamma_def).step_amplitude
+
+    # step estimates below the background scatter: the 68.27 % quantile stays within 1 + 5 medians
+    for step in (0.01, 1.0)
+        d = step_prior(step)
+        @test quantile(d, 0.6827) / median(d) <= 6
+    end
+
+    # step estimates above the background scatter keep their prior
+    @test step_prior(50.0) == weibull_from_mx(50.0, 50.0 + 5 * ps.mean_background_std)
+end

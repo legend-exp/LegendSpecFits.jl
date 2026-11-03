@@ -5,6 +5,10 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
     # base priors common with all functions
     window_left = ps.peak_pos - minimum(h.edges[1])
     window_right = maximum(h.edges[1]) - ps.peak_pos
+    # A step estimate below the per-bin background scatter is noise. Using the scatter as the
+    # median keeps the 68.27 % quantile within 6 medians (Weibull shape ≥ 0.28), so the
+    # transformed step amplitude stays finite for the optimizer.
+    step_median = max(ps.mean_background_step, ps.mean_background_std)
     # base priors common with all functions
     pprior_base = NamedTupleDist(
             μ = ifelse(fixed_position, ConstValueDist(ps.peak_pos), Normal(ps.peak_pos, 0.2*ps.peak_sigma)),
@@ -13,7 +17,7 @@ function get_standard_pseudo_prior(h::Histogram, ps::NamedTuple{(:peak_pos, :pea
             skew_fraction = ifelse(low_e_tail, truncated(weibull_from_mx(0.002, 0.008), _almost_zero, 0.5), ConstValueDist(0.0)),
             skew_width = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 1.2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
             background = weibull_from_mx(ps.mean_background, ps.mean_background + 5*ps.mean_background_std),
-            step_amplitude = weibull_from_mx(ps.mean_background_step, ps.mean_background_step + 5*ps.mean_background_std),
+            step_amplitude = weibull_from_mx(step_median, step_median + 5*ps.mean_background_std),
             skew_fraction_highE = ifelse(low_e_tail, truncated(weibull_from_mx(0.002, 0.008), _almost_zero, 0.1), ConstValueDist(0.0)),
             skew_width_highE = ifelse(low_e_tail, weibull_from_mx(ps.peak_sigma/ps.peak_pos, 1.2*ps.peak_sigma/ps.peak_pos), ConstValueDist(1.0)),
             background_slope = ifelse(ps.mean_background < 5, ConstValueDist(0), truncated(Normal(0, 0.1*ps.mean_background_std / (window_left + window_right)), - ps.mean_background / window_right, 0)),
