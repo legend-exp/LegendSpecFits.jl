@@ -33,4 +33,12 @@ using StatsBase
         # the single-trigger spectrum is empty from ~0.25 to ~0.6 PE: the threshold sits well inside
         @test 0.3 < result.trigger_threshold_cal < 0.6
     end
+
+    @testset "trigger lists: a vector of views calibrates like a VectorOfVectors" begin
+        vov = LegendSpecFits.VectorOfVectors([[x] for x in peaks(rng)])
+        result_vov, _ = sipm_simple_calibration(vov; n_fwhm_noise_cut = 0.0, initial_min_amp = 0.3)
+        result_views, _ = sipm_simple_calibration(collect(vov); n_fwhm_noise_cut = 0.0, initial_min_amp = 0.3)
+        @test collect(vov) isa Vector{<:SubArray}
+        @test result_views == result_vov
+    end
 end

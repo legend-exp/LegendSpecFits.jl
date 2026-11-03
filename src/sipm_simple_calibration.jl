@@ -1,6 +1,6 @@
 """
     sipm_simple_calibration(pe_uncal::Vector{<:Real})
-    sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real})
+    sipm_simple_calibration(pe_uncal_vov::AbstractVector{<:AbstractVector{<:Real}})
 
 Simple SiPM calibration from the 1 PE and 2 PE peak positions found by a
 peakfinder. The noise/1PE cut is auto-detected at the centroid of the first
@@ -100,7 +100,7 @@ function _find_trigger_threshold(h::Histogram, noise_threshold_cal::Real, pe1_po
     return xs[j] - dy[j] * (xs[j+1] - xs[j]) / (dy[j+1] - dy[j])
 end
 
-function sipm_simple_calibration(pe_uncal_vov::VectorOfVectors{<:Real};
+function sipm_simple_calibration(pe_uncal_vov::AbstractVector{<:AbstractVector{<:Real}};
     initial_min_amp::Real=0.0, initial_max_amp::Real=50.0,
     relative_cut_noise_cut::Real=0.5, n_fwhm_noise_cut::Real=5.0,
     single_trigger_only::Bool=true, cut_pool_max_mult::Int=3, kwargs...
