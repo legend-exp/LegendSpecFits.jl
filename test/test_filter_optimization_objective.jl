@@ -172,9 +172,8 @@ using Unitful
 
         result, report = fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false)
         @test abs(mvalue(result.ft) - 2.0u"µs") <= step(e_grid_ft) * (1 + 1e-9)
-        @test abs(mvalue(result.legacy_ft) - 2.0u"µs") <= step(e_grid_ft) * (1 + 1e-9)
         @test result.objective == :fwhm
-        @test keys(report) == (:ft, :min_fwhm, :min_objective, :objective, :legacy_ft, :table, :objective_values)
+        @test keys(report) == (:ft, :min_fwhm, :min_objective, :objective, :table, :objective_values)
         ok = 2:length(e_grid_ft)
         @test isequal(report.objective_values, report.table.fwhm)
         @test all(iszero, report.table.ct_spread[ok])
