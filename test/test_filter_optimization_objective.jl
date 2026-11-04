@@ -174,20 +174,20 @@ using Unitful
         @test abs(mvalue(result.ft) - 2.0u"µs") <= step(e_grid_ft) * (1 + 1e-9)
         @test abs(mvalue(result.legacy_ft) - 2.0u"µs") <= step(e_grid_ft) * (1 + 1e-9)
         @test result.objective == :fwhm
-        @test keys(report) == (:ft, :min_fwhm, :min_objective, :objective, :legacy_ft, :e_grid_ft, :fwhm, :w90, :asym, :fct, :ct_spread, :objective_values, :table)
-        @test report.objective_values == report.fwhm
-        @test all(iszero, report.ct_spread)
-        @test result.min_objective <= minimum(report.fwhm) * 1.005
+        @test keys(report) == (:ft, :min_fwhm, :min_objective, :objective, :legacy_ft, :table, :objective_values)
+        ok = 2:length(e_grid_ft)
+        @test isequal(report.objective_values, report.table.fwhm)
+        @test all(iszero, report.table.ct_spread[ok])
+        @test result.min_objective <= minimum(report.table.fwhm[ok]) * 1.005
         result_w90, _ = fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; objective = :w90)
         @test result_w90.objective == :w90
-        @test result_w90.min_objective <= minimum(report.w90) * 1.005
+        @test result_w90.min_objective <= minimum(report.table.w90[ok]) * 1.005
         @test report.table isa Table
         @test length(report.table) == length(e_grid_ft)
         @test report.table.ft == collect(e_grid_ft)
         @test report.table.status[1] != "ok" && isnan(report.table.w90[1])
         @test all(==("ok"), report.table.status[2:end])
-        @test report.e_grid_ft == collect(e_grid_ft)[2:end]
-        @test all(iszero, report.fct)
+        @test all(iszero, report.table.fct[ok])
 
         result_fwhm, _ = fit_fwhm_ft(e_grid, e_grid_ft, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5, false; objective = :fwhm)
         @test result_fwhm.min_objective == result_fwhm.min_fwhm
@@ -210,10 +210,10 @@ using Unitful
         result_ctc, report_ctc = fit_fwhm_ft(e_grid_ctc, fts_ctc, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5)
         @test abs(mvalue(result_ctc.ft) - 2.0u"µs") <= step(fts_ctc) * (1 + 1e-9)
         @test all(isapprox.(report_ctc.table.fct, 0.01; rtol = 0.2))
-        @test all(>(0u"keV"), report_ctc.ct_spread)
+        @test all(>(0u"keV"), report_ctc.table.ct_spread)
         result_ct, report_ct = fit_fwhm_ft(e_grid_ctc, fts_ctc, qdrift, 3.0u"µs", 2400.0, 2800.0, 0.5; objective = :fwhm_ct, ctc_rel_uncertainty = 0.1)
         @test result_ct.objective == :fwhm_ct
-        @test report_ct.objective_values ≈ sqrt.(report_ct.fwhm .^ 2 .+ (0.1 .* report_ct.ct_spread) .^ 2)
+        @test report_ct.objective_values ≈ sqrt.(report_ct.table.fwhm .^ 2 .+ (0.1 .* report_ct.table.ct_spread) .^ 2)
         @test result_ct.min_objective ≈ minimum(report_ct.objective_values) rtol = 0.005
         @test result_ct.min_objective >= result_ct.min_fwhm
         @test keys(report_ct) == keys(report)
