@@ -79,29 +79,26 @@ export fit_enc_sigmas
 Scan the flat-top times `e_grid_ft` at the rise time `rt` and select the optimal flat-top time.
 
 With `qdrift`, row `i` of `e_grid` (energies in ADC at `e_grid_ft[i]`) is evaluated in parallel
-with `evaluate_energy_point`. The optimum minimizes `objective` (see `objective_value`);
-flat-top times within `rel_tol` of the minimum tie and the longest one wins (`select_optimum`).
-`legacy_ft` is the shortest flat-top time whose FWHM lies within `ft_fwhm_tol` of the minimum
-FWHM. A flat-top time whose evaluation throws keeps its error text in `status` and `NaN` metrics.
+with `evaluate_energy_point`. The optimum minimizes `objective` (see `objective_value`); flat-top
+times within `rel_tol` of the minimum tie and the longest one wins (`select_optimum`). `legacy_ft`
+is the shortest flat-top time whose FWHM lies within `ft_fwhm_tol` of the minimum FWHM. A failed
+evaluation is kept with its error text in `status` and `NaN` metrics.
 
 Without `qdrift`, each row is fitted without correction and the flat-top time is chosen by FWHM
 with the `ft_fwhm_tol` rule; the result is `(ft, min_fwhm)`.
 
 # Returns (with `qdrift`)
 - `result`: `(ft, min_fwhm, min_objective, objective, legacy_ft)`; `ft` and `legacy_ft` carry
-  `step(e_grid_ft)` as uncertainty, `min_fwhm` is the FWHM at `ft`
-- `report`: `result` with `table`, a `TypedTables.Table` with one row per flat-top time and the
-  columns `ft`, `status` and the fields of `evaluate_energy_point`, and `objective_values`, the
-  value of `objective` per row
+  `step(e_grid_ft)` as uncertainty
+- `report`: `result` with `table` (one row per flat-top time: `ft`, `status` and the fields of
+  `evaluate_energy_point`) and `objective_values`
 
-Throws an `ArgumentError` for an invalid `objective` or `ctc_rel_uncertainty` (see
-`objective_value`) and for `:fwhm_ct` with `apply_ctc = false`, and an `ErrorException` if no
-flat-top time is evaluated successfully.
+Throws an `ArgumentError` for an invalid `objective` or `ctc_rel_uncertainty`, or `:fwhm_ct` with
+`apply_ctc = false`, and an `ErrorException` if no flat-top time is evaluated successfully.
 """
 function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::Real, max_e::Real, rel_cut_fit::Real, apply_ctc::Bool=true;
         n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"),
         objective::Symbol=:fwhm, ctc_rel_uncertainty::Union{Nothing, Real}=nothing, containment::Real=0.9, rel_tol::Real=0.005, ft_fwhm_tol::Unitful.Energy{<:Real}=0.1u"keV")
-    # validate objective and ctc_rel_uncertainty before the scan
     objective_value(nan_energy_point, objective; ctc_rel_uncertainty)
     objective == :fwhm_ct && !apply_ctc && throw(ArgumentError("fit_fwhm_ft: objective :fwhm_ct requires apply_ctc = true"))
     axes(e_grid, 1) == eachindex(e_grid_ft) || throw(DimensionMismatch("e_grid has $(size(e_grid, 1)) rows, e_grid_ft has $(length(e_grid_ft)) entries"))
@@ -125,7 +122,7 @@ function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:R
     objective_values = [objective_value(row, objective; ctc_rel_uncertainty) for row in table]
     i_best = select_optimum(ustrip.(objective_values), [(-ft,) for ft in fts]; rel_tol)
     min_fwhm = minimum(table.fwhm[ok])
-    i_legacy = argmin(i -> fts[i], filter(i -> table.fwhm[i] - min_fwhm < ft_fwhm_tol, ok))
+    i_legacy = argmin(i -> fts[i], [i for i in ok if table.fwhm[i] - min_fwhm < ft_fwhm_tol])
 
     result = (
         ft = measurement(fts[i_best], step(e_grid_ft)), min_fwhm = table.fwhm[i_best],
