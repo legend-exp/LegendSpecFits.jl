@@ -27,8 +27,8 @@ end
 
 
 
-""" 
-    p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector}) 
+"""
+    p_value(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector})
 calculate p-value based on least-squares, assuming gaussian uncertainty
 baseline method to get goodness-of-fit (gof)
 # input:
@@ -44,7 +44,7 @@ function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{Na
     # prepare data
     counts, bin_widths, bin_centers = _prepare_data(h)
 
-    # get peakshape of best-fit 
+    # get peakshape of best-fit
     model_counts = _get_model_counts(fit_func, v_ml, bin_centers, bin_widths)
 
     # calculate chi2
@@ -52,7 +52,7 @@ function p_value(fit_func::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union{Na
     npar = length(v_ml)
     dof = length(counts[counts .> 0]) - npar
     if dof<0
-        pval = NaN # tbd 
+        pval = NaN # tbd
     else
         pval = ccdf(Chisq(dof),chi2)
     end
@@ -141,7 +141,7 @@ function likelihood_ratio(f_fit::Base.Callable, h::Histogram{<:Real,1})
 end
 export likelihood_ratio2
 """
-    p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1},ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background)},v_ml::NamedTuple,;n_samples::Int64=1000) 
+    p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1},ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background)},v_ml::NamedTuple,;n_samples::Int64=1000)
 alternative p-value calculation via Monte Carlo sampling. **Warning**: computational more expensive than p_vaule() and p_value_LogLikeRatio()
 # Input:
  * `f_fit`function handle of fit function (peakshape)
@@ -153,13 +153,13 @@ alternative p-value calculation via Monte Carlo sampling. **Warning**: computati
 # Performed Steps:
 * Create n_samples randomized histograms. For each bin, samples are drawn from a Poisson distribution with λ = model peak shape (best-fit parameter)
 * Each sample histogram is fit using the model function `f_fit`
-* For each sample fit, the max. loglikelihood fit is calculated 
+* For each sample fit, the max. loglikelihood fit is calculated
 
 # Returns
 * % p value --> comparison of sample max. loglikelihood and max. loglikelihood of best-fit
 """
 function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple{(:peak_pos, :peak_fwhm, :peak_sigma, :peak_counts, :mean_background, :mean_background_step, :mean_background_std), NTuple{7, T}}, v_ml::NamedTuple, ; n_samples::Int64=1000) where T<:Real
-    counts, bin_widths, bin_centers = _prepare_data(h) # get data 
+    counts, bin_widths, bin_centers = _prepare_data(h) # get data
     # get peakshape of best-fit and maximum likelihood value
     model_func = Base.Fix2(f_fit, v_ml) # fix the fit parameters to ML best-estimate
     model_counts = bin_widths .* map(energy -> model_func(energy), bin_centers) # evaluate model at bin center (= binned measured energies)
@@ -190,10 +190,10 @@ function p_value_MC(f_fit::Base.Callable, h::Histogram{<:Real,1}, ps::NamedTuple
 end
 export p_value_MC
 
-""" 
+"""
     residuals(f_fit::Base.Callable, h::Histogram{<:Real,1},v_ml::Union{NamedTuple, AbstractVector})
-Calculate bin-wise residuals and normalized residuals. 
-Calcualte bin-wise p-value based on poisson distribution for each bin.
+Calculate bin-wise residuals and normalized residuals.
+Calculate bin-wise p-value based on poisson distribution for each bin.
 
 # Input:
  * `f_fit`function handle of fit function (peakshape)
@@ -210,10 +210,10 @@ function get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union
     # prepare data
     counts, bin_widths, bin_centers = _prepare_data(h)
 
-    # get peakshape of best-fit 
+    # get peakshape of best-fit
     model_counts = _get_model_counts(f_fit, v_ml, bin_centers, bin_widths)
-    
-    # calculate bin-wise residuals 
+
+    # calculate bin-wise residuals
     residuals = model_counts[model_counts .> 0] - counts[model_counts .> 0]
     sigma = sqrt.(model_counts[model_counts .> 0])
     residuals_norm = residuals ./ sigma
@@ -226,4 +226,3 @@ function get_residuals(f_fit::Base.Callable, h::Histogram{<:Real,1}, v_ml::Union
     p_value_binwise = cdf_value_low .+ cdf_value_up # significance of residuals -> ~proabability that residual (for a given bin) is as large as observed or larger
     return residuals, residuals_norm, p_value_binwise, bin_centers[model_counts .> 0]
 end
-

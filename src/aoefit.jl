@@ -3,8 +3,8 @@
 """
     generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton_bands::Vector{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
 
-Generate histograms for the A/E Compton bands and estimate peak parameters. 
-The compton bands are cutted out of the A/E spectrum and then binned using the Freedman-Diaconis Rule. For better performance
+Generate histograms for the A/E Compton bands and estimate peak parameters.
+The compton bands are cut out of the A/E spectrum and then binned using the Freedman-Diaconis Rule. For better performance
 the binning is only done in the area around the peak. The peak parameters are estimated using the `estimate_single_peak_stats_psd` function.
 
 # Returns
@@ -14,10 +14,10 @@ the binning is only done in the area around the peak. The peak parameters are es
     * `max_aoe`: Array of maximum A/E values for each compton band
     * `mean_peak_pos`: Mean peak position of all compton bands
     * `std_peak_pos`: Standard deviation of the peak position of all compton bands
-    * `simple_pars_aoe_μ`: Simple curve fit parameters for the peak position energy depencence
-    * `simple_pars_error_aoe_μ`: Simple curve fit parameter errors for the peak position energy depencence
-    * `simple_pars_aoe_σ`: Simple curve fit parameters for the peak sigma energy depencence
-    * `simple_pars_error_aoe_σ`: Simple curve fit parameter errors for the peak sigma energy depencence
+    * `simple_pars_aoe_μ`: Simple curve fit parameters for the peak position energy dependence
+    * `simple_pars_error_aoe_μ`: Simple curve fit parameter errors for the peak position energy dependence
+    * `simple_pars_aoe_σ`: Simple curve fit parameters for the peak sigma energy dependence
+    * `simple_pars_error_aoe_σ`: Simple curve fit parameter errors for the peak sigma energy dependence
 """
 function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton_bands::Vector{<:T}, compton_window::T) where T<:Unitful.Energy{<:Real}
     @assert length(aoe) == length(e) "A/E and Energy arrays must have the same length"
@@ -44,7 +44,7 @@ function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton
     peakstats.peak_fwhm[:]  = ifelse.(peakstats.peak_fwhm .== 0, median_fwhm, peakstats.peak_fwhm)
     peakstats.peak_sigma[:] = ifelse.(peakstats.peak_sigma .== 0, median_sigma, peakstats.peak_sigma)
 
-    # estimate peak positions energy depencence 
+    # estimate peak positions energy dependence
     peak_pos = peakstats.peak_pos
     mean_peak_pos, std_peak_pos = mean(peak_pos), std(peak_pos)
     peak_pos_cut = mean_peak_pos - 3*std_peak_pos .< peak_pos .< mean_peak_pos + 3*std_peak_pos
@@ -58,7 +58,7 @@ function generate_aoe_compton_bands(aoe::Vector{<:Real}, e::Vector{<:T}, compton
         @warn "Error calculating standard errors for simple fitted μ: $e"
     end
 
-    # estimate peak sigmas energy depencence
+    # estimate peak sigmas energy dependence
     peak_sigma = peakstats.peak_sigma
     mean_peak_sigma, std_peak_sigma = mean(peak_sigma[20:end]), std(peak_sigma[20:end])
     # simple curve fit for parameter extraction
@@ -116,7 +116,7 @@ Fit the A/E Compton bands using the `f_aoe_compton` function consisting of a gau
     * `result`: Dict of NamedTuples of the fit results containing values and errors for each compton band
     * `report`: Dict of NamedTuples of the fit report which can be plotted for each compton band
 """
-function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; uncertainty::Bool=false, fit_func::Symbol=:aoe_one_bck) where T<:Unitful.Energy{<:Real}    
+function fit_aoe_compton(peakhists::Vector{<:Histogram}, peakstats::StructArray, compton_bands::Array{T},; uncertainty::Bool=false, fit_func::Symbol=:aoe_one_bck) where T<:Unitful.Energy{<:Real}
     # create return and result dicts
     v_result = Vector{NamedTuple}(undef, length(compton_bands))
     v_report = Vector{NamedTuple}(undef, length(compton_bands))
@@ -161,7 +161,7 @@ Perform a fit of the peakshape to the data in `h` using the initial values in `p
 function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=true, pseudo_prior::NamedTupleDist=NamedTupleDist(empty = true), fit_func::Symbol=:aoe_one_bck, background_center::Union{Real,Nothing} = ps.peak_pos, fixed_position::Bool=false)
     # create pseudo priors
     pseudo_prior = get_aoe_pseudo_prior(h, ps, fit_func; pseudo_prior = pseudo_prior, fixed_position = fixed_position)
-        
+
     # transform back to frequency space
     f_trafo = BAT.DistributionTransform(Normal, pseudo_prior)
 
@@ -187,11 +187,11 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
 
     # best fit results
     v_ml = inverse(f_trafo)(res.u)
-        
+
     if uncertainty && converged
-    
+
         f_loglike_array(v) = - f_loglike(array_to_tuple(v, v_ml))
-        
+
         # Calculate the Hessian matrix using ForwardDiff
         H = ForwardDiff.hessian(f_loglike_array, tuple_to_array(v_ml))
 
@@ -209,13 +209,13 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         # Extract the parameter uncertainties
         v_ml_err = array_to_tuple(sqrt.(abs.(diag(param_covariance))), v_ml)
 
-        # get p-value 
+        # get p-value
         pval, chi2, dof = p_value(fit_function, h, v_ml)
         # calculate normalized residuals
         residuals, residuals_norm, _, bin_centers = get_residuals(fit_function, h, v_ml)
 
         # get fwhm of peak
-        fwhm, fwhm_err = 
+        fwhm, fwhm_err =
             try
                 get_peak_fwhm_aoe_compton(v_ml, param_covariance, Base.Fix2(fit_function, v_ml))
             catch e
@@ -231,11 +231,11 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
         @debug "FWHM: $(fwhm) ± $(fwhm_err)"
 
         result = merge(NamedTuple{keys(v_ml)}([measurement(v_ml[k], v_ml_err[k]) for k in keys(v_ml)]...),
-                (fwhm = measurement(fwhm, fwhm_err), fit_func = fit_func, 
-                    gof = (pvalue = pval, 
-                            chi2 = chi2, 
-                            dof = dof, 
-                            covmat = param_covariance, 
+                (fwhm = measurement(fwhm, fwhm_err), fit_func = fit_func,
+                    gof = (pvalue = pval,
+                            chi2 = chi2,
+                            dof = dof,
+                            covmat = param_covariance,
                             mean_residuals = mean(residuals_norm),
                             median_residuals = median(residuals_norm),
                             std_residuals = std(residuals_norm),
@@ -270,7 +270,7 @@ function fit_single_aoe_compton(h::Histogram, ps::NamedTuple; uncertainty::Bool=
             gof = NamedTuple()
         )
     end
-    
+
     return result, report
 end
 
@@ -286,7 +286,7 @@ Get the FWHM of a peak from the fit parameters.
 function estimate_fwhm_aoe_compton(v::NamedTuple, f_fit::Function)
     try
         aoe_low, aoe_high = (v.μ - v.σ, v.μ + v.σ)
-        
+
         max_sig = -Inf
         for aoe in aoe_low:0.001:aoe_high
             fe = f_fit(aoe)
@@ -299,7 +299,7 @@ function estimate_fwhm_aoe_compton(v::NamedTuple, f_fit::Function)
             end
         end
         half_max_sig = max_sig/2
-        
+
         tmp = x -> f_fit(x) - half_max_sig
         roots_low = find_zero(tmp, aoe_low, maxiter=100)
         roots_high = find_zero(tmp, aoe_high, maxiter=100)
@@ -325,9 +325,9 @@ function get_peak_fwhm_aoe_compton(v_ml::NamedTuple, v_ml_err::Union{Matrix,Name
     end
 
     # get MC for FWHM err
-    if isa(v_ml_err, Matrix)# use correlated fit parameter uncertainties 
+    if isa(v_ml_err, Matrix)# use correlated fit parameter uncertainties
         v_mc = get_mc_value_shapes(v_ml, v_ml_err, 10000)
-    elseif isa(v_ml_err, NamedTuple) # use uncorrelated fit parameter uncertainties 
+    elseif isa(v_ml_err, NamedTuple) # use uncorrelated fit parameter uncertainties
         v_mc = get_mc_value_shapes(v_ml, v_ml_err, 1000)
     end
     fwhm_mc = estimate_fwhm_aoe_compton.(v_mc, Ref(f_fit))

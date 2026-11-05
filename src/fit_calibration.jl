@@ -10,7 +10,7 @@ Fit the calibration lines with polynomial function of pol_order order
         * `func`: the calibration curve as a LEGEND Julia expression of `e_expression`
         * `func_err`: the same expression with the uncertainty of the curve written out as `value ± error`,
           which includes the correlations between the fit parameters (see `chi2fit`)
-    * `report`: 
+    * `report`:
 """
 function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e", m_cal_simple::Union{MaybeWithEnergyUnits, Nothing} = nothing, uncertainty::Bool=true)
     @assert length(peaks) == length(μ) "Number of calibration points does not match the number of energies"
@@ -38,7 +38,7 @@ function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.Real
     else
         c_cal
     end
-    @debug "Fit calibration curve with $(pol_order)-order polynominal function"
+    @debug "Fit calibration curve with $(pol_order)-order polynomial function"
     p_start = append!([0.0, c], fill(0.0, pol_order-1))
     @debug "Initial parameters: $p_start"
     pseudo_prior = get_fit_calibration_pseudo_prior(pol_order, c)
@@ -46,7 +46,7 @@ function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.Real
 
     # fit calibration curve
     result_fit, report_fit = chi2fit(pol_order, μ_nounit, peaks_nounit; v_init=p_start, pseudo_prior=pseudo_prior, uncertainty=uncertainty)
-    
+
     # get best fit results
     par =  result_fit.par
     par_unit = par .* e_unit
@@ -59,7 +59,7 @@ function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.Real
     d = [sum(C[i, j] for i in eachindex(par), j in eachindex(par) if i + j - 1 == k) for k in 1:2length(par)-1]
     func = join(["$(mvalue(par[i]))$e_unit .* ($(e_expression)).^$(i-1)" for i in eachindex(par)], " .+ ")
     func_err = "($func) .± sqrt($(join(["$(d[k])$e_unit^2 .* ($(e_expression)).^$(k-1)" for k in eachindex(d)], " .+ ")))"
-    
+
     result = merge(result_fit, (func = func, func_err = func_err, µ = μ, peaks = peaks))
     report = merge(report_fit, (e_unit = e_unit, par = result.par, type = :cal))
     return result, report
@@ -83,6 +83,6 @@ function get_fit_calibration_pseudo_prior(pol_order::Int, m_cal_simple::Real)
             quad = Normal(0.0, (0.005*m_cal_simple)^2)
         )
     else
-        throw(ArgumentError("Only 0, 1, 2 order polynominal calibration is supported"))
+        throw(ArgumentError("Only 0, 1, 2 order polynomial calibration is supported"))
     end)
 end
