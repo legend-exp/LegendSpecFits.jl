@@ -3,57 +3,67 @@
 """
     fit_pmt_spe(x::AbstractVector{<:Real}; kwargs...)
 
-Fit the single-photoelectron (1 p.e.) spectrum of a photomultiplier, e.g. the pulse heights
-of the muon-veto PMTs in LED calibration data, with the model
+Fits the single-photoelectron (1 p.e.) pulse-height spectrum of a photomultiplier
+tube (PMT) with an exponential and the 1 p.e. and 2 p.e. peaks.
 
-    f(x) = n_exp/τ · exp(-(x - x_min)/τ) + n_1 · N(x; μ1, σ1) + r2 · n_1 · N(x; 2μ1, √2·σ1)
+The model, in counts per unit of `x`, is
 
-in counts per unit of `x`: an exponential for the tail of the pedestal and the 1 p.e. and
-2 p.e. peaks (`N` is a normalized Gaussian). `n_exp` and `n_1` are the numbers of entries of
-the exponential (above `x_min`) and of the 1 p.e. peak, and `r2 ≤ 1` is the ratio of 2 p.e. to
-1 p.e. entries: at LED occupancies the 2 p.e. peak is never larger than the 1 p.e. peak, and
-without the bound the fit can put the 1 p.e. peak at half its position.
+    f(x) = n_exp / τ * exp(-(x - x_min) / τ) + n_1 * N(x; μ1, σ1) + r2 * n_1 * N(x; 2 μ1, √2 σ1)
 
-The pedestal itself is a sharp, non-Gaussian peak at the low end, so it is not fitted: the fit
-starts at the valley between the pedestal and the 1 p.e. peak. The histogram of `x` in
-`hist_range` with bins of `bin_width` is smoothed with a 3-bin moving average. Starting at
-`first(peak_search_range)`, the valley is the first bin after which the smoothed spectrum
-rises for two bins; the start value of `μ1` is the maximum of the smoothed spectrum between
-the valley and `last(peak_search_range)`. The fit starts at `x_min = valley - x_min_offset` (at
-least `first(hist_range)`), and the binned Poisson likelihood of the histogram above `x_min` is
-maximized. The bounds of the parameters follow from the arguments: `μ1` in
-`peak_search_range`, `σ1` between `bin_width / 2` and the width of `peak_search_range`, `τ`
-between `bin_width / 2` and the fit range, `r2` in `[0, 1]`; `n_exp` and `n_1` are positive.
+where `N` is a normalized Gaussian. `n_exp` and `n_1` are the numbers of entries of the
+exponential (above `x_min`) and of the 1 p.e. peak, and `r2` is the ratio of 2 p.e. to 1 p.e.
+entries, bounded by 1 so that the fit cannot place the 1 p.e. peak at half its position.
 
-# Keywords
-- `hist_range`: range of the histogram, in the unit of `x`, as two numbers (e.g. a tuple or a
-  vector); a whole number of bins
-  (default `(0, 100)`)
-- `bin_width`: bin width (default `1`)
-- `peak_search_range`: range in which the valley and the 1 p.e. peak are searched, as two
-  numbers
-  (default `(6, 60)`)
-- `x_min_offset`: distance of the fit start below the valley (default `2`)
-- `σ1_rel_init`: start value of `σ1` relative to the start value of `μ1` (default `0.33`)
-- `τ_init`: start value of `τ` (default `5`)
-- `r2_init`: start value of `r2` (default `0.1`)
-- `min_counts`: minimum number of entries above `x_min` (default `50`)
-- `uncertainty`: compute the uncertainties and the goodness of fit (default `true`)
+The pedestal is a sharp, non-Gaussian peak at the low end and is not fitted. The fit starts
+at the valley between the pedestal and the 1 p.e. peak. The histogram of `x` in `hist_range`
+with bins of `bin_width` is smoothed with a 3-bin moving average. Starting at
+`first(peak_search_range)`, the valley is the first bin after which the smoothed spectrum rises
+for two bins. The start value of `μ1` is the maximum of the smoothed spectrum between the valley
+and `last(peak_search_range)`. The fit range starts at `x_min = valley - x_min_offset` (at least
+`first(hist_range)`), and the binned Poisson likelihood of the histogram above `x_min` is
+maximized, with L-BFGS-B and, if that does not converge, with BOBYQA. The bounds of the
+parameters are `μ1` in `peak_search_range`, `σ1` between `bin_width / 2` and the width of
+`peak_search_range`, `τ` between `bin_width / 2` and the fit range, `r2` in `[0, 1]`, and
+positive `n_exp` and `n_1`.
 
-The defaults suit the smoothed pulse height (`pulse_height` of `LegendDSP.dsp_pmts`) of the
-LEGEND-200 muon-veto PMTs in ADC units (LSB), with the 1 p.e. peak at about 10-20 LSB.
+## Arguments
+* `x::AbstractVector{<:Real}`: Pulse heights. Non-finite values are ignored.
 
-Throws an `ArgumentError` if the smoothed spectrum does not rise again in `peak_search_range`
-(no 1 p.e. peak above the pedestal) or if there are fewer than `min_counts` entries above
-`x_min`.
+## Keywords
+* `hist_range = (0.0, 100.0)`: Range of the histogram, two numbers (a tuple or a vector) in the unit of `x`. It must be a whole number of bins.
+* `bin_width::Real = 1.0`: Bin width.
+* `peak_search_range = (6.0, 60.0)`: Range in which the valley and the 1 p.e. peak are searched, two numbers within `hist_range`.
+* `x_min_offset::Real = 2.0`: Distance of the fit start below the valley.
+* `σ1_rel_init::Real = 0.33`: Start value of `σ1` relative to the start value of `μ1`.
+* `τ_init::Real = 5.0`: Start value of `τ`.
+* `r2_init::Real = 0.1`: Start value of `r2`.
+* `min_counts::Real = 50`: Minimum number of entries above `x_min`.
+* `uncertainty::Bool = true`: Compute the parameter uncertainties and the goodness of fit.
 
-# Returns
-- `result`: `μ1`, `σ1`, `τ`, `n_exp`, `n_1`, `r2`, `x_min` and `gof`. With `uncertainty`, the
-  parameters are `Measurement`s (with `NaN` uncertainties if the fit did not converge or the
-  Hessian is not finite) and `gof` has `converged`, `pvalue`, `chi2`, `dof`, `covmat`,
-  `residuals`, `residuals_norm` and `bin_centers`; without, `gof` has only `converged`.
-- `report`: `h` (histogram of all of `hist_range`), `f_fit` (model in counts per unit of `x`,
-  `NaN` below `x_min`), `f_components` (`exponential`, `pe1`, `pe2`), `x_min`, `μ1`, `gof`
+The defaults are for pulse heights in ADC units with the 1 p.e. peak at about 10 to 20 units.
+
+An `ArgumentError` is thrown if a range does not have two elements or `peak_search_range`
+does not lie within `hist_range`, if `hist_range` is not a whole number of bins, if
+`peak_search_range` covers fewer than three bins, if the smoothed spectrum does not rise again in
+`peak_search_range` (no 1 p.e. peak above the pedestal), or if there are fewer than `min_counts`
+entries above `x_min`. A warning is emitted if the fit does not converge.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `μ1`, `σ1`: position and width of the 1 p.e. peak.
+* `τ`: decay constant of the exponential.
+* `n_exp`, `n_1`: numbers of entries of the exponential and of the 1 p.e. peak.
+* `r2`: ratio of 2 p.e. to 1 p.e. entries.
+* `x_min`: start of the fit range.
+* `gof`: goodness of fit. With `uncertainty`, it has `converged`, `pvalue`, `chi2`, `dof`,
+  `covmat`, `residuals`, `residuals_norm` and `bin_centers`; without, only `converged`.
+
+With `uncertainty`, the parameters are `Measurement`s. Their uncertainties are `NaN` if the fit
+did not converge or the Hessian matrix is not finite.
+
+`report` contains the histogram `h` of all of `hist_range`, the model `f_fit` (`NaN` below
+`x_min`), `f_components` (a `NamedTuple` with the functions `exponential`, `pe1` and `pe2`),
+`x_min`, `μ1` and `gof`, for plotting with `LegendMakie.lplot`.
 """
 function fit_pmt_spe(x::AbstractVector{<:Real}; hist_range = (0.0, 100.0), bin_width::Real = 1.0, peak_search_range = (6.0, 60.0),
                      x_min_offset::Real = 2.0, σ1_rel_init::Real = 0.33,

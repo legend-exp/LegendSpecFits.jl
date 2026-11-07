@@ -28,9 +28,9 @@ finally shifted and scaled to mean 0 and standard deviation 1.
 
 ## Arguments
 * `aoe_all`: A/E values of all events.
-* `ecal_all`: Calibrated energies of all events.
+* `ecal_all`: Calibrated energies of all events, with an energy unit.
 * `qdrift_e_all`: Drift-time parameter divided by the energy of all events.
-* `compton_bands`: Lower edges of the energy bands that are used.
+* `compton_bands`: Lower edges of the energy bands that are used, with an energy unit.
 * `peak`: Center of the A/E peak.
 * `window`: Widths `(lower, upper)` of the A/E range around `peak` that is used.
 * `hist_start`, `hist_end`, `bin_width`: Range and bin width of the A/E histograms.
@@ -48,10 +48,10 @@ A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
 * `peak`, `window`: the input values.
 * `func`: the correction and normalization as a Julia expression string in `aoe_expression` and `qdrift_expression`.
 * `fct`: the coefficients of the correction.
-* `σ_start`, `σ_optimal`: the width of the half-truncated Gaussian fit without correction and with `fct`.
-* `σ_before`, `σ_after`, `σ_after_norm`: peak width from the fits before the correction, after it, and after the normalization.
+* `σ_start`, `σ_optimal`: the optimized Gaussian width of the A/E peak without and with the correction.
+* `σ_before`, `σ_after`, `σ_after_norm`: the widths of the A/E peak before the correction, after it, and after the final normalization.
 * `before`, `after`, `after_norm`: the corresponding fit results.
-* `converged`: whether the optimization converged.
+* `converged`: whether the optimizer converged.
 
 `report` contains `peak`, `window`, `fct`, `bin_width`, `bin_width_qdrift`, the
 selected events (`aoe_peak`, `aoe_ctc`, `aoe_ctc_norm`, `qdrift_peak`), the

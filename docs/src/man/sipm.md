@@ -19,11 +19,13 @@ All functions return `(result, report)`. The report is plotted with `lplot` from
 
 where $a$ is the amplitude, $a_1$ and $a_2$ are the positions of the first two peaks and $n_1$ is `min_pe_peak`. The distance $a_2 - a_1$ is the gain in amplitude units.
 
+The trigger threshold is a second threshold, placed after the calibration. It is the lowest minimum of the Savitzky-Golay smoothed calibrated spectrum between the noise threshold and `min_pe_peak` (smoothing width 0.15 PE). If the spectrum has no minimum there that is lower than the spectrum at the noise threshold, for example because it only rises from the noise threshold to the 1 PE peak, or if the noise threshold is less than one smoothing window away from the 1 PE peak, the trigger threshold equals the noise threshold. If the spectrum has several minima, the deepest one is used. Where the single-trigger spectrum is empty between the noise tail and the 1 PE peak, the trigger threshold lies in the middle of the empty region. The dataflow converts `trigger_threshold` with the final calibration curve to PE.
+
 The `peakfinder_*` keywords control the peak finder; `peakfinder_σ` is the expected peak width in bins and must be an integer. Its default is an estimate from the noise peak.
 
 If the input is a `VectorOfVectors` with the trigger amplitudes of each waveform, the function determines the threshold from the pool of all triggers, optionally restricted to waveforms with at most `cut_pool_max_mult` triggers (`single_trigger_only = true`), and calibrates the triggers above the threshold of waveforms with exactly one such trigger.
 
-The result contains the calibrated amplitudes `pe_simple_cal`, `peakpos`, the calibration function `f_simple_calib` and its inverse `f_simple_uncal`, the coefficients `c` and `offset`, the noise-peak properties and the thresholds `noise_threshold` (uncalibrated) and `noise_threshold_cal`.
+The result contains `peakpos`, the coefficients `c` and `offset`, the noise-peak properties `noisepeakpos` and `noisepeakwidth`, and the thresholds `noise_threshold` and `trigger_threshold` (uncalibrated) with `noise_threshold_cal` and `trigger_threshold_cal` (calibrated). The report contains the histograms, the thresholds, the calibrated amplitudes `pe_simple_cal` and the calibration function `f_simple_calib` with its inverse `f_simple_uncal`, which are used by the following functions.
 
 The example generates amplitudes with a gain of 12, an offset of 3 and Poisson-distributed numbers of photoelectrons:
 
@@ -35,10 +37,11 @@ gain, offset = 12.0, 3.0
 npe = rand(Poisson(0.9), 60_000)
 amplitudes = [rand(Normal(offset + k * gain, sqrt(1.0 + k))) for k in npe]
 result_simple, report_simple = sipm_simple_calibration(amplitudes; initial_max_amp = 80.0)
-(peakpos = result_simple.peakpos, c = result_simple.c, noise_threshold = result_simple.noise_threshold)
+(peakpos = result_simple.peakpos, c = result_simple.c, noise_threshold = result_simple.noise_threshold,
+    trigger_threshold = result_simple.trigger_threshold)
 ```
 
-The positions of the first peaks are at about 15 and 27, which is `offset + gain` and `offset + 2 gain`. The inverse of the calibration slope, `1 / result_simple.c`, is the gain.
+The positions of the first peaks are at about 15 and 27, which is `offset + gain` and `offset + 2 gain`. The inverse of the calibration slope, `1 / result_simple.c`, is the gain. The spectrum has no valley between the noise cut and the 1 PE peak, so the trigger threshold equals the noise threshold.
 
 ## Spectrum Fit
 
@@ -48,15 +51,15 @@ The result is evaluated for each integer PE value `pe` in the range:
 
 * The position is the weighted mean of the centers of all Gaussians within `pe ± Δpe_peak_assignment` (default 0.3 PE), with their weights.
 * The resolution is the FWHM of the sum of these Gaussians, found numerically.
-* Both are also given in uncalibrated units, using the function `f_uncal` (pass `result_simple.f_simple_uncal`). The resolution in uncalibrated units is `f_uncal(res) - f_uncal(0)`.
+* Both are also given in uncalibrated units, using the function `f_uncal` (pass `report_simple.f_simple_uncal`). The resolution in uncalibrated units is `f_uncal(res) - f_uncal(0)`.
 
 With `uncertainty = true`, the parameter uncertainties follow from the Hessian matrix of the binned log-likelihood of the mixture, and `gof` contains the p-value from [`p_value_poissonll`](@ref) (see [Cuts and Goodness of Fit](@ref)). The fields of the result are `μ`, `σ`, `w` (Gaussian parameters), `peaks`, `positions_cal`, `resolutions_cal`, `positions`, `resolutions`, `n_mixtures`, `n_pos_mixtures` (number of Gaussians per peak) and `gof`.
 
 A typical sequence continues the example above. It is not executed in this page because the mixture fit takes several seconds:
 
 ```julia
-result_fit, report_fit = fit_sipm_spectrum(result_simple.pe_simple_cal, 0.5, 3.5;
-    f_uncal = result_simple.f_simple_uncal)
+result_fit, report_fit = fit_sipm_spectrum(report_simple.pe_simple_cal, 0.5, 3.5;
+    f_uncal = report_simple.f_simple_uncal)
 result_fit.peaks        # 1:1:3
 result_fit.positions    # positions of the PE peaks, uncalibrated amplitude
 result_fit.resolutions  # FWHM of the PE peaks, uncalibrated amplitude
@@ -115,3 +118,37 @@ The result contains the optimal `wl` (with the step of the grid as uncertainty) 
 result_wl, report_wl = fit_sipm_wl(trig_max_grid, e_grid_wl, thresholds_grid)
 result_thr, report_thr = fit_sipm_threshold(thresholds, min_cut, max_cut; n_bins = 100)
 ```
+
+## PMT Single-Photoelectron Fit
+
+[`fit_pmt_spe`](@ref) fits the pulse-height spectrum of a photomultiplier tube (PMT) at a light level where most pulses contain at most one photoelectron. The spectrum has a sharp pedestal at low amplitudes, a falling tail of the pedestal and a broad 1 PE peak, with a weaker 2 PE peak at twice its position. The function does not fit the pedestal. It fits the model
+
+```math
+f(x) = \frac{n_\mathrm{exp}}{\tau}\, e^{-(x - x_\mathrm{min})/\tau} + n_1\, \mathcal{N}(x;\, \mu_1, \sigma_1) + r_2\, n_1\, \mathcal{N}(x;\, 2\mu_1, \sqrt{2}\,\sigma_1)\,,
+```
+
+in counts per unit of the pulse height $x$ above the start of the fit range $x_\mathrm{min}$. Here $\mathcal{N}(x;\, \mu, \sigma)$ is a normalized Gaussian, $n_\mathrm{exp}$ is the number of entries of the exponential above $x_\mathrm{min}$ and $\tau$ its decay constant, $n_1$ is the number of entries of the 1 PE peak with position $\mu_1$ and width $\sigma_1$, and $r_2 \le 1$ is the ratio of 2 PE to 1 PE entries. The bound on $r_2$ keeps the fit from placing the 1 PE peak at half its position.
+
+The fit proceeds in these steps:
+
+1. It histograms the pulse heights in `hist_range` with bins of `bin_width` and smooths the histogram with a 3-bin moving average.
+2. It searches the valley between the pedestal and the 1 PE peak: the first bin in `peak_search_range` after which the smoothed spectrum rises for two bins. The start value of $\mu_1$ is the maximum of the smoothed spectrum above the valley. An [`ArgumentError`](https://docs.julialang.org/en/v1/base/base/#Core.ArgumentError) is thrown if there is no such rise.
+3. It sets $x_\mathrm{min}$ to `x_min_offset` below the valley and maximizes the binned Poisson likelihood of the histogram above $x_\mathrm{min}$, with the parameter bounds given in [`fit_pmt_spe`](@ref).
+
+The defaults of `hist_range = (0, 100)`, `bin_width = 1` and `peak_search_range = (6, 60)` are for pulse heights in ADC units with the 1 PE peak at about 10 to 20 units. For other scales, change these keywords together. `uncertainty = false` skips the Hessian matrix and the goodness-of-fit test, and the parameters are then plain numbers instead of `Measurement`s.
+
+The result contains `μ1`, `σ1`, `τ`, `n_exp`, `n_1`, `r2`, `x_min` and `gof` (with `pvalue`, `chi2` and `dof` if `uncertainty = true`). The report contains the histogram `h`, the model `f_fit`, its components `f_components` (`exponential`, `pe1`, `pe2`) and can be plotted with `lplot`. The example fits synthetic pulse heights with a pedestal, its tail, and 1 PE and 2 PE peaks:
+
+```@example sipm
+Random.seed!(5)
+μ1, σ1 = 17.0, 6.0
+pulse_heights = vcat(abs.(rand(Normal(0.8, 0.3), 100_000)),       # pedestal
+                     rand(Exponential(3.0), 15_000),               # pedestal tail
+                     rand(Normal(μ1, σ1), 10_000),                 # 1 PE
+                     rand(Normal(2μ1, sqrt(2) * σ1), 1_000))       # 2 PE
+result_pmt, report_pmt = fit_pmt_spe(pulse_heights)
+(μ1 = result_pmt.μ1, σ1 = result_pmt.σ1, r2 = result_pmt.r2, x_min = result_pmt.x_min,
+    pvalue = result_pmt.gof.pvalue)
+```
+
+The fitted $\mu_1$ and $\sigma_1$ agree with the generated values of 17 and 6 within their uncertainties.

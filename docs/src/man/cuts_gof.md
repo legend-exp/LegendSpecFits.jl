@@ -4,7 +4,7 @@ This page describes the helpers that select the region of a distribution around 
 
 ## Peak Window Cuts
 
-[`cut_single_peak`](@ref) locates the single peak of a sample `x` between `min_x` and `max_x`. It histograms the values that lie strictly inside this range, finds the highest bin and then the first bin from the left whose counts reach `relative_cut` times the maximum and the first bin right of the maximum whose counts fall to that level. The bin width follows the Freedman-Diaconis rule, $2\,\mathrm{IQR}(x)/\sqrt[3]{n}$, unless `n_bins` is set to a positive number. If the three positions are not ordered, the histogram is rebuilt with finer bins, up to `n_tries` times. The result is a `NamedTuple` `(low, high, max)` with the left edges of the two window bins and of the maximum bin, in the unit of `min_x`.
+[`cut_single_peak`](@ref) locates the single peak of a sample `x` between `min_x` and `max_x`. It histograms the values that lie strictly inside this range, finds the highest bin and then the first bin from the left whose counts reach `relative_cut` times the maximum and the first bin right of the maximum whose counts fall to that level. The bin width follows the Freedman-Diaconis rule, $2\,\mathrm{IQR}(x)/\sqrt[3]{n}$, unless `n_bins` is set to a positive number. If the left edge of the window does not lie below the maximum bin, the histogram is rebuilt with `i`-times finer bins for `i = 2, ..., n_tries` (`n_tries = 5` by default), and the refinement stops at the first histogram that gives a valid window. If none does, a warning is logged and the window of the last histogram is returned. The sample `x` can be any vector, including a view. The result is a `NamedTuple` `(low, high, max)` with the left edges of the two window bins and of the maximum bin, in the unit of `min_x`.
 
 The result serves as input to the Gaussian fits of [Peak Shapes and Likelihoods](@ref) (`cuts` argument) and as a quick estimate of the peak position and width.
 
@@ -92,4 +92,4 @@ residuals, residuals_norm, _, bin_centers = LegendSpecFits.get_residuals(f_fit, 
 
 The model counts $\lambda_i$ come from the bin center only, so the p-values are reliable when the bin width is small compared to the scale on which the model changes.
 
-The binned likelihood that these statistics refer to is [`hist_loglike`](@ref).
+The binned likelihood that these statistics refer to is [`hist_loglike`](@ref); [`HistLogLike`](@ref) evaluates it repeatedly for one histogram.

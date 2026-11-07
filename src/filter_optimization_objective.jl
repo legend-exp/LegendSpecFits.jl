@@ -10,26 +10,33 @@ const nan_energy_point = (
 )
 
 """
-    peak_width_metrics(v::NamedTuple; containment::Real=0.9)
+    peak_width_metrics(v::NamedTuple; containment::Real = 0.9)
 
-Width and shape metrics of the signal part (Gaussian plus low-energy tail, no step or background)
-of a gamma peak with parameters `v.μ, v.σ, v.n, v.skew_fraction, v.skew_width`, plain numbers or
-`Measurement`s (uncertainties are ignored). Widths are in the units of `v`.
+Computes width and shape metrics of the signal part of a gamma peak.
 
-# Returns
-`(fwhm, w90, asym, tail_fraction, tail_scale, centroid)`:
-- `fwhm`: full width at half maximum, as `estimate_fwhm`
-- `w90`: length of the shortest interval containing the fraction `containment` of the shape
-- `asym`: integral of the shape below `μ` divided by the integral above `μ`
-- `tail_fraction`: `skew_fraction`
-- `tail_scale`: decay length of the tail, `skew_width * μ`
-- `centroid`: mean of the shape, as `peak_centroid`
+The signal part is the Gaussian plus low-energy tail of the peak shape, without step and background.
+The metrics are evaluated on the normalized trapezoid-rule cumulative of this shape on a uniform grid
+with a step of at most `σ / 50`.
 
-`w90` and `asym` are computed from the normalized trapezoid-rule cumulative of the shape on a
-uniform grid with step at most `σ / 50`.
+## Arguments
+* `v::NamedTuple`: Peak parameters `μ`, `σ`, `n`, `skew_fraction` and `skew_width`, for example
+  the fit result of [`fit_single_peak_th228`](@ref). Plain numbers and `Measurement`s are accepted;
+  uncertainties are ignored.
 
-Throws an `ArgumentError` for non-finite or out-of-range parameters or `containment`, and an
-`ErrorException` if the FWHM cannot be determined.
+## Keywords
+* `containment::Real = 0.9`: Fraction of the signal shape that the interval `w90` contains, in `(0, 1)`.
+
+## Returns
+A `NamedTuple` with the fields
+* `fwhm`: full width at half maximum of the signal shape, as [`LegendSpecFits.estimate_fwhm`](@ref).
+* `w90`: length of the shortest interval that contains the fraction `containment` of the shape.
+* `asym`: integral of the shape below `μ` divided by the integral above `μ`.
+* `tail_fraction`: `skew_fraction`.
+* `tail_scale`: decay length of the tail, `skew_width * μ`.
+* `centroid`: mean of the shape, as [`peak_centroid`](@ref).
+
+All widths and positions have the units of `v`. Throws an `ArgumentError` for non-finite or
+out-of-range parameters or `containment`, and an `ErrorException` if the FWHM cannot be determined.
 """
 function peak_width_metrics(v::NamedTuple; containment::Real=0.9)
     p = map(x -> float(mvalue(x)), (μ = v.μ, σ = v.σ, n = v.n, skew_fraction = v.skew_fraction, skew_width = v.skew_width))
@@ -77,15 +84,27 @@ end
 export peak_width_metrics
 
 """
-    objective_value(metrics::NamedTuple, objective::Symbol; ctc_rel_uncertainty=nothing)
+    objective_value(metrics::NamedTuple, objective::Symbol; ctc_rel_uncertainty = nothing)
 
-Value of `objective` (one of `energy_objectives`) for a row as returned by `peak_width_metrics` or
-`evaluate_energy_point`: `w90`, `fwhm`, `asym`, `fwhm * asym` for `:fwhm_asym`, or
-`sqrt(fwhm^2 + (k * ct_spread)^2)` with `k = ctc_rel_uncertainty` for `:fwhm_ct`. The keyword is
-ignored by the other objectives.
+Computes the value of an optimization objective from the metrics of one filter setting.
 
-Throws an `ArgumentError` for an unknown objective, and for `:fwhm_ct` if `k` is not a finite
-number >= 0.
+## Arguments
+* `metrics::NamedTuple`: Row with the fields of [`peak_width_metrics`](@ref), as returned by it or by
+  [`evaluate_energy_point`](@ref). `:fwhm_ct` also needs the field `ct_spread`.
+* `objective::Symbol`: One of
+  * `:w90`: `w90`.
+  * `:fwhm`: `fwhm`.
+  * `:asym`: `asym`.
+  * `:fwhm_asym`: `fwhm * asym`.
+  * `:fwhm_ct`: `sqrt(fwhm^2 + (k * ct_spread)^2)` with `k = ctc_rel_uncertainty`.
+
+## Keywords
+* `ctc_rel_uncertainty = nothing`: Relative uncertainty `k` of the charge-trapping correction, a
+  finite number `>= 0`. Required for `:fwhm_ct`, ignored by the other objectives.
+
+## Returns
+The value of the objective, which is minimized by the optimization. Throws an `ArgumentError` for an
+unknown objective and for `:fwhm_ct` without a valid `ctc_rel_uncertainty`.
 """
 function objective_value(metrics::NamedTuple, objective::Symbol; ctc_rel_uncertainty=nothing)
     objective == :w90 && return metrics.w90
@@ -104,13 +123,24 @@ export objective_value
 """
     select_optimum(objective_values::AbstractVector{<:Real}, keys::AbstractVector{<:Tuple}; rel_tol::Real)
 
-Index of the selected optimum. Candidates with an objective within `min * (1 + rel_tol)` of the
-smallest one tie; among ties the lexicographically smallest key tuple wins (pass a negative to
-prefer a larger value). `NaN` objectives are never selected. The index belongs to
-`eachindex(objective_values, keys)`.
+Selects the optimum among candidates with tied objective values.
 
-Throws an `ArgumentError` if all objectives are `NaN`, if the smallest objective is not positive
-and finite, or if `rel_tol` is not in `[0, Inf)`.
+All candidates whose objective is at most `minimum(objective_values) * (1 + rel_tol)` tie. Among
+the tied candidates, the one with the lexicographically smallest tuple in `keys` is selected. A
+negated entry in the tuple prefers the larger value of that quantity. `NaN` objectives are never
+selected.
+
+## Arguments
+* `objective_values`: Objective of every candidate.
+* `keys`: Tie-breaking tuple of every candidate, with the same indices as `objective_values`.
+
+## Keywords
+* `rel_tol::Real`: Relative tolerance of the tie, in `[0, Inf)`. Required.
+
+## Returns
+The index of the selected candidate in `eachindex(objective_values, keys)`. Throws an `ArgumentError`
+if all objectives are `NaN`, if the smallest objective is not positive and finite, or if `rel_tol` is
+outside `[0, Inf)`.
 """
 function select_optimum(objective_values::AbstractVector{<:Real}, keys::AbstractVector{<:Tuple}; rel_tol::Real)
     0 <= rel_tol < Inf || throw(ArgumentError("select_optimum: rel_tol must satisfy 0 <= rel_tol < Inf, got $rel_tol"))
@@ -124,31 +154,48 @@ end
 export select_optimum
 
 """
-    evaluate_energy_point(e::AbstractVector{<:Real}, qdrift::AbstractVector{<:Real}, peak, window, min_e, max_e, rel_cut_fit; n_bins::Int=-1, apply_ctc::Bool=true, containment::Real=0.9)
+    evaluate_energy_point(
+        e::AbstractVector{<:Real}, qdrift::AbstractVector{<:Real},
+        peak::Unitful.Energy, window::Tuple, min_e::Real, max_e::Real, rel_cut_fit::Real;
+        n_bins::Int = -1, apply_ctc::Bool = true, containment::Real = 0.9
+    )
 
-Evaluate the peak shape of the uncalibrated energies `e` (ADC) around `peak` for one filter
-setting. Events with finite, positive `e` and `qdrift` within 15 half-widths of the mode found by
-`cut_single_peak` on `(min_e, max_e)` are calibrated to keV with `m_cal_simple = peak / mode`. With
-`apply_ctc=true`, `ctc_energy` fits the linear charge-trapping correction and `peak_width_metrics`
-is evaluated on the peak fit after it; otherwise the uncorrected peak is fitted.
+Evaluates the shape of a gamma peak for one filter setting.
 
-# Returns
-A NamedTuple `(fwhm_before, fwhm, w90, asym, tail_fraction, tail_scale, centroid, fct, ct_spread,
-m_cal_simple, ctc_converged, n_events)`:
-- `fwhm_before`, `fwhm`, `w90`, `tail_scale`, `centroid`: energies in keV, scaled by `peak / μ`
-  with `μ` the fitted peak position of the same fit (uncorrected for `fwhm_before`, corrected for
-  the others)
-- `ct_spread`: FWHM-equivalent spread in keV of the drift-time term removed by the correction,
-  `2 * sqrt(2 * log(2)) * |fct| * m_cal_simple * std(qdrift)` scaled by `peak / μ`, with `qdrift`
-  taken over the events inside the correction window
-- `asym`, `tail_fraction`: unitless
-- `fct`: first-order element of `ctc_energy`'s `result.fct`, in ADC per `qdrift` unit
-- `m_cal_simple`: keV per ADC
-- `ctc_converged`: convergence flag of the correction
-- `n_events`: number of events in the 15-half-width window
+Events with finite, positive `e` and `qdrift` are kept. The peak mode is found with
+[`cut_single_peak`](@ref) on `(min_e, max_e)`, and the energies are calibrated to keV with
+`m_cal_simple = peak / mode`. Events within 15 half-widths of the mode are kept for the fit. With
+`apply_ctc = true`, [`ctc_energy`](@ref) fits the linear charge-trapping correction, and the metrics are
+computed from the peak fit after the correction. Otherwise the uncorrected peak is fitted with
+[`fit_single_peak_th228`](@ref). The metrics come from [`peak_width_metrics`](@ref), which includes the
+low-energy tail of the peak.
 
-With `apply_ctc=false`, `fct` and `ct_spread` are zero, `ctc_converged` is `true` and
-`fwhm_before == fwhm`.
+## Arguments
+* `e`: Uncalibrated energies (ADC) of the events.
+* `qdrift`: Drift-time parameter of every event, aligned with `e`.
+* `peak::Unitful.Energy`: Energy of the gamma line.
+* `window::Tuple`: Energy range `(left, right)` around `peak` for the correction and its fit.
+* `min_e`, `max_e`: Range of `e` (ADC) that brackets the peak.
+* `rel_cut_fit`: `relative_cut` of [`cut_single_peak`](@ref).
+
+## Keywords
+* `n_bins::Int = -1`: Number of histogram bins for [`cut_single_peak`](@ref); a negative value selects it automatically.
+* `apply_ctc::Bool = true`: Apply the charge-trapping correction before the peak fit.
+* `containment::Real = 0.9`: Fraction contained by `w90`, see [`peak_width_metrics`](@ref).
+
+## Returns
+A `NamedTuple` with the fields
+* `fwhm_before`: FWHM in keV of the uncorrected peak fit (equal to `fwhm` for `apply_ctc = false`).
+* `fwhm`, `w90`, `tail_scale`, `centroid`: metrics of [`peak_width_metrics`](@ref) in keV, taken from the fit
+  after the correction and scaled by `peak / μ` with the fitted peak position `μ`.
+* `asym`, `tail_fraction`: unitless metrics of [`peak_width_metrics`](@ref).
+* `fct`: first-order coefficient of the correction, in ADC per `qdrift` unit (`0` for `apply_ctc = false`).
+* `ct_spread`: FWHM-equivalent spread in keV of the drift-time term that the correction removes,
+  `2 * sqrt(2 * log(2)) * |fct| * m_cal_simple * std(qdrift)` scaled by `peak / μ`. `std(qdrift)` is taken over
+  the events inside the correction window (`0` for `apply_ctc = false`).
+* `m_cal_simple`: calibration factor in keV per ADC.
+* `ctc_converged`: convergence flag of the correction (`true` for `apply_ctc = false`).
+* `n_events`: number of events within 15 half-widths of the mode.
 
 Throws an `ErrorException` if fewer than 100 events lie in `(min_e, max_e)`, if the peak-statistics
 guess has a non-positive entry, or if the peak fit returns a non-finite or non-positive `σ`.
@@ -206,37 +253,66 @@ end
 export evaluate_energy_point
 
 """
-    optimize_rtft(f_energy, qdrift, rt0, ft0; rt_bounds, ft_bounds, feasible=(rt, ft) -> true, step0, lattice, objective=:fwhm, ctc_rel_uncertainty=nothing, rel_tol=0.005, max_evals=60, peak, window, min_e, max_e, rel_cut_fit, n_bins=-1, apply_ctc=true, containment=0.9)
+    optimize_rtft(
+        f_energy, qdrift::AbstractVector{<:Real}, rt0::Unitful.Time, ft0::Unitful.Time;
+        rt_bounds::Tuple, ft_bounds::Tuple, feasible = (rt, ft) -> true, step0::Tuple, lattice::Unitful.Time,
+        objective::Symbol = :fwhm, ctc_rel_uncertainty = nothing, rel_tol::Real = 0.005, max_evals::Int = 60,
+        peak, window, min_e, max_e, rel_cut_fit, n_bins = -1, apply_ctc = true, containment = 0.9
+    )
 
-Joint search of rise time `rt` and flat-top time `ft` minimizing `objective` (see
-`objective_value`) of `evaluate_energy_point`; `peak, window, min_e, max_e, rel_cut_fit, n_bins,
-apply_ctc, containment` are forwarded to it. `:fwhm_ct` requires `ctc_rel_uncertainty` and
-`apply_ctc = true`.
+Searches the rise time and flat-top time of a trapezoidal filter jointly for the minimum of an objective.
 
-`f_energy(rt, ft)` returns the energies (ADC) of the waveform set at one filter setting, aligned
-with `qdrift`; it is called concurrently from several threads. `rt0`, `ft0`, the bounds, `step0` and
-`lattice` are times. Every candidate lies on the lattice `k * lattice` and is evaluated at most once.
+Every candidate `(rt, ft)` lies on the lattice of multiples of `lattice` and is evaluated at most
+once with [`evaluate_energy_point`](@ref). The search is a compass pattern search with diagonal moves,
+starting at `(rt0, ft0)` rounded to the lattice. The admissible neighbors at the current steps are
+evaluated in parallel with `Threads.@threads`. A neighbor is admissible if it lies inside the bounds, satisfies
+`feasible`, and has not been evaluated. The search moves to the best neighbor if its objective is
+below `(1 - rel_tol)` times the current one. Otherwise it halves both steps, down to one lattice step.
+It stops when both steps equal the lattice and no neighbor improves, or after `max_evals` evaluations.
 
-Compass pattern search with diagonal moves, starting at `(rt0, ft0)` rounded to the lattice. The
-admissible neighbors at the current steps (inside the bounds, `feasible(rt, ft)`, not yet
-evaluated) are evaluated in parallel. The search moves to the best neighbor if its objective is
-below `(1 - rel_tol)` times the current one; otherwise both steps are halved, down to one lattice
-step. It stops when both steps equal the lattice and no neighbor improves (`converged = false` if
-all admissible neighbors failed) or when `max_evals` evaluations are reached (`converged = false`).
-The optimum is chosen by `select_optimum` among the final point and its evaluated neighbors, so
-ties within `rel_tol` go to the shortest `rt`, then the longest `ft`.
+The optimum is selected with [`select_optimum`](@ref) among the final point and its evaluated
+neighbors: points within `rel_tol` of the best objective tie, and the tie goes to the shortest `rt`,
+then the longest `ft`. An evaluation that throws is recorded with its error text in `status` and
+`NaN` metrics, and a warning is logged.
 
-An evaluation that throws is recorded with its error text in `status` and `NaN` metrics.
+## Arguments
+* `f_energy`: Function `f_energy(rt, ft)` that returns the energies (ADC) of the waveform set filtered
+  with this setting, aligned with `qdrift`. It is called from several threads concurrently.
+* `qdrift`: Drift-time parameter of every event.
+* `rt0`, `ft0`: Seed rise time and flat-top time.
 
-# Returns
-- `result`: `(rt, ft, fwhm, w90, asym, fct, ct_spread, min_objective, objective, n_evals, converged)`
-- `report`: `(rt, ft, objective, table, path, objective_values)`; `table` is a `TypedTables.Table`
-  with one row per evaluation and the columns `rt, ft, stage, step_rt, step_ft, status` followed by
-  the fields of `evaluate_energy_point` (`stage` is `:seed` or `:neighbor`), `path` the accepted
-  `(rt, ft)` positions starting with the seed, `objective_values` the objective per row of `table`.
+## Keywords
+* `rt_bounds::Tuple`, `ft_bounds::Tuple`: Allowed range `(min, max)` of the rise time and the flat-top time. Required.
+* `feasible = (rt, ft) -> true`: Function that returns `false` for settings that must not be evaluated.
+* `step0::Tuple`: Initial steps `(rt step, ft step)`, rounded to multiples of `lattice` (at least one). Required.
+* `lattice::Unitful.Time`: Grid spacing of all candidates. Required.
+* `objective::Symbol = :fwhm`: Objective of [`objective_value`](@ref).
+* `ctc_rel_uncertainty = nothing`: Required for `:fwhm_ct` (which also needs `apply_ctc = true`), see [`objective_value`](@ref).
+* `rel_tol::Real = 0.005`: Relative improvement needed to move, and relative tolerance of the tie.
+* `max_evals::Int = 60`: Maximum number of evaluations.
+* `peak`, `window`, `min_e`, `max_e`, `rel_cut_fit`: Required, see [`evaluate_energy_point`](@ref).
+* `n_bins = -1`, `apply_ctc = true`, `containment = 0.9`: See [`evaluate_energy_point`](@ref).
 
-Throws an `ArgumentError` for invalid arguments or a seed that is infeasible or outside the bounds
-after rounding, and an `ErrorException` if the seed evaluation fails.
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `rt`, `ft`: selected rise time and flat-top time.
+* `fwhm`, `w90`, `asym`, `fct`, `ct_spread`: fields of [`evaluate_energy_point`](@ref) at the optimum.
+* `min_objective`: objective value at the optimum.
+* `objective`: the objective used.
+* `n_evals`: number of evaluations, including failed ones.
+* `converged`: `true` if both steps reached the lattice and no evaluated neighbor improved;
+  `false` if `max_evals` was reached or all admissible neighbors failed.
+
+`report`, for plotting with `LegendMakie.lplot`, contains
+* `rt`, `ft`, `objective`: as in `result`.
+* `table`: `TypedTables.Table` with one row per evaluation: the columns `rt`, `ft`, `stage`
+  (`:seed` or `:neighbor`), `step_rt`, `step_ft` and `status` (`"ok"` or the error text), followed by
+  the fields of [`evaluate_energy_point`](@ref).
+* `path`: accepted `(rt, ft)` positions, starting with the seed.
+* `objective_values`: objective for every row of `table`.
+
+Throws an `ArgumentError` for invalid arguments or a seed that is infeasible or out of bounds after
+rounding, and an `ErrorException` if the seed evaluation fails.
 """
 function optimize_rtft(f_energy, qdrift::AbstractVector{<:Real}, rt0::Unitful.Time{<:Real}, ft0::Unitful.Time{<:Real};
         rt_bounds::Tuple{Any,Any}, ft_bounds::Tuple{Any,Any}, feasible=(rt, ft) -> true, step0::Tuple{Any,Any}, lattice::Unitful.Time{<:Real},

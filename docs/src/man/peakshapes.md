@@ -96,7 +96,7 @@ A histogram `h` with bin centers $x_i$, bin widths $\Delta x_i$ and counts $k_i$
 \ln L(\vec{p}) = \sum_i \ln \mathrm{Pois}\!\left(k_i;\, \lambda_i\right), \qquad \lambda_i = \Delta x_i\, f(x_i; \vec{p})\,,
 ```
 
-where $\vec{p}$ are the model parameters and $\lambda_i$ is the expected count in bin $i$. [`hist_loglike`](@ref) computes this sum for a function `f_fit(x)` of the energy. The model is evaluated at the bin centers only (midpoint rule), so the bin width must be small compared to the peak width $\sigma$.
+where $\vec{p}$ are the model parameters and $\lambda_i$ is the expected count in bin $i$. [`hist_loglike`](@ref) computes this sum for a function `f_fit(x)` of the energy. The model is evaluated at the bin centers only (midpoint rule), so the bin width must be small compared to the peak width $\sigma$. The terms $\ln k_i!$ do not depend on $\vec{p}$. [`HistLogLike`](@ref) computes them once when it is constructed from the histogram; calling the object with `f_fit` then returns the same value as `hist_loglike`. The fit functions build one `HistLogLike` per histogram, and the same pattern applies to any repeated evaluation, for example inside an optimizer.
 
 [`fit_single_peak_th228`](@ref) maximizes $\ln L$ with the L-BFGS-B algorithm. The uncertainties of the parameters are the square roots of the diagonal of the inverse Hessian matrix of $-\ln L$ at the maximum, computed with automatic differentiation. If this covariance matrix is not positive definite, it is replaced by the nearest positive-definite matrix. The goodness of fit uses the Poisson deviance (see [Cuts and Goodness of Fit](@ref)).
 
@@ -110,7 +110,8 @@ Each fit parameter has a prior distribution. The prior does not enter the object
 The default pseudo-priors depend on the initial peak statistics `ps`, a `NamedTuple` that [`estimate_single_peak_stats`](@ref) computes from the histogram. For `calib_type = :th228` it contains the peak position, FWHM and standard deviation, the number of counts in the peak, the bin width, and the mean and standard deviation of the background and of the background step. The defaults are:
 
 * `μ`: normal distribution around the estimated position with a standard deviation of 20 % of the estimated `peak_sigma`,
-* `σ`, `n`, `background`, `step_amplitude`: Weibull distributions (see below) centered on the estimated values,
+* `σ`, `n`, `background`: Weibull distributions (see below) centered on the estimated values,
+* `step_amplitude`: Weibull distribution centered on the larger of the estimated step and the estimated standard deviation of the background, so that a small estimated step does not set the median below the scatter of the background,
 * `skew_fraction`, `skew_fraction_highE`: Weibull distributions with a median of 0.002 (before truncation), truncated to at most 0.5 and 0.1,
 * `skew_width`, `skew_width_highE`: Weibull distributions with a median of the estimated relative peak width,
 * `background_slope`: zero if the mean background is below 5 counts per bin, otherwise a truncated normal distribution of non-positive slopes,

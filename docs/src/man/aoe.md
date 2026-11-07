@@ -174,7 +174,7 @@ result_ctc, report_ctc = LegendSpecFits.ctc_aoe(
 )
 ```
 
-Only events in the Compton bands (each band extends 20 keV above its lower edge) and with an A/E in `[peak - window[1], peak + window[2]]` enter the fit.
+The energies `e_cal` and `compton_bands` must carry an energy unit. Only events in the Compton bands (each band extends `compton_window` above its lower edge, 20 keV by default) and with an A/E in `[peak - window[1], peak + window[2]]` enter the fit.
 The defaults are `peak = 0` (the normalized single-site position) and `window = (50, 8)`.
 With $q$ the drift-time parameter and $c_i$ the coefficients, the corrected value is
 

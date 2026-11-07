@@ -86,27 +86,72 @@ end
 export fit_enc_sigmas
 
 """
-    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt, min_e, max_e, rel_cut_fit, apply_ctc::Bool=true; n_bins=-1, peak=2614.5u"keV", window=(35.0u"keV", 25.0u"keV"), objective=:fwhm, ctc_rel_uncertainty=nothing, containment=0.9, rel_tol=0.005)
-    fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt, min_e, max_e, rel_cut_fit; kwargs...)
+    fit_fwhm_ft(
+        e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt,
+        min_e::Real, max_e::Real, rel_cut_fit::Real, apply_ctc::Bool = true;
+        n_bins::Int = -1, peak = 2614.5u"keV", window = (35.0u"keV", 25.0u"keV"),
+        objective::Symbol = :fwhm, ctc_rel_uncertainty = nothing, containment::Real = 0.9, rel_tol::Real = 0.005
+    )
+    fit_fwhm_ft(
+        e_grid::Matrix, e_grid_ft::StepRangeLen, rt, min_e, max_e, rel_cut_fit;
+        n_bins::Int = -1, peak = 2614.5u"keV", window = (35.0u"keV", 25.0u"keV"), ft_fwhm_tol = 0.1u"keV"
+    )
 
-Scan the flat-top times `e_grid_ft` at the rise time `rt` and select the optimal flat-top time.
+Determines the flat-top time (FT) of a trapezoidal filter that gives the best peak shape of a gamma line.
 
-With `qdrift`, row `i` of `e_grid` (energies in ADC at `e_grid_ft[i]`) is evaluated in parallel
-with `evaluate_energy_point`. The optimum minimizes `objective` (see `objective_value`); flat-top
-times within `rel_tol` of the minimum tie and the longest one wins (`select_optimum`). A failed
-evaluation is kept with its error text in `status` and `NaN` metrics.
+Row `i` of `e_grid` holds the energies for the flat-top time `e_grid_ft[i]`.
 
-Without `qdrift`, each row is fitted without correction and the flat-top time is chosen by FWHM
-with the `ft_fwhm_tol` rule; the result is `(ft, min_fwhm)`.
+With `qdrift`, each row is evaluated in parallel with [`evaluate_energy_point`](@ref). The flat-top time
+with the smallest `objective` (see [`objective_value`](@ref)) is selected; flat-top times within
+`rel_tol` of the smallest value tie, and the longest one wins ([`select_optimum`](@ref)). A row whose
+evaluation throws is kept in the report with its error text in `status` and `NaN` metrics, and a
+warning is logged.
 
-# Returns (with `qdrift`)
-- `result`: `(ft, min_fwhm, min_objective, objective)`; `ft` carries `step(e_grid_ft)` as
-  uncertainty
-- `report`: `result` with `table` (one row per flat-top time: `ft`, `status` and the fields of
-  `evaluate_energy_point`) and `objective_values`
+Without `qdrift`, each row is restricted to a window around the peak and fitted without correction
+with [`fit_single_peak_th228`](@ref). The FWHM values are converted to keV with one factor that places the mean
+peak position of all rows at `peak`. Among the flat-top times with an FWHM within `ft_fwhm_tol` of the
+smallest one, the shortest wins. Rows with fewer than 100 energies in `(min_e, max_e)` or an invalid
+fit start are skipped.
 
-Throws an `ArgumentError` for an invalid `objective` or `ctc_rel_uncertainty`, or `:fwhm_ct` with
-`apply_ctc = false`, and an `ErrorException` if no flat-top time is evaluated successfully.
+## Arguments
+* `e_grid`: Energies (ADC), one row per flat-top time.
+* `e_grid_ft::StepRangeLen`: Flat-top times of the rows, with time units.
+* `qdrift::Vector{<:Real}`: Drift-time parameter of every event, for the charge-trapping correction.
+* `rt`: Rise time of the scan. It is not used in the computation.
+* `min_e`, `max_e`: Range of `e_grid` (ADC) that brackets the peak.
+* `rel_cut_fit`: `relative_cut` of [`cut_single_peak`](@ref).
+* `apply_ctc::Bool = true`: Apply the charge-trapping correction before the peak fit (with `qdrift` only).
+
+## Keywords
+* `n_bins::Int = -1`: Number of histogram bins for [`cut_single_peak`](@ref); a negative value selects it automatically.
+* `peak = 2614.5u"keV"`: Energy of the gamma line.
+* `window = (35.0u"keV", 25.0u"keV")`: Energy range `(left, right)` around `peak` for the correction
+  and its fit (with `qdrift` only).
+* `objective::Symbol = :fwhm`: Objective of [`objective_value`](@ref) (with `qdrift` only).
+* `ctc_rel_uncertainty = nothing`: Required for the objective `:fwhm_ct`, which also needs `apply_ctc = true`.
+* `containment::Real = 0.9`: Fraction contained by `w90`, see [`peak_width_metrics`](@ref).
+* `rel_tol::Real = 0.005`: Relative tolerance of the tie.
+* `ft_fwhm_tol = 0.1u"keV"`: Absolute FWHM tolerance of the tie (without `qdrift` only).
+
+## Returns
+A tuple `(result, report)`. With `qdrift`, `result` is a `NamedTuple` with the fields
+* `ft`: selected flat-top time, with `step(e_grid_ft)` as uncertainty.
+* `min_fwhm`: FWHM in keV of the selected flat-top time.
+* `min_objective`: objective value of the selected flat-top time.
+* `objective`: the objective used.
+
+`report`, for plotting with `LegendMakie.lplot`, contains the fields of `result` and
+* `table`: `TypedTables.Table` with one row per flat-top time: the columns `ft` and `status`
+  (`"ok"` or the error text), followed by the fields of [`evaluate_energy_point`](@ref).
+* `objective_values`: objective for every row of `table`.
+
+Without `qdrift`, `result` has the fields `ft` and `min_fwhm`, and `report` contains `ft`, `min_fwhm`, the
+flat-top times `e_grid_ft` and the FWHM values `fwhm` of all successful fits.
+
+Throws an `ErrorException` if no flat-top time is evaluated successfully. If the rows of `e_grid`
+do not match `e_grid_ft`, the method with `qdrift` throws a `DimensionMismatch` and the method without
+`qdrift` an `AssertionError`. The method with `qdrift` throws an `ArgumentError` for an invalid
+`objective` or `ctc_rel_uncertainty`, or for `:fwhm_ct` with `apply_ctc = false`.
 """
 function fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, qdrift::Vector{<:Real}, rt::Unitful.RealOrRealQuantity, min_e::Real, max_e::Real, rel_cut_fit::Real, apply_ctc::Bool=true;
         n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"),
@@ -145,9 +190,9 @@ export fit_fwhm_ft
 
 
 """
-    _fit_fwhm_ft(e_grid, e_grid_ft, rt, min_e, max_e, rel_cut_fit; kwargs...)
+    _fit_fwhm_ft(e_grid, e_grid_ft, rt, min_e, max_e, rel_cut_fit; n_bins, peak, window, ft_fwhm_tol)
 
-Implementation of [`fit_fwhm_ft`](@ref) without a correction of the energies.
+Implements the method of [`fit_fwhm_ft`](@ref) without `qdrift`: the energies are not corrected.
 """
 function _fit_fwhm_ft(e_grid::Matrix, e_grid_ft::StepRangeLen, rt::Unitful.RealOrRealQuantity, min_e::T, max_e::T, rel_cut_fit::T; n_bins::Int=-1, peak::Unitful.Energy{<:Real}=2614.5u"keV", window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}=(35.0u"keV", 25.0u"keV"), ft_fwhm_tol::Unitful.Energy{<:Real} = 0.1u"keV") where {T <:Real}
     @assert size(e_grid, 1) == length(e_grid_ft) "e_grid and e_grid_rt must have the same number of columns"

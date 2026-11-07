@@ -129,8 +129,8 @@ function get_mc_value_shapes(v::V, v_err::Matrix{T}, n::Integer)::Vector{V} wher
     ]
 end
 """
-    get_friedman_diaconis_bin_width(x::Vector{<:Real})
-    get_friedman_diaconis_bin_width(x::Vector{<:Quantity{<:Real}})
+    get_friedman_diaconis_bin_width(x::AbstractVector{<:Real})
+    get_friedman_diaconis_bin_width(x::AbstractVector{<:Quantity{<:Real}})
 
 Returns the bin width ``2\\,\\mathrm{IQR}(x)/\\sqrt[3]{n}`` of the
 Freedman-Diaconis rule, where IQR is the interquartile range of `x` and `n` is
