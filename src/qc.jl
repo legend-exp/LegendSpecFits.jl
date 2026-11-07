@@ -1,15 +1,28 @@
 """
-    qc_window_cut(tab::Table, config::PropDict, cols::NTuple{<:Any, Symbol})
+    qc_window_cut(tab::Table, config::AbstractDict)
+    qc_window_cut(x::Vector{<:Unitful.RealOrRealQuantity}, min::T, max::T, sigma::Real; col_expression = "col", kwargs...)
 
-Perform quality control on the data using a window cut based on a centered Gaussian fit.
-The `config` is a `PropDict` containing the configuration for each column to be checked. Each column should have a `min`, `max`, and `sigma` value, along with optional keyword arguments for the cut.
-# Arguments
-    * `data`: a `Table` containing the data to be checked
-    * `config`: a `PropDict` containing the configuration for each column to be checked
-    * `cols`: a tuple of column names to be checked
-# Returns
-    * `result`: a `NamedTuple` containing the results of the quality control, with a `qc` field that is a string describing the cut condition for each column
-    * `report`: an `OrderedDict` containing the reports for each column which can be plotted, with fields like `f_fit`, `h`, `μ`, `σ`, `gof`, `low_cut`, and `high_cut`
+Determines quality-control window cuts on one or more columns, each from a
+centered Gaussian fit with [`get_centered_gaussian_window_cut`](@ref).
+
+For a table, `config` maps each column name (a `Symbol`) to a dictionary with
+the entries `:min`, `:max` (range of the data used), `:sigma` (half-width of the
+window in standard deviations) and `:kwargs` (keyword arguments of
+[`get_centered_gaussian_window_cut`](@ref) as a dictionary or `NamedTuple`).
+The columns are processed in parallel on the available threads. For a vector
+`x`, these values are passed directly and `kwargs` are forwarded.
+
+## Keywords
+* `col_expression`: Name of the variable in the returned cut string (vector method).
+
+## Returns
+A tuple `(result, report)`.
+* Table method: `result` is a `NamedTuple` with the field `qc`, a string of the
+  conditions of all columns joined by ` && `, and one entry per column holding its result;
+  `report` is an `OrderedDict` keyed by column name.
+* Vector method: `result` is the result of [`get_centered_gaussian_window_cut`](@ref) extended by `qc`, the cut condition string
+  `<low_cut> < col_expression && col_expression < <high_cut>` (with units if present);
+  `report` is its report (`f_fit`, `h`, `μ`, `σ`, `gof`, `low_cut`, `high_cut`).
 """
 function qc_window_cut end
 export qc_window_cut

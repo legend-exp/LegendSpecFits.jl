@@ -1,2 +1,6 @@
 build/
 site/
+src/tutorials/*.ipynb
+src/tutorials/*.md
+src/tutorials/*.jl
+!src/tutorials/*_lit.jl

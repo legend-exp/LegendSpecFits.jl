@@ -1,19 +1,45 @@
 """
-    fit_fwhm(pol_order::Int, peaks::Vector{<:Unitful.Energy}, fwhm::Vector{<:Unitful.Energy}; e_type_cal, e_expression, uncertainty, correlated, pull_fano)
-Fit the resolution curve fwhm(E) = √(enc + fano·E [+ ct·E²]) to the FWHM of the peaks, with `pol_order` the
-degree of the polynomial under the square root. With `pull_fano = true`, the quadratic fit ties the
-linear term to Fano statistics of germanium (F = 0.112 ± 0.015) by a pull term, so that the E² term takes
-up the other contributions; by default, and in the linear fit, the linear term is free.
-# Returns
-    * `par`: `enc`, the width √enc in keV that the curve approaches at zero energy; `fano`, the Fano
-      factor extracted from the linear term with the pair creation energy of germanium; and, for the
-      quadratic fit, the dimensionless coefficient `ct` of E²
-    * `qbb`: the FWHM at 2039 keV
-    * `func`, `func_cal`: the resolution curve as LEGEND Julia expressions of `e_expression` and `e_type_cal`
-    * `func_err`, `func_cal_err`: the same expressions with the uncertainty of the curve written out as
-      `value ± error`, which includes the correlations between the fit parameters (see `chi2fit`).
-      Evaluating them at an energy that is itself a `Measurement` nests the two uncertainties.
-    * `f_fit` (report): the fitted function
+    fit_fwhm(
+        pol_order::Int, peaks::Vector{<:Unitful.Energy{<:Real}}, fwhm::Vector{<:Unitful.Energy{<:Real}};
+        e_type_cal::Symbol = :e_cal, e_expression::Union{Symbol, String} = "e",
+        uncertainty::Bool = true, correlated::Bool = true, pull_fano::Bool = false
+    )
+    fit_fwhm(peaks, fwhm; kwargs...)
+
+Fits the energy resolution curve `fwhm(E) = √(enc + fano·E [+ ct·E²])` to the
+full widths at half maximum `fwhm` of the peaks at energies `peaks`, using
+[`chi2fit`](@ref). The polynomial under the square root has degree `pol_order`
+(1 or 2). The method without `pol_order` uses `pol_order = 1`.
+
+The energies are fitted in MeV and the squared widths in keV². The Fano factor
+is derived from the linear coefficient with a pair creation energy of 2.96 eV
+for germanium. The method evaluates the FWHM at Qββ = 2039.061 keV (the
+`qbb` field).
+
+## Keywords
+* `e_type_cal::Symbol = :e_cal`: Name of the calibrated energy variable in `func_cal` and `func_cal_err`.
+* `e_expression::Union{Symbol, String} = "e"`: Name of the energy variable in `func` and `func_err`.
+* `uncertainty::Bool = true`: Calculate parameter uncertainties and goodness of fit.
+* `correlated::Bool = true`: Return parameters that carry their full covariance (see [`chi2fit`](@ref)).
+* `pull_fano::Bool = false`: For `pol_order = 2`, add a Gaussian pull term that ties the linear
+  coefficient to the Fano statistics of germanium (Fano factor 0.112 ± 0.015), so that the `E²` term
+  absorbs the other contributions. Without it, and for `pol_order = 1`, the linear term is free.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields of the
+[`chi2fit`](@ref) result (`converged`, `gof`) and
+* `par`: `enc`, the FWHM `√enc` in keV that the curve approaches at zero energy;
+  `fano`, the dimensionless Fano factor; and, for `pol_order = 2`, the dimensionless coefficient `ct` of `E²`.
+* `qbb`: FWHM at 2039.061 keV, in keV.
+* `func`, `func_cal`: the resolution curve as Julia expression strings in `e_expression` and `e_type_cal`.
+* `func_err`, `func_cal_err`: the same expressions with the uncertainty of the curve written out as
+  `value ± error`, including the correlations between the fit parameters. Evaluating them at an
+  energy that is itself a `Measurement` nests the two uncertainties.
+* `peaks`, `fwhm`: the input values.
+
+`report` is the report of [`chi2fit`](@ref) with `f_fit` replaced by the fitted
+FWHM curve in keV, extended by `e_unit`, `par`, `qbb` and `type = :fwhm`, for
+plotting with `LegendMakie.lplot`.
 """
 function fit_fwhm end
 export fit_fwhm

@@ -1,16 +1,35 @@
 """
-    fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Real,Measurement{<:Real}}}, peaks::AbstractVector{<:Union{Real,Measurement{<:Real}}}; pull_t::Vector{<:NamedTuple}=fill(NamedTuple(), pol_order+1), v_init::Vector = [], uncertainty::Bool=true )
-Fit the calibration lines with polynomial function of pol_order order
-    pol_order == 1 -> linear function
-    pol_order == 2 -> quadratic function
-# Returns
-    * `result`: NamedTuple with the following fields
-        * `par`: best-fit parameters
-        * `gof`: godness of fit
-        * `func`: the calibration curve as a LEGEND Julia expression of `e_expression`
-        * `func_err`: the same expression with the uncertainty of the curve written out as `value ± error`,
-          which includes the correlations between the fit parameters (see `chi2fit`)
-    * `report`: 
+    fit_calibration(
+        pol_order::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity, Measurement{<:Unitful.RealOrRealQuantity}}},
+        peaks::AbstractVector{<:Quantity};
+        e_expression::Union{Symbol, String} = "e", m_cal_simple = nothing, uncertainty::Bool = true
+    )
+
+Fits a polynomial calibration curve that maps the uncalibrated peak positions
+`µ` to the known peak energies `peaks`, using [`chi2fit`](@ref).
+
+`pol_order = 1` fits a linear function and `pol_order = 2` a quadratic function.
+The peak energies `peaks` define the energy unit of the result. Uncertainties of
+`µ` enter the fit through error propagation. If `µ` carries a unit, it is
+converted to that energy unit and stripped, with a warning.
+
+## Keywords
+* `e_expression::Union{Symbol, String} = "e"`: Name of the uncalibrated energy variable in `func` and `func_err`.
+* `m_cal_simple = nothing`: Slope of a simple calibration used as the starting point and prior center of
+  the fit. If `nothing`, the ratio of the highest peak energy to its position `µ` is used.
+* `uncertainty::Bool = true`: Calculate parameter uncertainties and goodness of fit.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `par`: best-fit coefficients with energy units; entry `i` multiplies `e^(i-1)`.
+* `converged`, `gof`: convergence flag and goodness of fit as returned by [`chi2fit`](@ref).
+* `func`: the calibration curve as a Julia expression string in `e_expression`.
+* `func_err`: the same expression with the uncertainty of the curve written out as `value ± error`,
+  including the correlations between the fit parameters.
+* `µ`, `peaks`: the input peak positions and energies.
+
+`report` is the report of [`chi2fit`](@ref) extended by `e_unit`, `par` and
+`type = :cal`, for plotting with `LegendMakie.lplot`.
 """
 function fit_calibration(pol_order::Int, µ::AbstractVector{<:Union{Unitful.RealOrRealQuantity,Measurement{<:Unitful.RealOrRealQuantity}}}, peaks::AbstractVector{<:Quantity}; e_expression::Union{Symbol, String}="e", m_cal_simple::Union{MaybeWithEnergyUnits, Nothing} = nothing, uncertainty::Bool=true)
     @assert length(peaks) == length(μ) "Number of calibration points does not match the number of energies"

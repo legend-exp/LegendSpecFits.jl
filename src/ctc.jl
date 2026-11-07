@@ -1,19 +1,45 @@
 
 """
-    ctc_energy(e::Array{T}, qdrift::Array{T}, peak::T, window::T) where T<:Real
+    ctc_energy(
+        e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real}, peak::Unitful.Energy{<:Real},
+        window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}},
+        m_cal_simple::Unitful.Energy{<:Real} = 1.0u"keV";
+        e_expression::Union{Symbol, String} = "e", pol_order::Int = 1
+    )
 
-Correct for the drift time dependence of the energy by minimizing the ratio of
-the FWHM and the peak height of the peak around `peak` in `e` with a cut window
-of `window`. The drift time dependence is given by `qdrift`.
+Corrects the dependence of the energy on the drift time (charge-trapping
+correction) in the peak at `peak`.
 
-# Returns 
-    * `peak`: peak position
-    * `window`: window size
-    * `fct`: correction factor
-    * `fwhm_before`: FWHM before correction
-    * `fwhm_after`: FWHM after correction
-    * `func`: function to correct energy
-    * `func_generic`: generic function to correct energy
+The events within `window = (lower, upper)` around `peak` are used. The corrected
+energy is `e + Σ_i fct[i] * qdrift^i` for `i = 1:pol_order`. The coefficients
+`fct` minimize the logarithm of the ratio of the FWHM to the height of the fitted
+peak, found with a bounded derivative-free optimization (NLopt `LN_BOBYQA`) limited by the time
+limit of [`set_timelimit`](@ref LegendSpecFits.set_timelimit). The peak is fitted with [`fit_single_peak_th228`](@ref).
+
+## Arguments
+* `e`: Calibrated energies.
+* `qdrift`: Drift-time parameter of each event.
+* `peak`: Peak energy.
+* `window`: Widths `(lower, upper)` of the energy window around `peak`.
+* `m_cal_simple`: Simple calibration constant (energy per uncalibrated unit). `fct` in the result is divided by it,
+  so that the correction `func` applies to the uncalibrated energy.
+
+## Keywords
+* `e_expression`: Name of the energy variable in the returned `func`.
+* `pol_order::Int = 1`: Order of the polynomial in `qdrift`.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `peak`, `window`, `m_cal_simple`: the input values.
+* `func`: the correction as a Julia expression string, `e_expression + fct[1] * qdrift^1 + ...`.
+* `fct`: the coefficients of the correction (divided by `m_cal_simple`).
+* `fwhm_before`, `fwhm_after`: FWHM of the peak before and after the correction, in keV.
+* `converged`: whether the optimization converged.
+
+`report` contains `peak`, `window`, `fct`, `bin_width`, `bin_width_qdrift`, the
+selected events (`e_peak`, `e_ctc`, `qdrift_peak`), the histograms `h_before`
+and `h_after`, the FWHM values and the reports of both fits (`report_before`,
+`report_after`), for plotting with `LegendMakie.lplot`.
 """
 function ctc_energy(e::Vector{<:Unitful.Energy{<:Real}}, qdrift::Vector{<:Real}, peak::Unitful.Energy{<:Real}, window::Tuple{<:Unitful.Energy{<:Real}, <:Unitful.Energy{<:Real}}, m_cal_simple::Unitful.Energy{<:Real}=1.0u"keV"; e_expression::Union{Symbol, String}="e", pol_order::Int=1)
     # create cut window around peak

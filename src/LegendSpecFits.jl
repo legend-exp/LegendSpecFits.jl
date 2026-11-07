@@ -3,7 +3,13 @@
 """
     LegendSpecFits
 
-Template for Julia packages.
+Fitting routines for the analysis of germanium detector spectra in the LEGEND experiment.
+
+The package provides gamma peak shapes and binned Poisson likelihood fits for energy
+calibration and resolution curves, charge-trapping correction, A/E and LQ pulse shape
+discrimination, SiPM calibration, filter parameter optimization, and goodness-of-fit
+tests. Most fit functions return a tuple `(result, report)` of the fit results and the
+data needed to plot them with `LegendMakie.lplot`.
 """
 module LegendSpecFits
 

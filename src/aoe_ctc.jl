@@ -3,22 +3,60 @@
 ### check if it works :-)
 
 """
-## TO DO: Still needs to be updated once finalized
+    ctc_aoe(
+        aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.Energy{<:Real}},
+        qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.Energy{<:Real}},
+        peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0),
+        hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05;
+        compton_window::Unitful.Energy{<:Real} = 20.0u"keV",
+        aoe_expression = "aoe", qdrift_expression = "qdrift / e",
+        pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true),
+        pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true),
+        fit_func::Symbol = :aoe_two_bck, pol_order::Int = 1
+    )
 
-    ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.Energy}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.Energy}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; compton_window::Unitful.Energy = 20.0u"keV", kwargs...)
+Corrects the drift time dependence of the A/E parameter.
 
-Correct for the drift time dependence of A/E parameter, using the events with a calibrated
-energy `ecal_all` in one of the Compton bands `[band, band + compton_window]` for `band` in
-`compton_bands`.
+Events with a calibrated energy `ecal_all` in one of the Compton bands
+`[band, band + compton_window]` for `band` in `compton_bands` are selected, and
+those with A/E within `window` around `peak` are used. The corrected value is
+`aoe + Σ_i fct[i] * qdrift_e^i` for `i = 1:pol_order`. The coefficients `fct`
+minimize the Gaussian width of the A/E peak, found with a bounded derivative-free
+optimization (NLopt `LN_BOBYQA`) limited by the time limit of
+[`set_timelimit`](@ref LegendSpecFits.set_timelimit). The corrected A/E is
+finally shifted and scaled to mean 0 and standard deviation 1.
 
-# Returns (but may change):
-    * `peak`: peak position
-    * `window`: window size
-    * `fct`: correction factor
-    * `σ_before`: σ before correction
-    * `σ_after`: σ after correction
-    * `func`: function to correct aoe
-    * `func_generic`: generic function to correct aoe
+## Arguments
+* `aoe_all`: A/E values of all events.
+* `ecal_all`: Calibrated energies of all events, with an energy unit.
+* `qdrift_e_all`: Drift-time parameter divided by the energy of all events.
+* `compton_bands`: Lower edges of the energy bands that are used, with an energy unit.
+* `peak`: Center of the A/E peak.
+* `window`: Widths `(lower, upper)` of the A/E range around `peak` that is used.
+* `hist_start`, `hist_end`, `bin_width`: Range and bin width of the A/E histograms.
+
+## Keywords
+* `compton_window::Unitful.Energy = 20.0u"keV"`: Width of each Compton band.
+* `aoe_expression`, `qdrift_expression`: Names of the A/E and drift-time variables in the returned `func`.
+* `pseudo_prior`: Replaces fields of the default prior of the A/E peak fits.
+* `pseudo_prior_all`: Accepted but not used.
+* `fit_func::Symbol = :aoe_two_bck`: Shape of the A/E peak fits (see [`fit_single_aoe_compton`](@ref)).
+* `pol_order::Int = 1`: Order of the polynomial in `qdrift_e`.
+
+## Returns
+A tuple `(result, report)`. `result` is a `NamedTuple` with the fields
+* `peak`, `window`: the input values.
+* `func`: the correction and normalization as a Julia expression string in `aoe_expression` and `qdrift_expression`.
+* `fct`: the coefficients of the correction.
+* `σ_start`, `σ_optimal`: the optimized Gaussian width of the A/E peak without and with the correction.
+* `σ_before`, `σ_after`, `σ_after_norm`: the widths of the A/E peak before the correction, after it, and after the final normalization.
+* `before`, `after`, `after_norm`: the corresponding fit results.
+* `converged`: whether the optimizer converged.
+
+`report` contains `peak`, `window`, `fct`, `bin_width`, `bin_width_qdrift`, the
+selected events (`aoe_peak`, `aoe_ctc`, `aoe_ctc_norm`, `qdrift_peak`), the
+histograms `h_before`, `h_after`, `h_after_norm`, the widths and the reports of
+the three fits, for plotting with `LegendMakie.lplot`.
 """
 function ctc_aoe(aoe_all::Vector{<:Real}, ecal_all::Vector{<:Unitful.Energy{<:Real}}, qdrift_e_all::Vector{<:Real}, compton_bands::Vector{<:Unitful.Energy{<:Real}}, peak::Real = 0.0, window::Tuple{<:Real, <:Real} = (50.0, 8.0), hist_start::Real = -20.0, hist_end::Real = 5.0, bin_width::Real = 0.05; compton_window::Unitful.Energy{<:Real} = 20.0u"keV", aoe_expression::Union{Symbol, String}="aoe", qdrift_expression::Union{Symbol, String} = "qdrift / e", pseudo_prior::NamedTupleDist = NamedTupleDist(empty = true), pseudo_prior_all::NamedTupleDist = NamedTupleDist(empty = true), fit_func::Symbol=:aoe_two_bck, pol_order::Int=1) # deleted m_cal since no calibration
 
