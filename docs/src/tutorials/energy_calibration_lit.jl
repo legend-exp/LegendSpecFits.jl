@@ -21,60 +21,80 @@ CairoMakie.activate!(type = "png")
 
 # ## Synthetic Data
 #
-# The spectrum of each calibration line is sampled from the peak shape model that is also used to fit the lines
-# (see [Peak Shapes and Likelihoods](@ref)): a Gaussian with a low-energy tail on top of a flat background and a Compton step.
-# The sampling inverts the cumulative distribution function of the model on a fine energy grid.
+# The spectrum is built from the processes that shape a real calibration spectrum.
+# Every gamma line of the source contributes
+# * a full-energy peak (FEP): a Gaussian whose variance grows linearly with the energy, plus a small low-energy tail from incomplete charge collection,
+# * a Compton continuum: the gamma scatters once and leaves the detector, depositing an energy between zero and the Compton edge with the Klein-Nishina distribution,
+# * a multiple-scattering continuum: the gamma scatters several times or loses energy outside the detector before being absorbed.
+#   It fills the gap between the Compton edge and the line and forms the step below each peak.
+#
+# Besides the seven calibration lines, the source emits weaker lines (510.8, 785.4 and 1078.6 keV) that are not used for the calibration.
+# The double escape peak (DEP) and single escape peak (SEP) of the 2614.5 keV line are peaks without a continuum of their own.
+# The counts of the lines are rough values for a Th-228 calibration of one detector; they are not tied to a real detector.
 # The tutorial uses a fixed seed, so the numbers shown below are reproducible.
 
 Random.seed!(1234)
 
-f_peak = LegendSpecFits.get_th228_fit_functions().gamma_def
-
-## Peak shape parameters of every line; σ² grows linearly with the energy
 th228_lines = [583.191, 727.330, 860.564, 1592.513, 1620.50, 2103.512, 2614.511]u"keV"
-shape_pars = [
-    (σ = 0.73, n = 1865.5, step_amplitude = 3.0,  skew_fraction = 0.02, skew_width = 0.003, background = 3),
-    (σ = 0.78, n = 452.9,  step_amplitude = 1.0,  skew_fraction = 0.01, skew_width = 0.003, background = 3),
-    (σ = 0.83, n = 355.8,  step_amplitude = 0.5,  skew_fraction = 0.01, skew_width = 0.003, background = 3),
-    (σ = 1.02, n = 206.8,  step_amplitude = 0.1,  skew_fraction = 0.01, skew_width = 0.003, background = 2),
-    (σ = 1.04, n = 130.3,  step_amplitude = 0.1,  skew_fraction = 0.01, skew_width = 0.003, background = 2),
-    (σ = 1.14, n = 385.1,  step_amplitude = 0.1,  skew_fraction = 0.01, skew_width = 0.003, background = 2),
-    (σ = 1.25, n = 3130.4, step_amplitude = 0.1,  skew_fraction = 0.02, skew_width = 0.003, background = 1),
-]
 
-function sample_line(μ, pars; n_events, half_width = 60.0, n_grid = 10_000)
-    x = range(μ - half_width, μ + half_width, length = n_grid)
-    cdf = cumsum(f_peak.(x, Ref((; μ, pars...))))
-    cdf ./= last(cdf)
-    u = rand(n_events)
-    ## linear interpolation of the inverse cumulative distribution function
-    map(u) do ui
-        i = clamp(searchsortedfirst(cdf, ui), 2, n_grid)
-        x[i-1] + (ui - cdf[i-1]) / (cdf[i] - cdf[i-1]) * step(x)
+## energy (keV), counts in the FEP, Compton events per FEP event; escape peaks have no own continuum
+gamma_lines = [
+    (510.77,  6_000, 2.8), (583.191, 25_000, 2.9), (727.330, 4_500, 3.1), (785.37,  700, 3.2),
+    (860.564, 3_000, 3.3), (1078.62, 400, 3.6),    (1592.513, 2_500, 0.0), (1620.50, 800, 4.4),
+    (2103.512, 4_000, 0.0), (2614.511, 20_000, 5.9),
+]
+resolution(E) = sqrt(0.42 + 2.7e-4 * E)   # Gaussian σ in keV
+tail_fraction, tail_scale = 0.05, 0.001     # low-energy tail: fraction of the FEP, exponential scale relative to E
+multiscatter_fraction = 0.03                # fraction of the continuum events between the Compton edge and the line
+
+## Energy deposited by a single Compton scattering, sampled from the Klein-Nishina cross section
+function sample_compton(E; m_e = 510.999)
+    ε = E / m_e
+    T_edge = E * 2ε / (1 + 2ε)
+    dσdT(T) = (s = T / E; 2 + s^2 / (ε^2 * (1 - s)^2) + s / (1 - s) * (s - 2 / ε))
+    f_max = maximum(dσdT, range(0, T_edge, length = 100))
+    while true
+        T = rand() * T_edge
+        rand() * f_max < dσdT(T) && return T
     end
 end
+compton_edge(E) = E * (1 - 1 / (1 + 2E / 510.999))
 
-## The relative peak heights follow the model heights; each line gets its share of 200_000 events
-peak_heights = map(zip(th228_lines, shape_pars)) do (μ, pars)
-    maximum(f_peak.(range(ustrip(μ) - 60, ustrip(μ) + 60, length = 2000), Ref((; μ = ustrip(μ), pars...))))
+e_true = Float64[]
+for (E, n_fep, compton_per_fep) in gamma_lines
+    tail = rand(n_fep) .< tail_fraction
+    append!(e_true, E .- tail .* rand(Exponential(tail_scale * E), n_fep))
+    n_compton = round(Int, compton_per_fep * n_fep)
+    multiscatter = rand(n_compton) .< multiscatter_fraction
+    append!(e_true, [m ? rand(Uniform(compton_edge(E), E)) : sample_compton(E) for m in multiscatter])
 end
-n_events = round.(Int, 200_000 .* peak_heights ./ sum(peak_heights))
-e_lines = reduce(vcat, [sample_line(ustrip(μ), pars; n_events = n) for (μ, pars, n) in zip(th228_lines, shape_pars, n_events)])
-length(e_lines)
 
-# A flat continuum below 2614.5 keV and the drift-time-like parameter complete the data set.
+## gammas scattered in the materials around the detector add a continuum that rises towards low energies;
+## random coincidences (pile-up) add a small flat continuum, also above 2614.5 keV
+append!(e_true, rand(Exponential(250.0), 150_000))
+append!(e_true, rand(Uniform(0, 3300), 8_000))
+e_true .+= resolution.(e_true) .* randn(length(e_true))
+
+## the detector trigger threshold removes the lowest energies
+filter!(>(100.0), e_true)
+length(e_true)
+
+# The data also contain a drift-time-like parameter `qdrift`.
 # The energy reconstruction loses a part of the charge that depends on `qdrift`.
 # The simulated loss is independent of the energy, so the correction fitted at one peak applies to all peaks.
 # The conversion factor from keV to ADC units is arbitrary.
 
 c_true = 0.01u"keV"            # keV per ADC unit
-n_continuum = 150_000
-e_continuum = rand(truncated(Exponential(700.0), 100.0, 2614.5), n_continuum)
-
-e_true = vcat(e_lines, e_continuum)
 qdrift = rand(Normal(1000.0, 300.0), length(e_true))
 e_uncal = @. e_true / ustrip(c_true) - 0.5 * (qdrift - 1000.0)
 length(e_uncal)
+
+# The true spectrum before the charge loss:
+
+fig = Figure(size = (700, 400))
+ax = Axis(fig[1, 1], xlabel = "Energy (keV)", ylabel = "Counts / 1 keV", yscale = log10, limits = ((0, 3000), (1, 2e4)))
+stephist!(ax, e_true, bins = 0:1:3000)
+fig
 
 # ## Configuration
 #
@@ -90,7 +110,6 @@ left_window_sizes  = [25, 25, 25, 25, 15, 25, 35]u"keV"
 right_window_sizes = [25, 25, 25, 15, 25, 25, 30]u"keV"
 fit_funcs = fill(:gamma_def, length(th228_names))
 binning_peak_window = 4u"keV"      # energy range around a peak used to choose the histogram bin width
-quantile_perc = 0.91               # fraction of events below the 2614.5 keV peak
 cal_pol_order = 1
 fwhm_pol_order = 1
 excluded_peaks = [:Tl208DEP, :Tl208SEP]  # escape peaks are not used for the calibration and resolution curves
@@ -101,13 +120,13 @@ th228_lines_dict = Dict(th228_names .=> th228_lines)
 #
 # [`simple_calibration`](@ref) finds the 2614.5 keV full-energy peak in the uncalibrated spectrum.
 # It returns a calibration constant `c` that converts ADC units to keV and, for each calibration line, a histogram and start values for the peak fit.
-# The peak finder does not work reliably for a spectrum with few events per bin, so the position of the peak is
-# given as the quantile `quantile_perc` of the energy distribution.
+# For `calib_type = :th228`, the peak finder searches the highest 10 % of the energies, where the 2614.5 keV peak is the most prominent one.
+# For spectra in which the peak finder fails, the keyword `quantile_perc` sets the peak position to a quantile of the energy distribution instead.
 # The constant is only an approximation, since it ignores any offset.
 
 result_simple, report_simple = simple_calibration(
     e_uncal, th228_lines, left_window_sizes, right_window_sizes;
-    calib_type = :th228, binning_peak_window, quantile_perc
+    calib_type = :th228, binning_peak_window
 )
 m_cal_simple = result_simple.c
 
@@ -123,11 +142,16 @@ lplot(report_simple, cal = true, title = "Simple Calibration", watermark = false
 # The function takes the energy in keV, so the uncalibrated energy is multiplied by the simple calibration constant.
 # The expression `e_expression` names the uncalibrated energy in the function string of the result.
 # See [Charge-Trapping Correction](@ref) for details.
+# The optimization fits the peak for many trial values of `fct`; fits at trial values far from the optimum may not converge.
+# Their warnings are suppressed here.
 
+using Logging #hide
+disable_logging(Logging.Warn) #hide
 result_ctc, report_ctc = ctc_energy(
     e_uncal .* m_cal_simple, qdrift, 2614.511u"keV", (35u"keV", 30u"keV"), m_cal_simple;
     e_expression = "e_uncal", pol_order = 1
 )
+disable_logging(Logging.BelowMinLevel) #hide
 result_ctc.converged || error("The charge-trapping correction did not converge")
 result_ctc.func
 
@@ -153,7 +177,7 @@ e_uncal_ctc = e_uncal .+ only(result_ctc.fct) .* qdrift;
 
 result_simple, report_simple = simple_calibration(
     e_uncal_ctc, th228_lines, left_window_sizes, right_window_sizes;
-    calib_type = :th228, binning_peak_window, quantile_perc
+    calib_type = :th228, binning_peak_window
 )
 m_cal_simple = result_simple.c
 
